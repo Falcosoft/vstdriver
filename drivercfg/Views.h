@@ -4,7 +4,7 @@
 #include <iostream>
 #include <fstream> 
 #include "utf8conv.h"
-#include <mmddk.h>
+#include "../driver/mmddk.h"
 using namespace std;
 using namespace utf8util;
 #include "../driver/VSTDriver.h"
