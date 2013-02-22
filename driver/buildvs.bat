@@ -8,7 +8,7 @@ find /C "x64" < tmp.txt > tmp2.txt
 SET /p IS64BIT= < tmp2.txt
 del tmp.txt
 del tmp2.txt
-cl /O1 /MT /EHsc /DUNICODE /D_UNICODE /LD /I "..\external_packages" /MP%NUMBER_OF_PROCESSORS% vstmididrv.cpp ..\driver\src\VSTDriver.cpp dsound.cpp sound_out_dsound.cpp sound_out_xaudio2.cpp kernel32.lib user32.lib Shlwapi.lib advapi32.lib winmm.lib Ole32.lib uuid.lib vstmididrv.def
+cl /O1 /MT /EHsc /DUNICODE /D_UNICODE /LD /I "..\external_packages" /MP%NUMBER_OF_PROCESSORS% vstmididrv.cpp VSTDriver.cpp dsound.cpp sound_out_dsound.cpp sound_out_xaudio2.cpp kernel32.lib user32.lib Shlwapi.lib advapi32.lib winmm.lib Ole32.lib uuid.lib vstmididrv.def
 if ERRORLEVEL 1 goto END
 REM Move files to the output dir
 if "%IS64BIT%" EQU "1" (
