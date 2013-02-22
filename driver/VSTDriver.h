@@ -21,8 +21,8 @@
 #include <malloc.h>
 #include <stdio.h>
 #include <tchar.h>
-#include "../../external_packages/aeffect.h"
-#include "../../external_packages/aeffectx.h"
+#include "../external_packages/aeffect.h"
+#include "../external_packages/aeffectx.h"
 #include <cstdint>
 #include <vector>
 

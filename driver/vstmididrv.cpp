@@ -19,18 +19,23 @@ void _endthreadex( unsigned retval );
 #include <stdlib.h>
 #include <process.h>
 #include <windows.h>
-#include "mmddk.h"  
+
 #include <mmsystem.h>
 #include <mmreg.h>
 #include <tchar.h>
 #include <Shlwapi.h>
 
+#if (_MSC_VER == 1700)
+#include <mmddk.h>
+#else
+#include "mmddk.h"  
 extern "C" {
-BOOL WINAPI DriverCallback( DWORD dwCallBack, DWORD dwFlags, HDRVR hdrvr, DWORD msg, DWORD dwUser, DWORD dwParam1, DWORD dwParam2 );	
+	BOOL WINAPI DriverCallback( DWORD dwCallBack, DWORD dwFlags, HDRVR hdrvr, DWORD msg, DWORD dwUser, DWORD dwParam1, DWORD dwParam2 );  
 }
+#endif
 
 #include "sound_out.h"
-#include "../driver/src/VSTDriver.h"
+#include "VSTDriver.h"
 
 #define MAX_DRIVERS 2
 #define MAX_CLIENTS 1 // Per driver

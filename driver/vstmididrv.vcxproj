@@ -19,8 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="VSTDriver.cpp" />
     <ClCompile Include="vstmididrv.cpp" />
-    <ClCompile Include="..\driver\src\VSTDriver.cpp" />
     <ClCompile Include="dsound.cpp" />
     <ClCompile Include="sound_out_dsound.cpp" />
     <ClCompile Include="sound_out_xaudio2.cpp" />
