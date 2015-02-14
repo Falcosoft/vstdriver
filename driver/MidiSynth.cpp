@@ -134,7 +134,7 @@ public:
 	int Init() {
 		hEvent = CreateEvent(NULL, false, true, NULL);
 		if (hEvent == NULL) {
-			MessageBox(NULL, L"Can't create sync object", L"VSTMIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			MessageBox(NULL, L"Can't create sync object", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 			return 1;
 		}
 		return 0;
@@ -182,7 +182,7 @@ public:
 		// Open waveout device
 		int wResult = waveOutOpen(&hWaveOut, WAVE_MAPPER, useFloat ? &wFormatFloat : (LPWAVEFORMATEX)&wFormat, callback, (DWORD_PTR)&midiSynth, callbackType);
 		if (wResult != MMSYSERR_NOERROR) {
-			MessageBox(NULL, L"Failed to open waveform output device", L"VSTMIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 			return 2;
 		}
 
@@ -295,7 +295,7 @@ public:
 		int delta = mmTime.u.sample - prevPlayPos;
 		if (usingFloat) {
 			if (delta < -(1 << 25)) {
-				std::cout << "VSTMIDI Driver: GetPos() wrap: " << delta << "\n";
+				std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
 				++getPosWraps;
 			}
 			prevPlayPos = mmTime.u.sample;
@@ -303,7 +303,7 @@ public:
 		}
 		else {
 			if (delta < -(1 << 26)) {
-				std::cout << "VSTMIDI Driver: GetPos() wrap: " << delta << "\n";
+				std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
 				++getPosWraps;
 			}
 			prevPlayPos = mmTime.u.sample;
