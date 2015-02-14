@@ -155,12 +155,12 @@ REGDONE3:
    WriteUninstaller "$WINDIR\SysWow64\vstmididrvuninstall.exe"
    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\SysWow64\vstmididrvuninstall.exe"'
    CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Uninstall.lnk" "$WINDIR\SysWow64\vstmididrvuninstall.exe" "" "$WINDIR\SysWow64\vstmididrvuninstall.exe" 0
-   CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure Driver.lnk" "$WINDIR\SysWow64\vstmididrvcfg.exe" "" "$WINDIR\SysWow64\vstmididrvcfg.exe" 0
+   CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST Driver.lnk" "$WINDIR\SysWow64\vstmididrvcfg.exe" "" "$WINDIR\SysWow64\vstmididrvcfg.exe" 0
    ${Else}
    WriteUninstaller "$WINDIR\System32\vstmididrvuninstall.exe"
    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\System32\vstmididrvuninstall.exe"'
    CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Uninstall.lnk" "$WINDIR\System32\vstmididrvuninstall.exe" "" "$WINDIR\System32\vstmididrvuninstall.exe" 0
-   CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure Driver.lnk" "$WINDIR\System32\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrvcfg.exe" 0
+   CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST Driver.lnk" "$WINDIR\System32\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrvcfg.exe" 0
    ${EndIf}
    MessageBox MB_OK "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver."
 
