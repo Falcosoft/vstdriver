@@ -12,6 +12,22 @@
 
 #pragma once
 
+
+BOOL IsWin8OrNewer()
+{
+	OSVERSIONINFOEX osvi;
+	BOOL bOsVersionInfoEx;
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
+	if (bOsVersionInfoEx == FALSE) return FALSE;
+	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId &&
+		(osvi.dwMajorVersion > 6 ||
+		(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion > 1)))
+		return TRUE;
+	return FALSE;
+}
+
 class CMainDlg : public CDialogImpl<CMainDlg>, public CUpdateUI<CMainDlg>,
 		public CMessageFilter, public CIdleHandler
 {
@@ -58,13 +74,18 @@ public:
 		SetIcon(hIconSmall, FALSE);
 		m_ctrlTab.SubclassWindow(GetDlgItem(IDC_TAB));
 		m_view1.Create(m_hWnd);
+		if (!IsWin8OrNewer())
 		m_view2.Create(m_hWnd);
 		TCITEM tci = { 0 };
 		tci.mask = TCIF_TEXT;
 		tci.pszText = _T("VST settings");
 		m_ctrlTab.InsertItem(0, &tci, m_view1);
-		tci.pszText = _T("Advanced");
-		m_ctrlTab.InsertItem(1, &tci, m_view2);
+		if (!IsWin8OrNewer())
+		{
+			tci.pszText = _T("Advanced");
+			m_ctrlTab.InsertItem(1, &tci, m_view2);
+		}
+		
 		m_ctrlTab.SetCurSel(0);
 
 		// register object for message filtering and idle updates
