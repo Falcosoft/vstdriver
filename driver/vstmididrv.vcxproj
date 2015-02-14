@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -19,11 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="MidiSynth.cpp" />
     <ClCompile Include="VSTDriver.cpp" />
-    <ClCompile Include="vstmididrv.cpp" />
-    <ClCompile Include="dsound.cpp" />
-    <ClCompile Include="sound_out_dsound.cpp" />
-    <ClCompile Include="sound_out_xaudio2.cpp" />
+    <ClCompile Include="winmm_drv.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="vstmididrv.def" />
@@ -33,8 +31,7 @@
     <ClInclude Include="..\external_packages\aeffectx.h" />
     <ClInclude Include="..\external_packages\audiodefs.h" />
     <ClInclude Include="..\external_packages\comdecl.h" />
-    <ClInclude Include="..\external_packages\XAudio2.h" />
-    <ClInclude Include="..\external_packages\xma2defs.h" />
+    <ClInclude Include="MidiSynth.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectName>vstmidi_win32drv</ProjectName>
@@ -49,6 +46,7 @@
     <UseOfAtl>Static</UseOfAtl>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
@@ -56,18 +54,21 @@
     <UseOfAtl>Static</UseOfAtl>
     <CharacterSet>Unicode</CharacterSet>
     <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <UseOfAtl>Static</UseOfAtl>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <UseOfAtl>Static</UseOfAtl>
     <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
