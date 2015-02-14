@@ -15,10 +15,11 @@
  */
 
 #include "stdafx.h"
-#include "VSTDriver.h"
 
-#ifndef BASSMIDIDRV_MIDISYNTH_H
+#ifndef VSTMIDIDRV_MIDISYNTH_H
 #define VSTMIDIDRV_MIDISYNTH_H
+
+class VSTDriver;
 
 namespace VSTMIDIDRV {
 
@@ -32,17 +33,12 @@ private:
 	bool usingFloat;
 	bool resetEnabled;
 	float outputGain;
-	VSTDriver * vst_driver;
+
 	short *buffer;
 	float *bufferf;
 	DWORD framesRendered;
 
-	//BOOL LoadBass();
-    
-   // bool LoadFontItem(unsigned uDeviceID, const TCHAR * in_path);
-    
-   /// void LoadFonts(unsigned uDeviceID, const TCHAR * name);
-   // void FreeFonts(unsigned uDeviceID);
+	VSTDriver * vstDriver;
 
 	unsigned int MillisToFrames(unsigned int millis);
 	void LoadSettings();

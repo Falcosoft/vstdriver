@@ -10,6 +10,12 @@ enum
 
 // #define LOG_EXCHANGE
 
+bool need_idle = false;
+bool idle_started = false;
+
+static char * dll_dir = NULL;
+
+static HANDLE null_file = NULL;
 static HANDLE pipe_in = NULL;
 static HANDLE pipe_out = NULL;
 
@@ -253,6 +259,28 @@ static VstIntPtr VSTCALLBACK audioMaster( AEffect * effect, VstInt32 opcode, Vst
 
 	case audioMasterGetLanguage:
 		return kVstLangEnglish;
+
+	case audioMasterVendorSpecific:
+		/* Steinberg HACK */
+		if ( ptr )
+		{
+			uint32_t * blah = ( uint32_t * ) ( ( ( char * ) ptr ) - 4 );
+			if ( *blah == 0x0737bb68 )
+			{
+				*blah ^= 0x5CC8F349;
+				blah[2] = 0x19E;
+				return 0x1E7;
+			}
+		}
+		break;
+
+	case audioMasterGetDirectory:
+		return (VstIntPtr) dll_dir;
+
+		/* More crap */
+	case DECLARE_VST_DEPRECATED(audioMasterNeedIdle):
+		need_idle = true;
+		return 0;
 	}
 
 	return 0;
@@ -277,7 +305,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 	int argc = 0;
 	LPWSTR * argv = CommandLineToArgvW( GetCommandLineW(), &argc );
 
-	if ( argv == NULL || argc != 4 ) return 1;
+	if ( argv == NULL || argc != 3 ) return 1;
 
 	wchar_t * end_char = 0;
 	unsigned in_sum = wcstoul( argv[ 2 ], &end_char, 16 );
@@ -310,19 +338,13 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 	std::vector<uint8_t> chunk;
 	std::vector<float> sample_buffer;
 
-	TCHAR pipe_name[128];
+	null_file = CreateFile( _T("NUL"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
 
-	_tcscpy_s( pipe_name, _countof( pipe_name ), _T("\\\\.\\pipe\\") );
+	pipe_in = GetStdHandle( STD_INPUT_HANDLE );
+	pipe_out = GetStdHandle( STD_OUTPUT_HANDLE );
 
-	_tcscpy_s( pipe_name + 9, _countof( pipe_name ) - 9, argv[ 3 ] );
-	pipe_in = CreateFile( pipe_name, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL );
-	if ( !pipe_in )
-	{
-		code = 13;
-		goto exit;
-	}
-
-	pipe_out = pipe_in;
+	SetStdHandle( STD_INPUT_HANDLE, null_file );
+	SetStdHandle( STD_OUTPUT_HANDLE, null_file );
 
 	{
 		INITCOMMONCONTROLSEX icc;
@@ -337,9 +359,12 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 	SetUnhandledExceptionFilter( myExceptFilterProc );
 #endif
 
-#if 0
-	MessageBox( GetDesktopWindow(), argv[ 1 ], _T("HUUUURRRRRR"), 0 );
-#endif
+	size_t dll_name_len = wcslen( argv[ 1 ] );
+	dll_dir = ( char * ) malloc( dll_name_len + 1 );
+	wcstombs( dll_dir, argv[ 1 ], dll_name_len );
+	dll_dir[ dll_name_len ] = '\0';
+	char * slash = strrchr( dll_dir, '\\' );
+	*slash = '\0';
 
 	hDll = LoadLibraryW( argv[ 1 ] );
 	if ( !hDll )
@@ -354,6 +379,10 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 		code = 7;
 		goto exit;
 	}
+
+#if 0
+	MessageBox( GetDesktopWindow(), argv[ 1 ], _T("HUUUURRRRRR"), 0 );
+#endif
 
 	pEffect[ 0 ] = pMain( &audioMaster );
 	if ( !pEffect[ 0 ] || pEffect[ 0 ]->magic != kEffectMagic )
@@ -516,7 +545,8 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 				uint32_t b = get_code();
 
-				ev->port = (b & 0x7F000000) ? 1 : 0;
+				ev->port = (b & 0x7F000000) >> 24;
+				if (ev->port > 1) ev->port = 1;
 				ev->ev.midiEvent.type = kVstMidiType;
 				ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
 				memcpy(&ev->ev.midiEvent.midiData, &b, 3);
@@ -537,6 +567,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				size &= 0xFFFFFF;
 
 				ev->port = port;
+				if (ev->port > 1) ev->port = 1;
 				ev->ev.sysexEvent.type = kVstSysExType;
 				ev->ev.sysexEvent.byteSize = sizeof(ev->ev.sysexEvent);
 				ev->ev.sysexEvent.dumpBytes = size;
@@ -594,6 +625,31 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					sample_buffer.resize( BUFFER_SIZE * max_num_outputs );
 				}
 
+				if ( need_idle )
+				{
+					pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+
+					if ( !idle_started )
+					{
+						unsigned idle_run = BUFFER_SIZE * 128;
+
+						while ( idle_run )
+						{
+							unsigned count_to_do = min( idle_run, BUFFER_SIZE );
+							unsigned num_outputs = pEffect[ 0 ]->numOutputs;
+
+							pEffect[ 0 ]->processReplacing( pEffect[ 0 ], float_list_in, float_list_out, count_to_do );
+							pEffect[ 1 ]->processReplacing( pEffect[ 1 ], float_list_in, float_list_out + num_outputs, count_to_do );
+
+							pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+							pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+
+							idle_run -= count_to_do;
+						}
+					}
+				}
+
 				VstEvents * events[ 2 ] = {0};
 
 				if ( evChain )
@@ -635,11 +691,25 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 						for ( unsigned i = 0; ev; )
 						{
-							if ( ev->port ) events[ 1 ]->events[ i++ ] = (VstEvent*) &ev->ev;
+							if ( ev->port == 1 ) events[ 1 ]->events[ i++ ] = (VstEvent*) &ev->ev;
 							ev = ev->next;
 						}
 
 						pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effProcessEvents, 0, 0, events[ 1 ], 0 );
+					}
+				}
+
+				if ( need_idle )
+				{
+					pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+
+					if ( !idle_started )
+					{
+						if ( events[ 0 ] ) pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effProcessEvents, 0, 0, events[ 0 ], 0 );
+						if ( events[ 1 ] ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effProcessEvents, 0, 0, events[ 1 ], 0 );
+
+						idle_started = true;
 					}
 				}
 
@@ -715,7 +785,13 @@ exit:
 
 	put_code( code );
 
-	if ( pipe_in ) CloseHandle( pipe_in );
+	if ( null_file )
+	{
+		CloseHandle( null_file );
+
+		SetStdHandle( STD_INPUT_HANDLE, pipe_in );
+		SetStdHandle( STD_OUTPUT_HANDLE, pipe_out );
+	}
 
 	return code;
 }

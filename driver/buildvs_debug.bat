@@ -1,6 +1,6 @@
 @ECHO OFF
 if "%INCLUDE%" EQU "" GOTO ERROR
-@cl /Od /Zi /MTd /EHsc /DUNICODE /D_UNICODE /LDd /I "..\external_packages" vstmididrv.cpp VSTDriver.cpp dsound.cpp sound_out_dsound.cpp sound_out_xaudio2.cpp kernel32.lib user32.lib Shlwapi.lib advapi32.lib winmm.lib Ole32.lib uuid.lib vstmididrv.def
+@cl /Fevstmididrv.dll /Od /Zi /MTd /EHsc /DUNICODE /D_UNICODE /LDd /I "..\external_packages" VSTDriver.cpp MidiSynth.cpp winmm_drv.cpp kernel32.lib user32.lib Shlwapi.lib advapi32.lib winmm.lib Ole32.lib uuid.lib vstmididrv.def
 goto END
 :ERROR
 echo.

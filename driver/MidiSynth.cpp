@@ -15,11 +15,10 @@
  */
 
 #include "stdafx.h"
-#include "VSTDriver.h"
 
 #undef GetMessage
 
-extern HINSTANCE hinst;
+#include "VSTDriver.h"
 
 namespace VSTMIDIDRV {
 
@@ -135,7 +134,7 @@ public:
 	int Init() {
 		hEvent = CreateEvent(NULL, false, true, NULL);
 		if (hEvent == NULL) {
-			MessageBox(NULL, L"Can't create sync object", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			MessageBox(NULL, L"Can't create sync object", L"VSTMIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 			return 1;
 		}
 		return 0;
@@ -183,7 +182,7 @@ public:
 		// Open waveout device
 		int wResult = waveOutOpen(&hWaveOut, WAVE_MAPPER, useFloat ? &wFormatFloat : (LPWAVEFORMATEX)&wFormat, callback, (DWORD_PTR)&midiSynth, callbackType);
 		if (wResult != MMSYSERR_NOERROR) {
-			MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			MessageBox(NULL, L"Failed to open waveform output device", L"VSTMIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 			return 2;
 		}
 
@@ -294,12 +293,22 @@ public:
 		// The output of that nasty waveOutGetPosition() isn't monotonically increasing
 		// even during 2^27 samples playback, so we have to ensure the difference is big enough...
 		int delta = mmTime.u.sample - prevPlayPos;
-		if (delta < -(1 << 26)) {
-			std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
-			++getPosWraps;
+		if (usingFloat) {
+			if (delta < -(1 << 25)) {
+				std::cout << "VSTMIDI Driver: GetPos() wrap: " << delta << "\n";
+				++getPosWraps;
+			}
+			prevPlayPos = mmTime.u.sample;
+			return mmTime.u.sample + getPosWraps * (1 << 26);
 		}
-		prevPlayPos = mmTime.u.sample;
-		return mmTime.u.sample + getPosWraps * (1 << 27);
+		else {
+			if (delta < -(1 << 26)) {
+				std::cout << "VSTMIDI Driver: GetPos() wrap: " << delta << "\n";
+				++getPosWraps;
+			}
+			prevPlayPos = mmTime.u.sample;
+			return mmTime.u.sample + getPosWraps * (1 << 27);
+		}
 	}
 
 	static void RenderingThread(void *pthis) {
@@ -375,11 +384,11 @@ void MidiSynth::Render(short *bufpos, DWORD totalFrames) {
             synthEvent.Wait();
             if (msg && !sysex)
             {
-				vst_driver->ProcessMIDIMessage(port & 1, msg);
+                vstDriver->ProcessMIDIMessage(port, msg);
             }
             else if (!msg && sysex && sysex_len)
             {
-				vst_driver->ProcessSysEx(port & 1, sysex, sysex_len);
+                vstDriver->ProcessSysEx(port, sysex, sysex_len);
                 free(sysex);
             }
 			synthEvent.Release();
@@ -392,27 +401,10 @@ void MidiSynth::Render(short *bufpos, DWORD totalFrames) {
 			framesToRender = totalFrames;
 		}
 		synthEvent.Wait();
-        {
-            short sampleBuffer[2048];
-            int framesDone = 0;
-            while (framesDone < framesToRender)
-            {
-                int i;
-                int framesThisBatch = framesToRender - framesDone;
-                if (framesThisBatch > 1024)
-                    framesThisBatch = 1024;
-				vst_driver->Render(sampleBuffer, framesThisBatch * sizeof(short), 1.0f);
-                for (i = 0; i < framesThisBatch * 2; ++i)
-                {
-                    int sample = sampleBuffer[i];
-                    if ( ( sample + 0x8000 ) & 0xFFFF0000 ) sample = 0x7FFF ^ ( sample >> 31 );
-                    *bufpos++ = (short) sample;
-                }
-                framesDone += framesThisBatch;
-            }
-        }
+		vstDriver->Render(bufpos, framesToRender);
 		synthEvent.Release();
 		framesRendered += framesToRender;
+		bufpos += framesToRender * 2;
 		totalFrames -= framesToRender;
 	}
 
@@ -435,11 +427,11 @@ void MidiSynth::RenderFloat(float *bufpos, DWORD totalFrames) {
 			synthEvent.Wait();
 			if (msg && !sysex)
 			{
-				vst_driver->ProcessMIDIMessage(port & 1, msg);
+				vstDriver->ProcessMIDIMessage(port, msg);
 			}
 			else if (!msg && sysex && sysex_len)
 			{
-				vst_driver->ProcessSysEx(port & 1, sysex, sysex_len);
+				vstDriver->ProcessSysEx(port, sysex, sysex_len);
 				free(sysex);
 			}
 			synthEvent.Release();
@@ -452,26 +444,10 @@ void MidiSynth::RenderFloat(float *bufpos, DWORD totalFrames) {
 			framesToRender = totalFrames;
 		}
 		synthEvent.Wait();
-		{
-			float sampleBuffer[2048];
-			int framesDone = 0;
-			while (framesDone < framesToRender)
-			{
-				int i;
-				int framesThisBatch = framesToRender - framesDone;
-				if (framesThisBatch > 1024)
-					framesThisBatch = 1024;
-				vst_driver->RenderFloat(sampleBuffer, framesThisBatch, 1.0f);
-				for (i = 0; i < framesThisBatch * 2; ++i)
-				{
-					float sample = sampleBuffer[i];
-					*bufpos++ = sample;
-				}
-				framesDone += framesThisBatch;
-			}
-		}
+		vstDriver->RenderFloat(bufpos, framesToRender);
 		synthEvent.Release();
 		framesRendered += framesToRender;
+		bufpos += framesToRender * 2;
 		totalFrames -= framesToRender;
 	}
 
@@ -526,12 +502,14 @@ int MidiSynth::Init() {
 	if (synthEvent.Init()) {
 		return 1;
 	}
-	vst_driver = new VSTDriver;
-	if (!vst_driver->OpenVSTDriver()) {
-		delete vst_driver;
-		vst_driver = NULL;
+
+	vstDriver = new VSTDriver;
+	if (!vstDriver->OpenVSTDriver()) {
+		delete vstDriver;
+		vstDriver = NULL;
 		return 1;
 	}
+
 	UINT wResult = waveOut.Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, useRingBuffer, sampleRate, usingFloat);
 	if (wResult) return wResult;
 
@@ -551,7 +529,7 @@ int MidiSynth::Reset(unsigned uDeviceID) {
 	if (wResult) return wResult;
 
 	synthEvent.Wait();
-   
+	vstDriver->ResetDriver();
 	synthEvent.Release();
 
 	wResult = waveOut.Resume();
@@ -570,10 +548,11 @@ void MidiSynth::Close() {
 	waveOut.Pause();
 	waveOut.Close();
 	synthEvent.Wait();
-	//synth->close();
-	delete vst_driver;
-	vst_driver = NULL;
 
+	// Cleanup memory
+	delete vstDriver;
+	vstDriver = NULL;
+    
 	synthEvent.Close();
 }
 

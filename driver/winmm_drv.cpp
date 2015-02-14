@@ -16,9 +16,8 @@
  */
 
 #include "stdafx.h"
-#include "VSTDriver.h"
-extern "C" HINSTANCE hinst_vst_driver = NULL;
-HINSTANCE hinst = 0;
+
+extern "C" HINSTANCE hinst_vst_driver = 0;
 
 #define MAX_DRIVERS 2
 #define MAX_CLIENTS 8 // Per driver
@@ -30,8 +29,7 @@ static int driverCount;
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ){
     if (fdwReason == DLL_PROCESS_ATTACH){
-        hinst = hinstDLL;
-		hinst_vst_driver = hinstDLL;
+        hinst_vst_driver = hinstDLL;
         DisableThreadLibraryCalls(hinstDLL);
     }else if(fdwReason == DLL_PROCESS_DETACH){
         ;
@@ -114,8 +112,8 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 	MIDIOUTCAPS2A * myCaps2A;
 	MIDIOUTCAPS2W * myCaps2W;
 
-	CHAR synthName[] = "VST MIDI Driver\0";
-	WCHAR synthNameW[] = L"VST MIDI Driver\0";
+	CHAR synthName[] = "VST MIDI Synth\0";
+	WCHAR synthNameW[] = L"VST MIDI Synth\0";
 
     CHAR synthPortA[] = " (port A)\0";
     WCHAR synthPortAW[] = L" (port A)\0";
