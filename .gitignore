@@ -32,11 +32,16 @@
 /vsthost/*.vcxproj.user
 /vsthost/*.suo
 /vsthost/*.user
+/vsthost/*.aps
+/vsthost/*.VC.db
 /vsthost/ipch
 /vsthost/Release
 /vsthost/Debug
+/vsthost/x64
+/vsthost/.vs
 /vsthost/*.dll
 /vsthost/*.exe
 /output/
 git_ver.h
 vstmididrv.exe
+vstmididrv.exe.asc
