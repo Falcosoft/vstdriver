@@ -15,7 +15,7 @@ Name "VST MIDI System Synth"
 
   !system "$%TEMP%\tempinstaller.exe" = 2
 
-  !system "e:\signit.bat $%TEMP%\vstmididrvuninstall.exe" = 0
+  ;!system "m:\signit.bat $%TEMP%\vstmididrvuninstall.exe" = 0
 
   ; The file to write
   OutFile "vstmididrv.exe"
@@ -91,6 +91,8 @@ Section "Needed (required)"
    ${If} ${RunningX64}
    SetOutPath "$WINDIR\SysWow64\vstmididrv"
    File output\vstmididrv.dll 
+   File output\bass.dll
+   File output\basswasapi.dll
    File output\vstmididrvcfg.exe
    File output\vsthost32.exe
    File output\64\vsthost64.exe
@@ -141,6 +143,8 @@ NEXT2:
    ${Else}
    SetOutPath "$WINDIR\System32\vstmididrv"
    File output\vstmididrv.dll 
+   File output\bass.dll
+   File output\basswasapi.dll
    File output\vstmididrvcfg.exe
    File output\vsthost32.exe
    ;check if already installed
@@ -214,6 +218,8 @@ ${EndIf}
 ${Else}
   MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
   ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrv.dll
+  ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bass.dll
+  ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\basswasapi.dll
   ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe
   ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe
   ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vsthost32.exe
@@ -226,6 +232,8 @@ ${If} ${AtLeastWinVista}
 ${Else}
   MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
   ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrv.dll
+  ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bass.dll
+  ${DeleteOnReboot} $WINDIR\System32\vstmididrv\basswasapi.dll
   ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
   ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvcfg.exe
   ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vsthost32.exe

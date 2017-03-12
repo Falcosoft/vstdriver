@@ -13,8 +13,10 @@ if ERRORLEVEL 1 goto END
 REM Move files to the output dir
 mkdir ..\output\64
 if "%IS64BIT%" EQU "1" (
+  copy ..\external_packages\lib64\*.dll ..\output\64
   move vstmididrv.dll ..\output\64
 ) else (
+  copy ..\external_packages\lib\*.dll ..\output
   move vstmididrv.dll ..\output\
 )
 goto END

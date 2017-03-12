@@ -17,7 +17,7 @@
 
 #include "stdafx.h"
 
-extern "C" HINSTANCE hinst_vst_driver = 0;
+extern "C" { HINSTANCE hinst_vst_driver = 0; }
 
 #define MAX_DRIVERS 2
 #define MAX_CLIENTS 8 // Per driver

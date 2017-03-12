@@ -3,16 +3,17 @@
 
 #include "stdafx.h"
 
+// #define LOG_EXCHANGE
+
 enum
 {
-	BUFFER_SIZE = 4096,
+	BUFFER_SIZE = 4096
 };
-
-// #define LOG_EXCHANGE
 
 bool need_idle = false;
 bool idle_started = false;
 
+static wchar_t * dll_dir_w = NULL;
 static char * dll_dir = NULL;
 
 static HANDLE null_file = NULL;
@@ -326,9 +327,9 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
-	AEffect * pEffect[2] = {0, 0};
+	AEffect * pEffect[3] = {0, 0, 0};
 
-	audioMasterData effectData[2] = { { 0 }, { 1 } };
+	audioMasterData effectData[3] = { { 0 }, { 1 }, { 2 } };
 
 	std::vector<uint8_t> blState;
 
@@ -337,6 +338,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 	std::vector<uint8_t> chunk;
 	std::vector<float> sample_buffer;
+	unsigned int samples_buffered = 0;
 
 	null_file = CreateFile( _T("NUL"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
 
@@ -360,13 +362,20 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 #endif
 
 	size_t dll_name_len = wcslen( argv[ 1 ] );
+	dll_dir_w = ( wchar_t * ) malloc( ( dll_name_len + 1 ) * 2 );
 	dll_dir = ( char * ) malloc( dll_name_len + 1 );
+	wcscpy( dll_dir_w, argv[ 1 ] );
 	wcstombs( dll_dir, argv[ 1 ], dll_name_len );
+	dll_dir_w[ dll_name_len ] = L'\0';
 	dll_dir[ dll_name_len ] = '\0';
+	wchar_t * slash_w = wcsrchr( dll_dir_w, L'\\' );
 	char * slash = strrchr( dll_dir, '\\' );
+	*slash_w = L'\0';
 	*slash = '\0';
 
+	SetDllDirectoryW( dll_dir_w );
 	hDll = LoadLibraryW( argv[ 1 ] );
+	SetDllDirectoryW( NULL );
 	if ( !hDll )
 	{
 		code = 6;
@@ -463,6 +472,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 				setChunk( pEffect[ 0 ], chunk );
 				setChunk( pEffect[ 1 ], chunk );
+				setChunk( pEffect[ 2 ], chunk );
 
 				put_code( 0 );
 			}
@@ -486,6 +496,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					DialogBoxIndirectParam ( 0, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)( pEffect[ 0 ] ) );
 					getChunk( pEffect[ 0 ], chunk );
 					setChunk( pEffect[ 1 ], chunk );
+					setChunk( pEffect[ 2 ], chunk );
 				}
 
 				put_code( 0 );
@@ -509,6 +520,12 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 		case 6: // Reset
 			{
+				if ( pEffect[ 2 ] )
+				{
+					if ( blState.size() ) pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effStopProcess, 0, 0, 0, 0 );
+					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effClose, 0, 0, 0, 0 );
+					pEffect[ 2 ] = NULL;
+				}
 				if ( pEffect[ 1 ] )
 				{
 					if ( blState.size() ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStopProcess, 0, 0, 0, 0 );
@@ -546,7 +563,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				uint32_t b = get_code();
 
 				ev->port = (b & 0x7F000000) >> 24;
-				if (ev->port > 1) ev->port = 1;
+				if (ev->port > 2) ev->port = 2;
 				ev->ev.midiEvent.type = kVstMidiType;
 				ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
 				memcpy(&ev->ev.midiEvent.midiData, &b, 3);
@@ -567,7 +584,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				size &= 0xFFFFFF;
 
 				ev->port = port;
-				if (ev->port > 1) ev->port = 1;
+				if (ev->port > 2) ev->port = 2;
 				ev->ev.sysexEvent.type = kVstSysExType;
 				ev->ev.sysexEvent.byteSize = sizeof(ev->ev.sysexEvent);
 				ev->ev.sysexEvent.dumpBytes = size;
@@ -593,6 +610,18 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effOpen, 0, 0, 0, 0 );
 					setChunk( pEffect[ 1 ], chunk );
 				}
+				if ( !pEffect[ 2 ] )
+				{
+					pEffect[ 2 ] = pMain( &audioMaster );
+					if ( !pEffect[ 2 ] )
+					{
+						code = 11;
+						goto exit;
+					}
+					pEffect[ 2 ]->user = &effectData[ 2 ];
+					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effOpen, 0, 0, 0, 0 );
+					setChunk( pEffect[ 2 ], chunk );
+				}
 
 				if ( !blState.size() )
 				{
@@ -606,33 +635,39 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effMainsChanged, 0, 1, 0, 0 );
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStartProcess, 0, 0, 0, 0 );
 
-					size_t buffer_size = sizeof(float*) * ( pEffect[ 0 ]->numInputs + pEffect[ 0 ]->numOutputs * 2 ); // float lists
+					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effSetSampleRate, 0, 0, 0, float(sample_rate) );
+					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effSetBlockSize, 0, BUFFER_SIZE, 0, 0 );
+					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effMainsChanged, 0, 1, 0, 0 );
+					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effStartProcess, 0, 0, 0, 0 );
+
+					size_t buffer_size = sizeof(float*) * ( pEffect[ 0 ]->numInputs + pEffect[ 0 ]->numOutputs * 3 ); // float lists
 					buffer_size += sizeof(float) * BUFFER_SIZE;                                // null input
-					buffer_size += sizeof(float) * BUFFER_SIZE * pEffect[ 0 ]->numOutputs * 2;          // outputs
+					buffer_size += sizeof(float) * BUFFER_SIZE * pEffect[ 0 ]->numOutputs * 3;          // outputs
 
 					blState.resize( buffer_size );
 
 					float_list_in  = (float**) blState.data();
 					float_list_out = float_list_in + pEffect[ 0 ]->numInputs;
-					float_null     = (float*) ( float_list_out + pEffect[ 0 ]->numOutputs * 2 );
+					float_null     = (float*) ( float_list_out + pEffect[ 0 ]->numOutputs * 3 );
 					float_out      = float_null + BUFFER_SIZE;
 
 					for ( unsigned i = 0; i < pEffect[ 0 ]->numInputs; ++i )      float_list_in [ i ] = float_null;
-					for ( unsigned i = 0; i < pEffect[ 0 ]->numOutputs * 2; ++i ) float_list_out[ i ] = float_out + BUFFER_SIZE * i;
+					for ( unsigned i = 0; i < pEffect[ 0 ]->numOutputs * 3; ++i ) float_list_out[ i ] = float_out + BUFFER_SIZE * i;
 
 					memset( float_null, 0, sizeof(float) * BUFFER_SIZE );
 
-					sample_buffer.resize( BUFFER_SIZE * max_num_outputs );
+					sample_buffer.resize( (4096 + BUFFER_SIZE) * max_num_outputs );
 				}
 
 				if ( need_idle )
 				{
 					pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
 
 					if ( !idle_started )
 					{
-						unsigned idle_run = BUFFER_SIZE * 128;
+						unsigned idle_run = BUFFER_SIZE * 200;
 
 						while ( idle_run )
 						{
@@ -641,20 +676,22 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 							pEffect[ 0 ]->processReplacing( pEffect[ 0 ], float_list_in, float_list_out, count_to_do );
 							pEffect[ 1 ]->processReplacing( pEffect[ 1 ], float_list_in, float_list_out + num_outputs, count_to_do );
+							pEffect[ 2 ]->processReplacing( pEffect[ 2 ], float_list_in, float_list_out + num_outputs * 2, count_to_do );
 
 							pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
 							pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+							pEffect[ 2 ]->dispatcher( pEffect[ 2 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
 
 							idle_run -= count_to_do;
 						}
 					}
 				}
 
-				VstEvents * events[ 2 ] = {0};
+				VstEvents * events[ 3 ] = {0};
 
 				if ( evChain )
 				{
-					unsigned event_count[ 2 ] = {0};
+					unsigned event_count[ 3 ] = {0};
 					myVstEvent * ev = evChain;
 					while ( ev )
 					{
@@ -697,17 +734,37 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 						pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effProcessEvents, 0, 0, events[ 1 ], 0 );
 					}
+
+					if ( event_count[ 2 ] )
+					{
+						events[ 2 ] = ( VstEvents * ) malloc( sizeof(long) + sizeof(long) + sizeof(VstEvent*) * event_count[ 2 ] );
+
+						events[ 2 ]->numEvents = event_count[ 2 ];
+						events[ 2 ]->reserved = 0;
+
+						ev = evChain;
+
+						for ( unsigned i = 0; ev; )
+						{
+							if ( ev->port == 2 ) events[ 2 ]->events[ i++ ] = (VstEvent*) &ev->ev;
+							ev = ev->next;
+						}
+
+						pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effProcessEvents, 0, 0, events[ 2 ], 0 );
+					}
 				}
 
 				if ( need_idle )
 				{
 					pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
 
 					if ( !idle_started )
 					{
 						if ( events[ 0 ] ) pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effProcessEvents, 0, 0, events[ 0 ], 0 );
 						if ( events[ 1 ] ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effProcessEvents, 0, 0, events[ 1 ], 0 );
+						if ( events[ 2 ] ) pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effProcessEvents, 0, 0, events[ 2 ], 0 );
 
 						idle_started = true;
 					}
@@ -719,21 +776,22 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 				while( count )
 				{
-					unsigned count_to_do = min( count, BUFFER_SIZE );
+					unsigned count_to_do = min(count, BUFFER_SIZE);
 					unsigned num_outputs = pEffect[ 0 ]->numOutputs;
 
 					pEffect[ 0 ]->processReplacing( pEffect[ 0 ], float_list_in, float_list_out, count_to_do );
 					pEffect[ 1 ]->processReplacing( pEffect[ 1 ], float_list_in, float_list_out + num_outputs, count_to_do );
+					pEffect[ 2 ]->processReplacing( pEffect[ 2 ], float_list_in, float_list_out + num_outputs * 2, count_to_do );
 
-					float * out = sample_buffer.data();
+					float * out = sample_buffer.data() + samples_buffered * max_num_outputs;
 
 					if ( max_num_outputs == 2 )
 					{
 						for ( unsigned i = 0; i < count_to_do; ++i )
 						{
-							float sample = ( float_out[ i ] + float_out[ i + BUFFER_SIZE * num_outputs ] );
+							float sample = ( float_out[ i ] + float_out[ i + BUFFER_SIZE * num_outputs ] + float_out[ i + BUFFER_SIZE * num_outputs * 2 ] );
 							out[ 0 ] = sample;
-							sample = ( float_out[ i + BUFFER_SIZE ] + float_out[ i + BUFFER_SIZE + BUFFER_SIZE * num_outputs ] );
+							sample = ( float_out[ i + BUFFER_SIZE ] + float_out[ i + BUFFER_SIZE + BUFFER_SIZE * num_outputs ] + float_out[ i + BUFFER_SIZE + BUFFER_SIZE * num_outputs * 2 ] );
 							out[ 1 ] = sample;
 							out += 2;
 						}
@@ -742,19 +800,20 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					{
 						for ( unsigned i = 0; i < count_to_do; ++i )
 						{
-							float sample = ( float_out[ i ] + float_out[ i + BUFFER_SIZE * num_outputs ] );
+							float sample = ( float_out[ i ] + float_out[ i + BUFFER_SIZE * num_outputs ] + float_out[ i + BUFFER_SIZE * num_outputs * 2 ] );
 							out[ 0 ] = sample;
 							out++;
 						}
 					}
 
-					put_bytes( sample_buffer.data(), sizeof(float) * count_to_do * max_num_outputs );
+					put_bytes( sample_buffer.data(), count_to_do * sizeof(float) * max_num_outputs );
 
 					count -= count_to_do;
 				}
 
 				if ( events[ 0 ] ) free( events[ 0 ] );
 				if ( events[ 1 ] ) free( events[ 1 ] );
+				if ( events[ 2 ] ) free( events[ 2 ] );
 
 				freeChain();
 			}
@@ -768,6 +827,11 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 	}
 
 exit:
+	if ( pEffect[ 2 ] )
+	{
+		if ( blState.size() ) pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effStopProcess, 0, 0, 0, 0 );
+		pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effClose, 0, 0, 0, 0 );
+	}
 	if ( pEffect[ 1 ] )
 	{
 		if ( blState.size() ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStopProcess, 0, 0, 0, 0 );
@@ -781,6 +845,8 @@ exit:
 	freeChain();
 	if ( hDll ) FreeLibrary( hDll );
 	CoUninitialize();
+	if ( dll_dir ) free( dll_dir );
+	if ( dll_dir_w ) free( dll_dir_w );
 	if ( argv ) LocalFree( argv );
 
 	put_code( code );

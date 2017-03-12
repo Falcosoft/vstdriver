@@ -26,11 +26,9 @@ namespace VSTMIDIDRV {
 class MidiSynth {
 private:
 	unsigned int sampleRate;
-	unsigned int midiLatency;
-	unsigned int bufferSize;
-	unsigned int chunkSize;
-	bool useRingBuffer;
-	bool usingFloat;
+	unsigned int midiLatency, midiLatencyMS;
+	unsigned int bufferSize, bufferSizeMS;
+	unsigned int chunkSize, chunkSizeMS;
 	bool resetEnabled;
 	float outputGain;
 
@@ -50,7 +48,6 @@ public:
 	int Init();
 	void Close();
 	int Reset(unsigned uDeviceID);
-	void RenderAvailableSpace();
 	void Render(short *bufpos, DWORD totalFrames);
 	void RenderFloat(float *bufpos, DWORD totalFrames);
 	void PushMIDI(unsigned uDeviceID, DWORD msg);
