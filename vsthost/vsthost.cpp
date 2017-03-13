@@ -13,7 +13,6 @@ enum
 bool need_idle = false;
 bool idle_started = false;
 
-static wchar_t * dll_dir_w = NULL;
 static char * dll_dir = NULL;
 
 static HANDLE null_file = NULL;
@@ -362,20 +361,13 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 #endif
 
 	size_t dll_name_len = wcslen( argv[ 1 ] );
-	dll_dir_w = ( wchar_t * ) malloc( ( dll_name_len + 1 ) * 2 );
 	dll_dir = ( char * ) malloc( dll_name_len + 1 );
-	wcscpy( dll_dir_w, argv[ 1 ] );
 	wcstombs( dll_dir, argv[ 1 ], dll_name_len );
-	dll_dir_w[ dll_name_len ] = L'\0';
 	dll_dir[ dll_name_len ] = '\0';
-	wchar_t * slash_w = wcsrchr( dll_dir_w, L'\\' );
 	char * slash = strrchr( dll_dir, '\\' );
-	*slash_w = L'\0';
 	*slash = '\0';
 
-	SetDllDirectoryW( dll_dir_w );
 	hDll = LoadLibraryW( argv[ 1 ] );
-	SetDllDirectoryW( NULL );
 	if ( !hDll )
 	{
 		code = 6;
@@ -405,7 +397,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 	pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effOpen, 0, 0, 0, 0 );
 
 	if ( pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effGetPlugCategory, 0, 0, 0, 0 ) != kPlugCategSynth ||
-		pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effCanDo, 0, 0, "sendVstMidiEvent", 0 ) == 0 )
+		pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effCanDo, 0, 0, "receiveVstMidiEvent", 0 ) == 0 )
 	{
 		code = 9;
 		goto exit;
@@ -846,7 +838,6 @@ exit:
 	if ( hDll ) FreeLibrary( hDll );
 	CoUninitialize();
 	if ( dll_dir ) free( dll_dir );
-	if ( dll_dir_w ) free( dll_dir_w );
 	if ( argv ) LocalFree( argv );
 
 	put_code( code );
