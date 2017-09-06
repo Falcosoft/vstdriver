@@ -507,7 +507,7 @@ void VSTDriver::CloseVSTDriver() {
 	}
 }
 
-BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath) {
+BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 	CloseVSTDriver();
 
 	load_settings(szPath);
@@ -515,7 +515,7 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath) {
 	if ( process_create() ) {
 		process_write_code( 5 );
 		process_write_code( sizeof(uint32_t ) );
-		process_write_code( 44100 );
+		process_write_code( sampleRate );
 
 		uint32_t code = process_read_code();
 		if ( code != 0 ) {

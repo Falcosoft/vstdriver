@@ -67,7 +67,7 @@ public:
 	VSTDriver();
 	~VSTDriver();
 	void CloseVSTDriver();
-	BOOL OpenVSTDriver(TCHAR * szPath = NULL);
+	BOOL OpenVSTDriver(TCHAR * szPath = NULL, int sampleRate = 44100);
 	void ResetDriver();
 	void ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1);
 	void ProcessSysEx(DWORD dwPort, const unsigned char *sysexbuffer, int exlen);

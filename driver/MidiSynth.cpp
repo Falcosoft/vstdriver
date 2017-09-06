@@ -178,7 +178,7 @@ public:
 		lstrcat(basspath, _T("\\bass.dll"));
 		if (!(bass=LoadLibrary(basspath))) {
 			OutputDebugString(_T("Failed to load BASS.dll.\n"));
-			return 1;
+			return -1;
 		}
 
 		lstrcat(basswasapipath, installpath);
@@ -208,10 +208,10 @@ public:
 			if (basswasapi) {
 				BASS_WASAPI_INFO winfo;
 				if (!BASS_WASAPI_Init(-1, 0, 2, BASS_WASAPI_EVENT, (float)bufferSize * 0.001f, (float)chunkSize * 0.001f, WasapiProc, this))
-					return 2;
+					return -2;
 				if (!BASS_WASAPI_GetInfo(&winfo)) {
 					BASS_WASAPI_Free();
-					return 3;
+					return -3;
 				}
 				sampleRate = winfo.freq;
 				soundOutFloat = false;
@@ -239,11 +239,11 @@ public:
 			}
 			else {
 				hStOutput = BASS_StreamCreate(sampleRate, 2, ( soundOutFloat ? BASS_SAMPLE_FLOAT : 0 ), StreamProc, this);
-				if (!hStOutput) return 2;
+				if (!hStOutput) return -2;
 			}
 		}
 
-		return 0;
+		return sampleRate;
 	}
 
 	int Close() {
@@ -454,15 +454,16 @@ int MidiSynth::Init() {
 		return 1;
 	}
 
+	INT wResult = waveOut.Init(bufferSizeMS, chunkSizeMS, sampleRate);
+	if (wResult < 0) return -wResult;
+	sampleRate = wResult;
+
 	vstDriver = new VSTDriver;
-	if (!vstDriver->OpenVSTDriver()) {
+	if (!vstDriver->OpenVSTDriver(NULL, sampleRate)) {
 		delete vstDriver;
 		vstDriver = NULL;
 		return 1;
 	}
-
-	UINT wResult = waveOut.Init(bufferSizeMS, chunkSizeMS, sampleRate);
-	if (wResult) return wResult;
 
 	wResult = waveOut.Start();
 	return wResult;

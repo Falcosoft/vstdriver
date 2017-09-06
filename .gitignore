@@ -16,6 +16,7 @@
 /driver/out
 /driver/*.dll
 /driver/*.exe
+/driver/.vs
 /drivercfg/*.opensdf
 /drivercfg/*.sdf
 /drivercfg/*.vcxproj.user
@@ -27,6 +28,7 @@
 /drivercfg/*.dll
 /drivercfg/*.exe
 /drivercfg/x64
+/drivercfg/.vs
 /vsthost/*.opensdf
 /vsthost/*.sdf
 /vsthost/*.vcxproj.user
