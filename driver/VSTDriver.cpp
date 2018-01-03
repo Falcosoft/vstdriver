@@ -21,6 +21,7 @@
 VSTDriver::VSTDriver() {
 	szPluginPath = NULL;
 	bInitialized = false;
+	bInitializedOtherModel = false;
 	hProcess = NULL;
 	hThread = NULL;
 	hReadEvent = NULL;
@@ -194,8 +195,10 @@ bool VSTDriver::process_create()
 
 	if ( !bInitialized )
 	{
-		if ( FAILED( CoInitialize( NULL ) ) ) return false;
+		HRESULT ret = CoInitialize( NULL );
+		if ( FAILED( ret ) && ret != RPC_E_CHANGED_MODE ) return false;
 		bInitialized = true;
+		bInitializedOtherModel = ret == RPC_E_CHANGED_MODE;
 	}
 
 	hReadEvent = CreateEvent( NULL, TRUE, FALSE, NULL );
@@ -330,8 +333,9 @@ void VSTDriver::process_terminate()
     if ( hChildStd_OUT_Rd ) CloseHandle( hChildStd_OUT_Rd );
     if ( hChildStd_OUT_Wr ) CloseHandle( hChildStd_OUT_Wr );
     if ( hReadEvent ) CloseHandle( hReadEvent );
-	if ( bInitialized ) CoUninitialize();
+	if ( bInitialized && !bInitializedOtherModel ) CoUninitialize();
 	bInitialized = false;
+	bInitializedOtherModel = false;
 	hProcess = NULL;
 	hThread = NULL;
 	hReadEvent = NULL;

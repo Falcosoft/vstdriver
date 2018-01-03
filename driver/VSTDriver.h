@@ -32,6 +32,7 @@ private:
 	unsigned     uPluginPlatform;
 
 	bool         bInitialized;
+	bool         bInitializedOtherModel;
 	HANDLE       hProcess;
 	HANDLE       hThread;
 	HANDLE       hReadEvent;
