@@ -1,11 +1,20 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual Studio 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.1758
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vstmidi_win32drv", "driver\vstmididrv.vcxproj", "{4666F6D4-704E-4223-B3A0-D27A4486C6A0}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "drivercfg", "drivercfg\drivercfg.vcxproj", "{AF13E822-617D-4B1E-A092-C9C9B07C1E05}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vsthost", "vsthost\vsthost.vcxproj", "{5D666F11-5E76-4653-8B5B-32988E4907A0}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "installer", "installer.vcxproj", "{021C1266-4298-48EE-8FC6-77DFEB63368F}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5D666F11-5E76-4653-8B5B-32988E4907A0} = {5D666F11-5E76-4653-8B5B-32988E4907A0}
+		{AF13E822-617D-4B1E-A092-C9C9B07C1E05} = {AF13E822-617D-4B1E-A092-C9C9B07C1E05}
+		{4666F6D4-704E-4223-B3A0-D27A4486C6A0} = {4666F6D4-704E-4223-B3A0-D27A4486C6A0}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,8 +48,17 @@ Global
 		{5D666F11-5E76-4653-8B5B-32988E4907A0}.Release|Win32.Build.0 = Release|Win32
 		{5D666F11-5E76-4653-8B5B-32988E4907A0}.Release|x64.ActiveCfg = Release|x64
 		{5D666F11-5E76-4653-8B5B-32988E4907A0}.Release|x64.Build.0 = Release|x64
+		{021C1266-4298-48EE-8FC6-77DFEB63368F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{021C1266-4298-48EE-8FC6-77DFEB63368F}.Debug|Win32.Build.0 = Debug|Win32
+		{021C1266-4298-48EE-8FC6-77DFEB63368F}.Debug|x64.ActiveCfg = Debug|Win32
+		{021C1266-4298-48EE-8FC6-77DFEB63368F}.Release|Win32.ActiveCfg = Release|Win32
+		{021C1266-4298-48EE-8FC6-77DFEB63368F}.Release|Win32.Build.0 = Release|Win32
+		{021C1266-4298-48EE-8FC6-77DFEB63368F}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {35653323-E255-4DD0-B051-EB103802940F}
 	EndGlobalSection
 EndGlobal
