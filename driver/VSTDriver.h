@@ -23,7 +23,11 @@
 #include <tchar.h>
 #include "../external_packages/aeffect.h"
 #include "../external_packages/aeffectx.h"
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+#include "../common/backport_cstdint"
+#else
 #include <cstdint>
+#endif
 #include <vector>
 
 class VSTDriver {

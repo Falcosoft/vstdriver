@@ -2,6 +2,9 @@
 //
 
 #include "stdafx.h"
+#ifdef IDC_STATIC
+  #undef IDC_STATIC
+#endif
 #include "resource.h"
 
 #include "MainDlg.h"

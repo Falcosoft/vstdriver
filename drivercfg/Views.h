@@ -50,7 +50,7 @@ void settings_load(VSTDriver * effect)
 			wstring ext = vst_path;
 			fname = stripExtension(ext);
 			fname += L".set";
-			file.open(fname,ifstream::binary);
+            file.open(fname.c_str(),ifstream::binary);
 			if (file.good())
 			{
 				file.seekg(0,ifstream::end);
@@ -58,8 +58,13 @@ void settings_load(VSTDriver * effect)
 				file.seekg(0);
 				vector<uint8_t> chunk;
 				chunk.resize( chunk_size );
-				file.read( (char*) chunk.data(), chunk_size );
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+				if (chunk_size) file.read( (char*) &chunk.front(), chunk_size );
+				if (effect) effect->setChunk( &chunk.front(), chunk_size );
+#else
+				if (chunk_size) file.read( (char*) chunk.data(), chunk_size );
 				if (effect) effect->setChunk( chunk.data(), chunk_size );
+#endif
 			}
 			file.close();
 		}
@@ -83,12 +88,16 @@ void settings_save(VSTDriver * effect)
 			wstring ext = vst_path;
 			fname = stripExtension(ext);
 			fname += L".set";
-			file.open(fname,ofstream::binary);
+			file.open(fname.c_str(),ofstream::binary);
 			if (file.good())
 			{
 				vector<uint8_t> chunk;
 				if (effect) effect->getChunk( chunk );
-				file.write( ( const char * ) chunk.data(), chunk.size() );
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+				if (chunk.size()) file.write( ( const char * ) &chunk.front(), chunk.size() );
+#else
+				if (chunk.size()) file.write( ( const char * ) chunk.data(), chunk.size() );
+#endif
 			}
 			file.close();
 		}
@@ -193,7 +202,8 @@ public:
 	   {
 		   delete effect;
 		   effect = NULL;
-		   MessageBox(L"This is NOT a VSTi synth!");
+		   if (szPluginPath && *szPluginPath)
+			   MessageBox(L"This is NOT a VSTi synth!");
 		   vst_effect.SetWindowText(L"No VSTi loaded");
 		   vst_vendor.SetWindowText(L"No VSTi loaded");
 		   vst_product.SetWindowText(L"No VSTi loaded");

@@ -17,7 +17,11 @@
 #include <Windows.h>
 #include <CommCtrl.h>
 
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+#include "../common/backport_cstdint"
+#else
 #include <stdint.h>
+#endif
 
 #include <io.h>
 #include <fcntl.h>

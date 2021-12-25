@@ -132,7 +132,11 @@ void setChunk( AEffect * pEffect, std::vector<uint8_t> const& in )
 	unsigned size = in.size();
 	if ( pEffect && size )
 	{
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+		const uint8_t * inc = &in.front();
+#else
 		const uint8_t * inc = in.data();
+#endif
 		uint32_t effect_id;
 		retrieve_be( effect_id, inc, size );
 		if ( effect_id != pEffect->uniqueID ) return;
@@ -374,7 +378,9 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 		goto exit;
 	}
 
-	pMain = (main_func) GetProcAddress( hDll, "main" );
+	pMain = (main_func) GetProcAddress( hDll, "VSTPluginMain" );
+	if (!pMain)
+		pMain = (main_func) GetProcAddress( hDll, "main" );
 	if ( !pMain )
 	{
 		code = 7;
@@ -453,14 +459,22 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 			put_code( 0 );
 			put_code( chunk.size() );
-			put_bytes( chunk.data(), chunk.size() );
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+			if (chunk.size()) put_bytes( &chunk.front(), chunk.size() );
+#else
+			if (chunk.size()) put_bytes( chunk.data(), chunk.size() );
+#endif
 			break;
 
 		case 2: // Set Chunk
 			{
 				uint32_t size = get_code();
 				chunk.resize( size );
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+				if ( size ) get_bytes( &chunk.front(), size );
+#else
 				if ( size ) get_bytes( chunk.data(), size );
+#endif
 
 				setChunk( pEffect[ 0 ], chunk );
 				setChunk( pEffect[ 1 ], chunk );
@@ -638,7 +652,11 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 					blState.resize( buffer_size );
 
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+                    float_list_in  = (float**) (blState.size() ? &blState.front() : NULL);
+#else
 					float_list_in  = (float**) blState.data();
+#endif
 					float_list_out = float_list_in + pEffect[ 0 ]->numInputs;
 					float_null     = (float*) ( float_list_out + pEffect[ 0 ]->numOutputs * 3 );
 					float_out      = float_null + BUFFER_SIZE;
@@ -775,7 +793,11 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					pEffect[ 1 ]->processReplacing( pEffect[ 1 ], float_list_in, float_list_out + num_outputs, count_to_do );
 					pEffect[ 2 ]->processReplacing( pEffect[ 2 ], float_list_in, float_list_out + num_outputs * 2, count_to_do );
 
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+					float * out = &sample_buffer.front() + samples_buffered * max_num_outputs;
+#else
 					float * out = sample_buffer.data() + samples_buffered * max_num_outputs;
+#endif
 
 					if ( max_num_outputs == 2 )
 					{
@@ -798,7 +820,11 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 						}
 					}
 
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+					put_bytes( &sample_buffer.front(), count_to_do * sizeof(float) * max_num_outputs );
+#else
 					put_bytes( sample_buffer.data(), count_to_do * sizeof(float) * max_num_outputs );
+#endif
 
 					count -= count_to_do;
 				}

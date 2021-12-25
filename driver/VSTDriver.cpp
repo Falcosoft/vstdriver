@@ -109,7 +109,11 @@ void VSTDriver::load_settings(TCHAR * szPath) {
 				size_t chunk_size = ftell( f );
 				fseek( f, 0, SEEK_SET );
 				blChunk.resize( chunk_size );
-				fread( blChunk.data(), 1, chunk_size, f );
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+				if (chunk_size) fread( &blChunk.front(), 1, chunk_size, f );
+#else
+				if (chunk_size) fread( blChunk.data(), 1, chunk_size, f );
+#endif
 				fclose( f );
 			}
 		}
@@ -527,14 +531,20 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 			return FALSE;
 		}
 
-		process_write_code( 2 );
-		process_write_code( blChunk.size() );
-		process_write_bytes( blChunk.data(), blChunk.size() );
+        if (blChunk.size()) {
+			process_write_code( 2 );
+			process_write_code( blChunk.size() );
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+			if (blChunk.size()) process_write_bytes( &blChunk.front(), blChunk.size() );
+#else
+			if (blChunk.size()) process_write_bytes( blChunk.data(), blChunk.size() );
+#endif
+			code = process_read_code();
+			if ( code != 0 ) {
+				process_terminate();
+				return FALSE;
+	        }
 
-		code = process_read_code();
-		if ( code != 0 ) {
-			process_terminate();
-			return FALSE;
 		}
 
 		return TRUE;
