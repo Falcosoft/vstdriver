@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="Windows-1252"?>
+<VisualStudioProject
+	ProjectType="Visual C++"
+	Version="9,00"
+	Name="installer"
+	ProjectGUID="{021C1266-4298-48EE-8FC6-77DFEB63368F}"
+	Keyword="MakeFileProj"
+	TargetFrameworkVersion="196613"
+	>
+	<Platforms>
+		<Platform
+			Name="Win32"
+		/>
+	</Platforms>
+	<ToolFiles>
+	</ToolFiles>
+	<Configurations>
+		<Configuration
+			Name="Debug|Win32"
+			OutputDirectory="$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="0"
+			>
+			<Tool
+				Name="VCNMakeTool"
+				BuildCommandLine="nmake PF86=&quot;%ProgramFiles(x86)%&quot; /f &quot;vstmididrv.mak&quot;"
+				ReBuildCommandLine="nmake PF86=&quot;%ProgramFiles(x86)%&quot; /f &quot;vstmididrv.mak&quot; /a"
+				CleanCommandLine="nmake PF86=&quot;%ProgramFiles(x86)%&quot; /f &quot;vstmididrv.mak&quot; clean"
+				Output="vstmididrv.exe"
+				PreprocessorDefinitions="WIN32;_DEBUG"
+				IncludeSearchPath=""
+				ForcedIncludes=""
+				AssemblySearchPath=""
+				ForcedUsingAssemblies=""
+				CompileAsManaged=""
+			/>
+		</Configuration>
+		<Configuration
+			Name="Release|Win32"
+			OutputDirectory="$(ConfigurationName)"
+			IntermediateDirectory="$(ConfigurationName)"
+			ConfigurationType="0"
+			>
+			<Tool
+				Name="VCNMakeTool"
+				BuildCommandLine="nmake PF86=&quot;%ProgramFiles(x86)%&quot; /f &quot;vstmididrv.mak&quot;"
+				ReBuildCommandLine="nmake PF86=&quot;%ProgramFiles(x86)%&quot; /f &quot;vstmididrv.mak&quot; /a"
+				CleanCommandLine="nmake PF86=&quot;%ProgramFiles(x86)%&quot; /f &quot;vstmididrv.mak&quot; clean"
+				Output="vstmididrv.exe"
+				PreprocessorDefinitions="WIN32;NDEBUG"
+				IncludeSearchPath=""
+				ForcedIncludes=""
+				AssemblySearchPath=""
+				ForcedUsingAssemblies=""
+				CompileAsManaged=""
+			/>
+		</Configuration>
+	</Configurations>
+	<References>
+	</References>
+	<Files>
+		<File
+			RelativePath=".\vstmididrv.mak"
+			>
+		</File>
+		<File
+			RelativePath=".\vstmididrv.nsi"
+			>
+		</File>
+	</Files>
+	<Globals>
+	</Globals>
+</VisualStudioProject>
