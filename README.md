@@ -24,11 +24,13 @@ To build it, you need the following software installed:
 
 #### Nullsoft Installer System (NSIS) V3.0a or higher
 See https://sourceforge.net/projects/nsis/
+
 Additionally, the locked-list plug-in needs to be installed; you can get that from
 https://nsis.sourceforge.io/LockedList_plug-in
 
 #### Windows Template Library 9.0 or 9.1
 See https://sourceforge.net/projects/wtl/
+
 I've put it into the subdirectory wtl in this project; if you want to use it in an unmodified form,
 copy the WTL contents to this directory. If you already got it installed somewhere else, you ned to
 modify the project settings of the drivercfg sub-project.
