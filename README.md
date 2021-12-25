@@ -32,3 +32,7 @@ See https://sourceforge.net/projects/wtl/
 I've put it into the subdirectory wtl in this project; if you want to use it in an unmodified form,
 copy the WTL contents to this directory. If you already got it installed somewhere else, you ned to
 modify the project settings of the drivercfg sub-project.
+
+## Known Problems
+
+Currently, this doesn't work too well on Windows 10 2004 or later. Microsoft changed driver requirements, and the simplistic user mode MIDI driver installation no longer works; specifically, it doesn't survive a reboot.
