@@ -33,6 +33,12 @@ I've put it into the subdirectory wtl in this project; if you want to use it in 
 copy the WTL contents to this directory. If you already got it installed somewhere else, you ned to
 modify the project settings of the drivercfg sub-project.
 
+#### The BASS MIDI Library
+Only necessary if you want to use a newer version; the current one (as of 2021-12-25) is already
+available in the external_packages subdirectory. The latest version of BASS can always be found at the BASS website:  
+	www.un4seen.com  
+Both the bass library and the basswasapi library are needed.
+
 ## Known Problems
 
 Currently, this doesn't work too well on Windows 10 2004 or later. Microsoft changed driver requirements, and the simplistic user mode MIDI driver installation no longer works; specifically, it doesn't survive a reboot.
