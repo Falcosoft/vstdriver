@@ -1,0 +1,6 @@
+Embed the WTL Library here.
+https://sourceforge.net/projects/wtl/
+
+For Visual Studio 2008, I used WTL90_4140_Final.
+WTL 9.1 should do, too.
+For WTL 10, XP compatibility would have to be scrapped.
