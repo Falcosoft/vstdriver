@@ -14,8 +14,8 @@ Parts Copyright (c) 2021 Hermann Seib
 
 ## Building
 
-Currently, the following development environments are supported:
-Visual Studio 2008, Visual Studio 2017-2022
+Currently, the following development environments are supported:  
+Visual Studio 2008, Visual Studio 2017-2022  
 In theory, VS2010-VS2015 should work, too, but I didn't investigate that.
 
 ### Additional requirements
