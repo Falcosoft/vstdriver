@@ -28,6 +28,7 @@
 #else
 #include <cstdint>
 #endif
+#include <string>
 #include <vector>
 
 class VSTDriver {
