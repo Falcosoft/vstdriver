@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------------------------------------------
 // VST Plug-Ins SDK
-// Version 2.4		$Date: 2006/02/13 12:04:43 $
+// Version 2.4		$Date: 2006/06/20 17:22:55 $
 //
 // Category     : VST 2.x Interfaces
 // Filename     : aeffect.h
@@ -31,9 +31,12 @@
 	#else
 		#pragma options align=mac68k
 	#endif
-#endif
-#if defined __BORLANDC__
+	#define VSTCALLBACK
+#elif defined __BORLANDC__
 	#pragma -a8
+#elif defined(__GNUC__)
+    #pragma pack(push,8)
+    #define VSTCALLBACK __cdecl
 #elif defined(WIN32) || defined(__FLAT__) || defined CBUILDER
 	#pragma pack(push)
 	#pragma pack(8)
@@ -53,7 +56,9 @@
 #define VST_2_1_EXTENSIONS 1 ///< Version 2.1 extensions (08-06-2000)
 #define VST_2_2_EXTENSIONS 1 ///< Version 2.2 extensions (08-06-2001)
 #define VST_2_3_EXTENSIONS 1 ///< Version 2.3 extensions (20-05-2003)
+#ifndef VST_2_4_EXTENSIONS
 #define VST_2_4_EXTENSIONS 1 ///< Version 2.4 extensions (01-01-2006)
+#endif
 
 /** Current VST Version */
 #if VST_2_4_EXTENSIONS
@@ -162,7 +167,7 @@ struct AEffect
 	VstIntPtr resvd1;		///< reserved for Host, must be 0
 	VstIntPtr resvd2;		///< reserved for Host, must be 0
 	
-	VstInt32 initialDelay;	///< for algorithms which need input in the first place (Group delay or latency). This value should be initialized in a resume state.
+	VstInt32 initialDelay;	///< for algorithms which need input in the first place (Group delay or latency in Samples). This value should be initialized in a resume state.
 	
 	VstInt32 DECLARE_VST_DEPRECATED (realQualities);	///< \deprecated unused member
 	VstInt32 DECLARE_VST_DEPRECATED (offQualities);		///< \deprecated unused member
@@ -265,7 +270,7 @@ enum AudioMasterOpcodes
 	audioMasterVersion,			///< [return value]: Host VST version (for example 2400 for VST 2.4) @see AudioEffect::getMasterVersion
 	audioMasterCurrentId,		///< [return value]: current unique identifier on shell plug-in  @see AudioEffect::getCurrentUniqueId
 	audioMasterIdle,			///< no arguments  @see AudioEffect::masterIdle
-	audioMasterPinConnected		///< [return value]: 0=true, 1=false [index]: pin index [value]: 0=input, 1=output  @see AudioEffect::isInputConnected @see AudioEffect::isOutputConnected
+	DECLARE_VST_DEPRECATED (audioMasterPinConnected) ///< \deprecated deprecated in VST 2.4 r2
 //-------------------------------------------------------------------------------------------------------
 };
 
@@ -337,7 +342,7 @@ struct ERect
 //-------------------------------------------------------------------------------------------------------
 #if TARGET_API_MAC_CARBON
 	#pragma options align=reset
-#elif defined(WIN32) || defined(__FLAT__)
+#elif defined(WIN32) || defined(__FLAT__) || defined(__GNUC__)
 	#pragma pack(pop)
 #elif defined __BORLANDC__
 	#pragma -a-

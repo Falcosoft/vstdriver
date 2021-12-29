@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------------------------------------------
 // VST Plug-Ins SDK
-// Version 2.4		$Date: 2006/02/13 12:04:43 $
+// Version 2.4		$Date: 2006/06/20 12:43:42 $
 //
 // Category     : VST 2.x Interfaces
 // Filename     : aeffectx.h
@@ -26,6 +26,8 @@
 	#endif
 #elif defined __BORLANDC__
 	#pragma -a8
+#elif defined(__GNUC__)
+    #pragma pack(push,8)
 #elif defined(WIN32) || defined(__FLAT__)
 	#pragma pack(push)
 	#pragma pack(8)
@@ -127,7 +129,7 @@ struct VstMidiSysexEvent
 {
 //-------------------------------------------------------------------------------------------------------
 	VstInt32 type;			///< #kVstSysexType
-	VstInt32 byteSize;		///< sizeof(VstMidiSysexEvent)
+	VstInt32 byteSize;		///< sizeof (VstMidiSysexEvent)
 	VstInt32 deltaFrames;	///< sample frames related to the current block start sample position
 	VstInt32 flags;			///< none defined yet (should be zero)
 	VstInt32 dumpBytes;		///< byte size of sysexDump
@@ -251,7 +253,7 @@ enum VstHostLanguage
 enum AudioMasterOpcodesX
 {
 //-------------------------------------------------------------------------------------------------------
-	DECLARE_VST_DEPRECATED (audioMasterWantMidi) = audioMasterPinConnected + 2,	///< \deprecated deprecated in VST 2.4
+	DECLARE_VST_DEPRECATED (audioMasterWantMidi) = DECLARE_VST_DEPRECATED (audioMasterPinConnected) + 2,	///< \deprecated deprecated in VST 2.4
 
 	audioMasterGetTime,				///< [return value]: #VstTimeInfo* or null if not supported [value]: request mask  @see VstTimeInfoFlags @see AudioEffectX::getTimeInfo
 	audioMasterProcessEvents,		///< [ptr]: pointer to #VstEvents  @see VstEvents @see AudioEffectX::sendVstEventsToHost
@@ -309,7 +311,7 @@ enum AudioMasterOpcodesX
 	
 	DECLARE_VST_DEPRECATED (audioMasterEditFile),		///< \deprecated deprecated in VST 2.4
 	
-	DECLARE_VST_DEPRECATED (audioMasterGetChunkFile),	///< \deprecated deprecated in VST 2.4 [ptr]: char[2048] or sizeof(FSSpec) [return value]: 1 if supported  @see AudioEffectX::getChunkFile
+	DECLARE_VST_DEPRECATED (audioMasterGetChunkFile),	///< \deprecated deprecated in VST 2.4 [ptr]: char[2048] or sizeof (FSSpec) [return value]: 1 if supported  @see AudioEffectX::getChunkFile
 
 	DECLARE_VST_DEPRECATED (audioMasterGetInputSpeakerArrangement)	///< \deprecated deprecated in VST 2.4
 };
@@ -412,8 +414,8 @@ enum AEffectXOpcodes
 //-------------------------------------------------------------------------------------------------------
 enum VstProcessPrecision
 {
-	kVstProcessPrecision32 = 0,		///< single precision float
-	kVstProcessPrecision64			///< double precision
+	kVstProcessPrecision32 = 0,		///< single precision float (32bits)
+	kVstProcessPrecision64			///< double precision (64bits)
 };
 
 //-------------------------------------------------------------------------------------------------------
@@ -1131,7 +1133,7 @@ enum VstAutomationStates
 //-------------------------------------------------------------------------------------------------------
 #if TARGET_API_MAC_CARBON
 	#pragma options align=reset
-#elif defined(WIN32) || defined(__FLAT__)
+#elif defined(WIN32) || defined(__FLAT__) || defined(__GNUC__)
 	#pragma pack(pop)
 #elif defined __BORLANDC__
 	#pragma -a-
