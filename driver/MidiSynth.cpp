@@ -166,22 +166,36 @@ public:
 
 	int Init(unsigned int bufferSize, unsigned int chunkSize, unsigned int sampleRate) {
 		TCHAR installpath[MAX_PATH] = {0};
-		TCHAR basspath[MAX_PATH] = {0};
-		TCHAR basswasapipath[MAX_PATH] = {0};
+		TCHAR basspath[MAX_PATH];
+		TCHAR basswasapipath[MAX_PATH];
 
 		soundOutFloat = false;
 
 		GetModuleFileName(hinst_vst_driver, installpath, MAX_PATH);
+        lstrcpy(basswasapipath, installpath);
 		PathRemoveFileSpec(installpath);
+        TCHAR *fnpart = basswasapipath + lstrlen(installpath);
+        TCHAR *fnend = fnpart + lstrlen(fnpart);
+        while (fnend > fnpart && *fnend != _T('.'))
+          fnend--;
+        if (fnend != fnpart)
+          *fnend = _T('\0');
 
-		lstrcat(basspath, installpath);
+		lstrcpy(basspath, installpath);
+        lstrcat(basspath, fnpart);
 		lstrcat(basspath, _T("\\bass.dll"));
 		if (!(bass=LoadLibrary(basspath))) {
-			OutputDebugString(_T("Failed to load BASS.dll.\n"));
-			return -1;
+          lstrcpy(basspath, installpath);
+          lstrcat(basspath, _T("\\bass.dll"));
+          if (!(bass=LoadLibrary(basspath))) {
+            OutputDebugString(_T("Failed to load BASS.dll.\n"));
+            return -1;
+            }
+        else
+          lstrcat(installpath, fnpart);
 		}
 
-		lstrcat(basswasapipath, installpath);
+		lstrcpy(basswasapipath, installpath);
 		lstrcat(basswasapipath, _T("\\basswasapi.dll"));
 		basswasapi=LoadLibrary(basswasapipath);
 

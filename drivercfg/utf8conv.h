@@ -93,7 +93,7 @@ inline std::wstring utf16_from_ansi(const std::string & utf8)
 		CP_ACP,            // convert from ANSI
 		0,                  // default flags
 		utf8.data(),        // source UTF-8 string
-		utf8.length(),      // length (in chars) of source UTF-8 string
+		(int)utf8.length(), // length (in chars) of source UTF-8 string
 		NULL,               // unused - no conversion done in this step
 		0                   // request size of destination buffer, in wchar_t's
 		);
@@ -119,9 +119,9 @@ inline std::wstring utf16_from_ansi(const std::string & utf8)
 		CP_UTF8,            // convert from UTF-8
 		0,                  // default flags
 		utf8.data(),        // source UTF-8 string
-		utf8.length(),      // length (in chars) of source UTF-8 string
+		(int)utf8.length(), // length (in chars) of source UTF-8 string
 		&utf16[0],          // destination buffer
-		utf16.length()      // size of destination buffer, in wchar_t's
+		(int)utf16.length() // size of destination buffer, in wchar_t's
 		) )
 	{
 		// Error
@@ -158,7 +158,7 @@ inline std::wstring utf16_from_utf8(const std::string & utf8)
         CP_UTF8,            // convert from UTF-8
         0,                  // default flags
         utf8.data(),        // source UTF-8 string
-        utf8.length(),      // length (in chars) of source UTF-8 string
+        (int)utf8.length(), // length (in chars) of source UTF-8 string
         NULL,               // unused - no conversion done in this step
         0                   // request size of destination buffer, in wchar_t's
         );
@@ -186,9 +186,9 @@ inline std::wstring utf16_from_utf8(const std::string & utf8)
         CP_UTF8,            // convert from UTF-8
         0,                  // default flags
         utf8.data(),        // source UTF-8 string
-        utf8.length(),      // length (in chars) of source UTF-8 string
+        (int)utf8.length(), // length (in chars) of source UTF-8 string
         &utf16[0],          // destination buffer
-        utf16.length()      // size of destination buffer, in wchar_t's
+        (int)utf16.length() // size of destination buffer, in wchar_t's
         ) )
     {
         // Error
@@ -222,13 +222,13 @@ inline std::string utf8_from_utf16(const std::wstring & utf16)
     // Get length (in chars) of resulting UTF-8 string
     //
     const int utf8_length = ::WideCharToMultiByte(
-        CP_UTF8,            // convert to UTF-8
-        0,                  // default flags
-        utf16.data(),       // source UTF-16 string
-        utf16.length(),     // source string length, in wchar_t's,
-        NULL,               // unused - no conversion required in this step
-        0,                  // request buffer size
-        NULL, NULL          // unused
+        CP_UTF8,             // convert to UTF-8
+        0,                   // default flags
+        utf16.data(),        // source UTF-16 string
+        (int)utf16.length(), // source string length, in wchar_t's,
+        NULL,                // unused - no conversion required in this step
+        0,                   // request buffer size
+        NULL, NULL           // unused
         );
     if (utf8_length == 0)
     {
@@ -254,9 +254,9 @@ inline std::string utf8_from_utf16(const std::wstring & utf16)
         CP_UTF8,                // convert to UTF-8
         0,                      // default flags
         utf16.data(),           // source UTF-16 string
-        utf16.length(),         // source string length, in wchar_t's,
+        (int)utf16.length(),    // source string length, in wchar_t's,
         &utf8[0],               // destination buffer
-        utf8.length(),          // destination buffer size, in chars
+        (int)utf8.length(),     // destination buffer size, in chars
         NULL, NULL              // unused
         ) )
     {

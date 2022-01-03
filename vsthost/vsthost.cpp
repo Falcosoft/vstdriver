@@ -119,7 +119,7 @@ void getChunk( AEffect * pEffect, std::vector<uint8_t> & out )
 	else
 	{
 		void * chunk;
-		uint32_t size = pEffect->dispatcher( pEffect, effGetChunk, 0, 0, &chunk, 0 );
+		uint32_t size = (uint32_t)pEffect->dispatcher( pEffect, effGetChunk, 0, 0, &chunk, 0 );
 		append_be( out, size );
 		size_t chunk_size = out.size();
 		out.resize( chunk_size + size );
@@ -129,7 +129,7 @@ void getChunk( AEffect * pEffect, std::vector<uint8_t> & out )
 
 void setChunk( AEffect * pEffect, std::vector<uint8_t> const& in )
 {
-	unsigned size = in.size();
+	unsigned size = (unsigned)in.size();
 	if ( pEffect && size )
 	{
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
@@ -424,10 +424,10 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 		pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effGetEffectName, 0, 0, &name_string, 0 );
 		pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effGetVendorString, 0, 0, &vendor_string, 0 );
 		pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effGetProductString, 0, 0, &product_string, 0 );
-		name_string_length = strlen( name_string );
-		vendor_string_length = strlen( vendor_string );
-		product_string_length = strlen( product_string );
-		vendor_version = pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effGetVendorVersion, 0, 0, 0, 0 );
+		name_string_length = (uint32_t)strlen( name_string );
+		vendor_string_length = (uint32_t)strlen( vendor_string );
+		product_string_length = (uint32_t)strlen( product_string );
+		vendor_version = (uint32_t)pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effGetVendorVersion, 0, 0, 0, 0 );
 		unique_id = pEffect[ 0 ]->uniqueID;
 
 		put_code( 0 );
@@ -458,11 +458,11 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 			getChunk( pEffect[ 0 ], chunk );
 
 			put_code( 0 );
-			put_code( chunk.size() );
+			put_code( (uint32_t)chunk.size() );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-			if (chunk.size()) put_bytes( &chunk.front(), chunk.size() );
+			if (chunk.size()) put_bytes( &chunk.front(), (uint32_t)chunk.size() );
 #else
-			if (chunk.size()) put_bytes( chunk.data(), chunk.size() );
+			if (chunk.size()) put_bytes( chunk.data(), (uint32_t)chunk.size() );
 #endif
 			break;
 
@@ -661,8 +661,8 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					float_null     = (float*) ( float_list_out + pEffect[ 0 ]->numOutputs * 3 );
 					float_out      = float_null + BUFFER_SIZE;
 
-					for ( unsigned i = 0; i < pEffect[ 0 ]->numInputs; ++i )      float_list_in [ i ] = float_null;
-					for ( unsigned i = 0; i < pEffect[ 0 ]->numOutputs * 3; ++i ) float_list_out[ i ] = float_out + BUFFER_SIZE * i;
+					for ( VstInt32 i = 0; i < pEffect[ 0 ]->numInputs; ++i )      float_list_in [ i ] = float_null;
+					for ( VstInt32 i = 0; i < pEffect[ 0 ]->numOutputs * 3; ++i ) float_list_out[ i ] = float_out + BUFFER_SIZE * i;
 
 					memset( float_null, 0, sizeof(float) * BUFFER_SIZE );
 

@@ -2,7 +2,7 @@
 # Makefile for the VST Midi Driver Installer
 #------------------------------------------------------------------------------
 
-TARGET = vstmididrv.exe
+TARGET = output\vstmididrv.exe
 
 #------------------------------------------------------------------------------
 # Macros for NSIS
@@ -63,6 +63,8 @@ clean:
 
 $(TARGET): vstmididrv.mak \
         vstmididrv.nsi \
+        Release\ummidiplg.dll \
+        ReleaseUnicode\ummidiplg.dll \
         output\vstmididrv.dll \
         output\vsthost32.exe \
         output\vstmididrvcfg.exe \

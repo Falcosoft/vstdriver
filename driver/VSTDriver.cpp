@@ -86,7 +86,7 @@ void VSTDriver::load_settings(TCHAR * szPath) {
 	if ( szPath || RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"),0,KEY_READ|KEY_WOW64_32KEY,&hKey) == ERROR_SUCCESS ) {
 		if ( !szPath ) lResult = RegQueryValueEx(hKey, _T("plugin"), NULL, &dwType, NULL, &dwSize);
 		if ( szPath || ( lResult == ERROR_SUCCESS && dwType == REG_SZ ) ) {
-			if ( szPath ) dwSize = _tcslen( szPath ) * sizeof(TCHAR);
+			if ( szPath ) dwSize = (DWORD)(_tcslen( szPath ) * sizeof(TCHAR));
 			szPluginPath = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 			if ( szPath ) _tcscpy( szPluginPath, szPath );
 			else RegQueryValueEx(hKey, _T("plugin"), NULL, &dwType, (LPBYTE) szPluginPath, &dwSize);
@@ -187,6 +187,29 @@ bool VSTDriver::connect_pipe( HANDLE hPipe )
 
 extern "C" { extern HINSTANCE hinst_vst_driver; };
 
+std::wstring VSTDriver::GetVsthostPath()
+{
+	TCHAR my_path[MAX_PATH];
+	GetModuleFileName( hinst_vst_driver, my_path, _countof(my_path) );
+
+	std::wstring sDir(my_path);
+    size_t idx = sDir.find_last_of( L'\\' ) + 1;
+    if (idx != std::wstring::npos)
+	  sDir.resize( idx );
+    std::wstring sSubdir(my_path + idx);
+    idx = sSubdir.find_last_of( L'.' );
+    if (idx != std::wstring::npos)
+      sSubdir.resize(idx);
+    sSubdir += L'\\';
+    std::wstring sFile((uPluginPlatform == 64) ? L"vsthost64.exe" : L"vsthost32.exe");
+
+    std::wstring sHostPath = sDir + sFile;
+    if (::GetFileAttributesW(sHostPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+      sHostPath = sDir + sSubdir + sFile;
+
+	return sHostPath;
+}
+
 bool VSTDriver::process_create()
 {
 	if ( uPluginPlatform != 32 && uPluginPlatform != 64 ) return false;
@@ -235,13 +258,7 @@ bool VSTDriver::process_create()
     CloseHandle( hPipe );
 
 	std::wstring szCmdLine = L"\"";
-
-	TCHAR my_path[MAX_PATH];
-	GetModuleFileName( hinst_vst_driver, my_path, _countof(my_path) );
-
-	szCmdLine += my_path;
-	szCmdLine.resize( szCmdLine.find_last_of( '\\' ) + 1 );
-	szCmdLine += (uPluginPlatform == 64) ? L"vsthost64.exe" : L"vsthost32.exe";
+    szCmdLine += GetVsthostPath();
 	szCmdLine += L"\" \"";
 	szCmdLine += szPluginPath;
 	szCmdLine += L"\" ";
@@ -533,11 +550,11 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 
         if (blChunk.size()) {
 			process_write_code( 2 );
-			process_write_code( blChunk.size() );
+			process_write_code( (uint32_t)blChunk.size() );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-			if (blChunk.size()) process_write_bytes( &blChunk.front(), blChunk.size() );
+			if (blChunk.size()) process_write_bytes( &blChunk.front(), (uint32_t)blChunk.size() );
 #else
-			if (blChunk.size()) process_write_bytes( blChunk.data(), blChunk.size() );
+			if (blChunk.size()) process_write_bytes( blChunk.data(), (uint32_t)blChunk.size() );
 #endif
 			code = process_read_code();
 			if ( code != 0 ) {
@@ -606,9 +623,9 @@ void VSTDriver::Render(short * samples, int len, float volume)
 	{
 		int len_todo = len > 512 ? 512 : len;
 		RenderFloat( float_out, len_todo, volume );
-		for ( int i = 0; i < len_todo * uNumOutputs; i++ )
+		for ( unsigned int i = 0; i < len_todo * uNumOutputs; i++ )
 		{
-			int sample = ( float_out[i] * 32768.f );
+			int sample = (int)( float_out[i] * 32768.f );
 			if ( ( sample + 0x8000 ) & 0xFFFF0000 ) sample = 0x7FFF ^ (sample >> 31);
 			samples[0] = sample;
 			samples++;

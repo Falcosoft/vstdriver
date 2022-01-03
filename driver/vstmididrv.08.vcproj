@@ -394,6 +394,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\external_packages\mmddk.h"
+				>
+			</File>
+			<File
 				RelativePath=".\stdafx.h"
 				>
 			</File>

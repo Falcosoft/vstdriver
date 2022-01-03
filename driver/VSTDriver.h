@@ -58,6 +58,7 @@ private:
 
 	unsigned test_plugin_platform();
 	bool connect_pipe( HANDLE hPipe );
+    std::wstring GetVsthostPath();
 	bool process_create();
 	void process_terminate();
 	bool process_running();

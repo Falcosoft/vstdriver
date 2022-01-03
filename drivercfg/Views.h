@@ -23,7 +23,7 @@ struct MyDLGTEMPLATE: DLGTEMPLATE
 
 std::wstring stripExtension(const std::wstring& fileName)
 {
-	const int length = fileName.length();
+	const size_t length = fileName.length();
 	for (int i=0; i!=length; ++i)
 	{
 		if (fileName[i]=='.') 
@@ -54,16 +54,16 @@ void settings_load(VSTDriver * effect)
 			if (file.good())
 			{
 				file.seekg(0,ifstream::end);
-				unsigned int chunk_size = file.tellg();
+				size_t chunk_size = file.tellg();
 				file.seekg(0);
 				vector<uint8_t> chunk;
 				chunk.resize( chunk_size );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 				if (chunk_size) file.read( (char*) &chunk.front(), chunk_size );
-				if (effect) effect->setChunk( &chunk.front(), chunk_size );
+				if (effect) effect->setChunk( &chunk.front(), (unsigned int)chunk_size );
 #else
 				if (chunk_size) file.read( (char*) chunk.data(), chunk_size );
-				if (effect) effect->setChunk( chunk.data(), chunk_size );
+				if (effect) effect->setChunk( chunk.data(), (unsigned int)chunk_size );
 #endif
 			}
 			file.close();
@@ -161,7 +161,7 @@ public:
 		   lstrcpy(szFileName,dlg.m_szFileName);
 		   if (load_vst(szFileName))
 		   {
-			   HKEY hKey, hSubKey;
+			   // HKEY hKey, hSubKey;
 			   long lResult;
 			   CRegKeyEx reg;
 			   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
