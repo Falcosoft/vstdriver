@@ -186,7 +186,8 @@ static RegisterDriverResult registerDriver
     tstring driverName /*=_T("mt32emu.dll")*/,
     tstring driverSubdir /*=T("")*/,
     const bool wow64Process,
-    std::vector<tstring> &regs
+    std::vector<tstring> &regs,
+    int &entryIx
     )
 {
 regs.clear();
@@ -194,7 +195,7 @@ for (int i = 0; i < 2; i++)
   regs.push_back(_T(""));
 
 HKEY hReg;
-int entryIx;
+entryIx = -1;
 if (RegOpenKeyEx(HKEY_LOCAL_MACHINE,
                  _T("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Drivers32"),
                  0L, (wow64Process ? (KEY_ALL_ACCESS | KEY_WOW64_64KEY) : KEY_ALL_ACCESS), &hReg))
@@ -678,7 +679,8 @@ return;
 
 int legacyMidiEntryIx;
 const RegisterDriverResult res = registerDriver(vars[0], vars[4],
-                                                wow64Process, rets);
+                                                wow64Process, rets,
+                                                legacyMidiEntryIx);
 if (res == regdrvFailed)
   {
   pushstring(_T("Error: driver could not be registered!"));
