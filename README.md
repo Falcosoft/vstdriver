@@ -25,7 +25,10 @@ To build it, you need the following software installed:
 #### Nullsoft Installer System (NSIS) V3.0a or higher
 See https://sourceforge.net/projects/nsis/  
 Additionally, the locked-list plug-in needs to be installed; you can get that from
-https://nsis.sourceforge.io/LockedList_plug-in
+https://nsis.sourceforge.io/LockedList_plug-in  
+After having fetched the plug-in, copy its contents into the NSIS installation directory.
+
+Then, from the NSIS installation directory, you have to copy the contents of the Examples\Plugin\nsis folder into this project's ummidiplg\nsis subdirectory. Since they may vary between NSIS installer versions, I didn't want to include them directly.
 
 #### Windows Template Library 9.0 or 9.1
 See https://sourceforge.net/projects/wtl/  
