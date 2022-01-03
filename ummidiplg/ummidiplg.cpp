@@ -183,8 +183,8 @@ return res == ERROR_SUCCESS;
 
 static RegisterDriverResult registerDriver
     (
-    tstring driverName /*=_T("mt32emu.dll")*/,
-    tstring driverSubdir /*=T("")*/,
+    tstring driverName,
+    tstring driverSubdir,
     const bool wow64Process,
     std::vector<tstring> &regs,
     int &entryIx
@@ -325,10 +325,10 @@ return pathName;
 
 static bool registerDriverClass
     (
-    tstring driverName /*=_T("mt32emu.dll")*/,
-    tstring driverSubdir /*=T("")*/,
-    tstring deviceDesc /*= _T("MT-32 Synth Emulator")*/,
-    tstring providerName /*= _T("muntemu.org")*/,
+    tstring driverName,
+    tstring driverSubdir,
+    tstring deviceDesc,
+    tstring providerName,
     HKEY devRegKey,
     int legacyMidiEntryIx
     )
@@ -400,8 +400,8 @@ return true;
 
 static FindDeviceResult findDriverDevice
     (
-    tstring devHwIds /*=_T("ROOT\\mt32emu")*/,
-    tstring deviceDesc /*=_T("MT-32 Synth Emulator")*/,
+    tstring devHwIds,
+    tstring deviceDesc,
     HDEVINFO &hDevInfo,
     SP_DEVINFO_DATA &deviceInfoData
     )
@@ -438,8 +438,8 @@ return GetLastError() == ERROR_NO_MORE_ITEMS ? fnddevNotFound : fnddevFailed;
 
 static ProcessReturnCode registerDevice
     (
-    tstring devHwIds /*=_T("ROOT\\mt32emu")*/,
-    tstring deviceDesc /*=_T("MT-32 Synth Emulator")*/,
+    tstring devHwIds,
+    tstring deviceDesc,
     HDEVINFO &hDevInfo,
     SP_DEVINFO_DATA &deviceInfoData,
     bool wow64Process
@@ -488,11 +488,11 @@ return ProcessReturnCode_OK;
 
 static ProcessReturnCode registerDeviceAndDriverClass
     (
-    tstring driverName /* =_T("mt32emu.dll")*/,
-    tstring driverSubdir /*=T("")*/,
-    tstring deviceDesc /* = "_T("MT-32 Synth Emulator") */,
-    tstring providerName /* = _T("muntemu.org") */,
-    tstring devHwIds /*=_T("ROOT\\mt32emu")*/,
+    tstring driverName,
+    tstring driverSubdir,
+    tstring deviceDesc,
+    tstring providerName,
+    tstring devHwIds,
     bool wow64Process,
     int legacyMidiEntryIx
     )
@@ -542,8 +542,8 @@ return ProcessReturnCode_OK;
 
 static ProcessReturnCode removeDevice
     (
-    tstring devHwIds /*=_T("ROOT\\mt32emu")*/,
-    tstring deviceDesc /*=_T("MT-32 Synth Emulator")*/,
+    tstring devHwIds,
+    tstring deviceDesc,
     bool wow64Process
     )
 {
@@ -648,7 +648,7 @@ if (nParms < 4)
   return;
   }
 if (nParms < 5)                         /* optional subdirectory parameter   */
-  vars.push_back(_T(""));
+  vars.push_back(_T(""));               /* (not necessary in this version)   */
 
 /* vars[0] = driverName
  * vars[1] = deviceDesc
@@ -660,22 +660,6 @@ if (nParms < 5)                         /* optional subdirectory parameter   */
 bool wow64Process = isWow64Process();
 
 std::vector<tstring> rets;
-
-#if 0 // TEST TEST TEST TEST TEST EST TEST
-rets.push_back(_T("-1"));
-rets.push_back(_T(""));
-tstring t(_T("SetupRegistry("));
-for (int i = 0; i < (int)vars.size(); i++)
-  {
-  if (i)
-    t += _T(", ");
-  t += vars[i];
-  }
-t += _T(")");
-rets.insert(rets.begin(), t);
-pushRets(rets);
-return;
-#endif
 
 int legacyMidiEntryIx;
 const RegisterDriverResult res = registerDriver(vars[0], vars[4],
@@ -734,26 +718,13 @@ if (nParms < 3)
   return;
   }
 if (nParms < 4)                         /* optional subdirectory parameter   */
-  vars.push_back(_T(""));
+  vars.push_back(_T(""));               /* (not necessary in this version)   */
 
 /* vars[0] = driverName
  * vars[1] = deviceDesc
  * vars[2] = devHwIds
  * vars[3] = driverSubdir
  */
-
-#if 0 // TEST TEST TEST TEST TEST EST TEST
-tstring t(_T("CleanupRegistry("));
-for (int i = 0; i < (int)vars.size(); i++)
-  {
-  if (i)
-    t += _T(", ");
-  t += vars[i];
-  }
-t += _T(")");
-pushstring(t.c_str());
-return;
-#endif
 
 bool wow64Process = isWow64Process();
 if (!unregisterDriver(vars[0], wow64Process))
