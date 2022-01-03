@@ -94,7 +94,7 @@ public:
       // FIX: Important; see Q149501
       wnd.ModifyStyleEx(0, WS_EX_CONTROLPARENT);
       // Notify owner
-      NMHDR nmh = { m_hWnd, GetDlgCtrlID(), TCN_INSERTITEM };
+      NMHDR nmh = { m_hWnd, (UINT_PTR)GetDlgCtrlID(), TCN_INSERTITEM };
       ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh);
       // Return new position
       return m_aViews.GetSize() - 1;
@@ -109,7 +109,7 @@ public:
    {
       if( iPos < 0 || iPos >= m_aViews.GetSize() ) return NULL;
       // Notify owner
-      NMHDR nmh = { m_hWnd, GetDlgCtrlID(), TCN_DELETEITEM };
+      NMHDR nmh = { m_hWnd, (UINT_PTR)GetDlgCtrlID(), TCN_DELETEITEM };
       ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh);
       // Remove view
       return m_aViews.RemoveAt(iPos);
@@ -128,7 +128,7 @@ public:
       if( iPos < 0 || iPos >= m_aViews.GetSize() ) return FALSE;
       if( iPos == m_iCurPos ) return TRUE; // Already selected
       // Ask user if it's OK to change selection...
-      NMHDR nmh = { m_hWnd, GetDlgCtrlID(), TCN_SELCHANGING };
+      NMHDR nmh = { m_hWnd, (UINT_PTR)GetDlgCtrlID(), TCN_SELCHANGING };
       LRESULT lRes = ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh);
       if( lRes!=0 ) return FALSE; // User declined
       // Assign new state
@@ -208,7 +208,7 @@ public:
       // FIX: Important; see Q149501
       ModifyStyleEx(0, WS_EX_CONTROLPARENT);
       // This is a little WTL subclass helper notification
-      NMHDR nmh = { m_hWnd, GetDlgCtrlID(), TCN_INITIALIZE };
+      NMHDR nmh = { m_hWnd, (UINT_PTR)GetDlgCtrlID(), TCN_INITIALIZE };
       ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh);
    }
 };
@@ -249,7 +249,7 @@ public:
    {
       ATLASSERT(nItem==GetItemCount()); // Only append at this time!
       // Notify owner
-      NMHDR nmh = { m_hWnd, GetDlgCtrlID(), TCN_INSERTITEM };
+      NMHDR nmh = { m_hWnd, (UINT_PTR)GetDlgCtrlID(), TCN_INSERTITEM };
       ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh);
       // Set the window parent (for correct resizing)
       ::SetParent(hWnd, m_hWndClient);
@@ -264,7 +264,7 @@ public:
    BOOL DeleteItem(int nItem)
    {
       // Notify owner
-      NMHDR nmh = { m_hWnd, GetDlgCtrlID(), TCN_DELETEITEM };
+      NMHDR nmh = { m_hWnd, (UINT_PTR)GetDlgCtrlID(), TCN_DELETEITEM };
       ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh);
       // Remove view and tab
       m_ctrlViews.RemoveItem(nItem);
@@ -282,7 +282,7 @@ public:
       if( iLastTab != -1 ) {
          // Tab controls will not send notifications on TCM_SETCURSEL.
          // I hate that! So I'll send it instead...
-         NMHDR nmh = { m_hWnd, GetDlgCtrlID(), TCN_SELCHANGE };
+         NMHDR nmh = { m_hWnd, (UINT_PTR)GetDlgCtrlID(), TCN_SELCHANGE };
          ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh);
       }
       return iLastTab;
