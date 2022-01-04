@@ -45,5 +45,3 @@ Both the bass library and the basswasapi library are needed.
 ## Known Problems
 
 I am not sure whether this is really based on the latest kode54 version; there's an installer available on the Internet that seems to have been built in November 2018. Unfortunately, authoritative sources for that cannot be found.
-
-Currently, this doesn't work too well on Windows 10 2004 or later. Microsoft changed driver requirements, and the simplistic user mode MIDI driver installation no longer works; specifically, it doesn't survive a reboot.
