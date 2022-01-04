@@ -225,12 +225,12 @@ Section "Uninstall"
   
  ${If} ${RunningX64}
    ${If} ${AtLeastWinVista}
-     Delete "$WINDIR\SysWow64\vstmididrv.dll"
-     RMDir /r  "$WINDIR\SysWow64\vstmididrv"
-     Delete "$WINDIR\SysNative\vstmididrv.dll"
-     RMDir /r  "$WINDIR\SysNative\vstmididrv"
+     Delete /REBOOTOK "$WINDIR\SysWow64\vstmididrv.dll"
+     RMDir /r /REBOOTOK "$WINDIR\SysWow64\vstmididrv"
+     Delete /REBOOTOK "$WINDIR\SysNative\vstmididrv.dll"
+     RMDir /r /REBOOTOK "$WINDIR\SysNative\vstmididrv"
    ${Else}
-     MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
+;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv.dll
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bass.dll
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\basswasapi.dll
@@ -243,22 +243,25 @@ Section "Uninstall"
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\basswasapi.dll
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vsthost32.exe
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vsthost64.exe
-     Reboot
    ${Endif}
  ${Else}
    ${If} ${AtLeastWinVista}
-     Delete "$WINDIR\System32\vstmididrv.dll"
-     RMDir /r  "$WINDIR\System32\vstmididrv"
+     Delete /REBOOTOK "$WINDIR\System32\vstmididrv.dll"
+     RMDir /r /REBOOTOK "$WINDIR\System32\vstmididrv"
    ${Else}
-     MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
+;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv.dll
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bass.dll
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\basswasapi.dll
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vsthost32.exe
-     Reboot
    ${Endif}
  ${EndIf}
+ IfRebootFlag 0 noreboot
+   MessageBox MB_YESNO "A reboot is required to finish the deinstallation. Do you wish to reboot now?" IDNO noreboot
+     Reboot
+ noreboot:
+ 
 SectionEnd
 !endif
