@@ -22,7 +22,7 @@ In theory, VS2010-VS2015 should work, too, but I didn't investigate that.
 
 To build it, you need the following software installed:
 
-#### Nullsoft Installer System (NSIS) V3.0a or higher
+#### Nullsoft Scriptable Install System (NSIS) V3.0a or higher
 See https://sourceforge.net/projects/nsis/  
 Additionally, the locked-list plug-in needs to be installed; you can get that from
 https://nsis.sourceforge.io/LockedList_plug-in  
