@@ -68,28 +68,14 @@ $(TARGET): vstmididrv.mak \
         output\vstmididrv.dll \
         output\vsthost32.exe \
         output\vstmididrvcfg.exe \
-        output\bass.dll \
-        output\basswasapi.dll \
         output\64\vstmididrv.dll \
-        output\64\vsthost64.exe \
-        output\64\bass.dll \
-        output\64\basswasapi.dll
+        output\64\vsthost64.exe 
         $(MKNSIS) vstmididrv.nsi
 
 #------------------------------------------------------------------------------
 # subtargets that need manual copying
 #------------------------------------------------------------------------------
 
-output\bass.dll: external_packages\lib\bass.dll
-        @copy /y external_packages\lib\bass.dll output\bass.dll
 
-output\basswasapi.dll: external_packages\lib\basswasapi.dll
-        @copy /y external_packages\lib\basswasapi.dll output\basswasapi.dll
-
-output\64\bass.dll: external_packages\lib64\bass.dll
-        @copy /y external_packages\lib64\bass.dll output\64\bass.dll
-
-output\64\basswasapi.dll: external_packages\lib64\basswasapi.dll
-        @copy /y external_packages\lib64\basswasapi.dll output\64\basswasapi.dll
 
 !ENDIF // NSIS found

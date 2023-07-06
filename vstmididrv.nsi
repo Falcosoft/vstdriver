@@ -2,7 +2,7 @@
 !include MUI2.nsh
 !include WinVer.nsh
 ; The name of the installer
-Name "VST MIDI System Synth"
+Name "VST MIDI System Synth (Falcomod)"
 
 ;Directory of User-Mode MIDI Registration PlugIn
 !ifdef NSIS_UNICODE
@@ -103,9 +103,7 @@ Section "Needed (required)"
     ;===========================================================================
     SetOutPath "$WINDIR\SysWow64"
     File output\vstmididrv.dll 
-    SetOutPath "$WINDIR\SysWow64\vstmididrv"
-    File output\bass.dll
-    File output\basswasapi.dll
+    SetOutPath "$WINDIR\SysWow64\vstmididrv"   
     File output\vstmididrvcfg.exe
     File output\vsthost32.exe
     File output\64\vsthost64.exe
@@ -114,9 +112,7 @@ Section "Needed (required)"
 !endif
     SetOutPath "$WINDIR\SysNative"
     File output\64\vstmididrv.dll
-    SetOutPath "$WINDIR\SysNative\vstmididrv"
-    File output\64\bass.dll
-    File output\64\basswasapi.dll
+    SetOutPath "$WINDIR\SysNative\vstmididrv"    
     File output\vsthost32.exe
     File output\64\vsthost64.exe
     
@@ -147,11 +143,12 @@ Section "Needed (required)"
     ;===========================================================================
     SetOutPath "$WINDIR\System32"
     File output\vstmididrv.dll 
-    SetOutPath "$WINDIR\System32\vstmididrv"
-    File output\bass.dll
-    File output\basswasapi.dll
+    SetOutPath "$WINDIR\System32\vstmididrv"    
     File output\vstmididrvcfg.exe
     File output\vsthost32.exe
+!ifndef INNER
+    File $%TEMP%\vstmididrvuninstall.exe
+!endif
     
     ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "seib.info" "ROOT\vstmididrv"
     pop $2
@@ -231,16 +228,12 @@ Section "Uninstall"
      RMDir /r /REBOOTOK "$WINDIR\SysNative\vstmididrv"
    ${Else}
 ;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv.dll
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bass.dll
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\basswasapi.dll
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv.dll    
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vsthost32.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vsthost64.exe
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv.dll
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\bass.dll
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\basswasapi.dll
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv.dll    
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vsthost32.exe
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vsthost64.exe
    ${Endif}
@@ -250,9 +243,7 @@ Section "Uninstall"
      RMDir /r /REBOOTOK "$WINDIR\System32\vstmididrv"
    ${Else}
 ;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
-     ${DeleteOnReboot} $WINDIR\System32\vstmididrv.dll
-     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bass.dll
-     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\basswasapi.dll
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrv.dll     
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vsthost32.exe

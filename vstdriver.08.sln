@@ -1,6 +1,6 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 10.00
-# Visual Studio 2008
+Microsoft Visual Studio Solution File, Format Version 9.00
+# Visual Studio 2005
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vstmididrv", "driver\vstmididrv.08.vcproj", "{34769F76-3AAD-4151-AD26-06ADBEBDE49B}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "drivercfg", "drivercfg\drivercfg.08.vcproj", "{B0335477-7446-4E61-8EB1-40A0802CF47D}"
@@ -34,7 +34,6 @@ Global
 		{34769F76-3AAD-4151-AD26-06ADBEBDE49B}.Release|x64.ActiveCfg = Release|x64
 		{34769F76-3AAD-4151-AD26-06ADBEBDE49B}.Release|x64.Build.0 = Release|x64
 		{B0335477-7446-4E61-8EB1-40A0802CF47D}.Debug|Win32.ActiveCfg = Debug|Win32
-		{B0335477-7446-4E61-8EB1-40A0802CF47D}.Debug|Win32.Build.0 = Debug|Win32
 		{B0335477-7446-4E61-8EB1-40A0802CF47D}.Debug|x64.ActiveCfg = Debug|x64
 		{B0335477-7446-4E61-8EB1-40A0802CF47D}.Debug|x64.Build.0 = Debug|x64
 		{B0335477-7446-4E61-8EB1-40A0802CF47D}.Release|Win32.ActiveCfg = Release|Win32
@@ -42,7 +41,6 @@ Global
 		{B0335477-7446-4E61-8EB1-40A0802CF47D}.Release|x64.ActiveCfg = Release|x64
 		{B0335477-7446-4E61-8EB1-40A0802CF47D}.Release|x64.Build.0 = Release|x64
 		{A3E76180-C035-43E0-86F0-82915E11F579}.Debug|Win32.ActiveCfg = Debug|Win32
-		{A3E76180-C035-43E0-86F0-82915E11F579}.Debug|Win32.Build.0 = Debug|Win32
 		{A3E76180-C035-43E0-86F0-82915E11F579}.Debug|x64.ActiveCfg = Debug|x64
 		{A3E76180-C035-43E0-86F0-82915E11F579}.Debug|x64.Build.0 = Debug|x64
 		{A3E76180-C035-43E0-86F0-82915E11F579}.Release|Win32.ActiveCfg = Release|Win32
@@ -55,7 +53,6 @@ Global
 		{021C1266-4298-48EE-8FC6-77DFEB63368F}.Release|Win32.Build.0 = Release|Win32
 		{021C1266-4298-48EE-8FC6-77DFEB63368F}.Release|x64.ActiveCfg = Release|Win32
 		{A1751D9D-9A64-44D2-8FCE-491C0FB157BC}.Debug|Win32.ActiveCfg = Debug|Win32
-		{A1751D9D-9A64-44D2-8FCE-491C0FB157BC}.Debug|Win32.Build.0 = Debug|Win32
 		{A1751D9D-9A64-44D2-8FCE-491C0FB157BC}.Debug|x64.ActiveCfg = Debug|Win32
 		{A1751D9D-9A64-44D2-8FCE-491C0FB157BC}.Release|Win32.ActiveCfg = Release|Win32
 		{A1751D9D-9A64-44D2-8FCE-491C0FB157BC}.Release|Win32.Build.0 = Release|Win32
