@@ -209,9 +209,14 @@ INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_INITDIALOG :
 		{
-			SetWindowLongPtr(hwnd,GWLP_USERDATA,lParam);
-			effect = (AEffect*)lParam;
-			SetWindowText (hwnd, L"VST Editor");
+			SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
+			effect = (AEffect*)lParam;		
+			
+			wchar_t wText[18] = L"VST Editor port ";
+			wchar_t intCnst[] = {'A' + *(int*)effect->user };
+			wcsncat(wText, intCnst, 1);
+		
+			SetWindowText(hwnd, wText);
 			SetTimer (hwnd, 1, 20, 0);
 			if(effect)
 			{
@@ -468,6 +473,17 @@ LONG __stdcall myExceptFilterProc( LPEXCEPTION_POINTERS param )
 	}
 }
 
+#pragma comment(lib, "Winmm")
+
+LPTIMECALLBACK TimeProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
+{
+	MyDLGTEMPLATE vstiEditor;
+	AEffect* pEffect = (AEffect*)dwUser;
+	vstiEditor.style = WS_POPUPWINDOW | WS_DLGFRAME | WS_MINIMIZEBOX | WS_SYSMENU | WS_CAPTION | DS_MODALFRAME | DS_CENTER;
+	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
+	return 0;
+}
+
 int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow )
 {
 	int argc = 0;
@@ -494,14 +510,15 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
-	AEffect * pEffect[3] = {0, 0, 0};
+	AEffect * pEffect[2] = {0, 0};
 
-	audioMasterData effectData[3] = { { 0 }, { 1 }, { 2 } };
+	audioMasterData effectData[2] = { { 0 }, { 1 } };
 
 	std::vector<uint8_t> blState;
 
 	uint32_t max_num_outputs = 2;
-	uint32_t sample_rate = 44100;
+	uint32_t sample_rate = 48000;
+	uint32_t port_num = 0;
 
 	std::vector<uint8_t> chunk;
 	std::vector<float> sample_buffer;
@@ -647,8 +664,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 #endif
 
 				setChunk( pEffect[ 0 ], chunk );
-				setChunk( pEffect[ 1 ], chunk );
-				setChunk( pEffect[ 2 ], chunk );
+				setChunk( pEffect[ 1 ], chunk );				
 
 				put_code( 0 );
 			}
@@ -669,15 +685,48 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				{
 					MyDLGTEMPLATE t;
 					t.style = WS_POPUPWINDOW | WS_DLGFRAME | DS_MODALFRAME | DS_CENTER;
+					t.dwExtendedStyle = WS_EX_TOPMOST;
 					DialogBoxIndirectParam ( 0, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)( pEffect[ 0 ] ) );
 					getChunk( pEffect[ 0 ], chunk );
-					setChunk( pEffect[ 1 ], chunk );
-					setChunk( pEffect[ 2 ], chunk );
+					setChunk( pEffect[ 1 ], chunk );					
 				}
 
 				put_code( 0 );
 			}
 			break;
+		
+		case 10: // Display Editor Modal
+		{
+			if (pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor)
+			{
+				uint32_t size = get_code();
+				if (size != sizeof(port_num))
+				{
+					code = 10;
+					goto exit;
+				}
+
+				port_num = get_code();
+
+				if (port_num && !pEffect[1])
+				{
+					pEffect[1] = pMain(&audioMaster);
+					if (!pEffect[1])
+					{
+						code = 11;
+						goto exit;
+					}
+					pEffect[1]->user = &effectData[1];
+					pEffect[1]->dispatcher(pEffect[1], effOpen, 0, 0, 0, 0);
+					setChunk(pEffect[1], chunk);
+				}
+
+				timeSetEvent(100, 10, (LPTIMECALLBACK)TimeProc, (DWORD_PTR)pEffect[port_num], TIME_ONESHOT);
+			}
+
+			put_code(0);
+		}
+		break;
 
 		case 5: // Set Sample Rate
 			{
@@ -695,13 +744,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 			break;
 
 		case 6: // Reset
-			{
-				if ( pEffect[ 2 ] )
-				{
-					if ( blState.size() ) pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effStopProcess, 0, 0, 0, 0 );
-					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effClose, 0, 0, 0, 0 );
-					pEffect[ 2 ] = NULL;
-				}
+			{				
 				if ( pEffect[ 1 ] )
 				{
 					if ( blState.size() ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStopProcess, 0, 0, 0, 0 );
@@ -739,7 +782,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				uint32_t b = get_code();
 
 				ev->port = (b & 0x7F000000) >> 24;
-				if (ev->port > 2) ev->port = 2;
+				if (ev->port > 1) ev->port = 1;
 				ev->ev.midiEvent.type = kVstMidiType;
 				ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
 				memcpy(&ev->ev.midiEvent.midiData, &b, 3);
@@ -760,7 +803,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				size &= 0xFFFFFF;
 
 				ev->port = port;
-				if (ev->port > 2) ev->port = 2;
+				if (ev->port > 1) ev->port = 1;
 				ev->ev.sysexEvent.type = kVstSysExType;
 				ev->ev.sysexEvent.byteSize = sizeof(ev->ev.sysexEvent);
 				ev->ev.sysexEvent.dumpBytes = size;
@@ -785,19 +828,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					pEffect[ 1 ]->user = &effectData[ 1 ];
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effOpen, 0, 0, 0, 0 );
 					setChunk( pEffect[ 1 ], chunk );
-				}
-				if ( !pEffect[ 2 ] )
-				{
-					pEffect[ 2 ] = pMain( &audioMaster );
-					if ( !pEffect[ 2 ] )
-					{
-						code = 11;
-						goto exit;
-					}
-					pEffect[ 2 ]->user = &effectData[ 2 ];
-					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effOpen, 0, 0, 0, 0 );
-					setChunk( pEffect[ 2 ], chunk );
-				}
+				}				
 
 				if ( !blState.size() )
 				{
@@ -809,12 +840,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effSetSampleRate, 0, 0, 0, float(sample_rate) );
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effSetBlockSize, 0, BUFFER_SIZE, 0, 0 );
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effMainsChanged, 0, 1, 0, 0 );
-					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStartProcess, 0, 0, 0, 0 );
-
-					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effSetSampleRate, 0, 0, 0, float(sample_rate) );
-					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effSetBlockSize, 0, BUFFER_SIZE, 0, 0 );
-					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effMainsChanged, 0, 1, 0, 0 );
-					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effStartProcess, 0, 0, 0, 0 );
+					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStartProcess, 0, 0, 0, 0 );					
 
 					size_t buffer_size = sizeof(float*) * ( pEffect[ 0 ]->numInputs + pEffect[ 0 ]->numOutputs * 3 ); // float lists
 					buffer_size += sizeof(float) * BUFFER_SIZE;                                // null input
@@ -842,8 +868,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				if ( need_idle )
 				{
 					pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
-					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
-					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );					
 
 					if ( !idle_started )
 					{
@@ -855,19 +880,18 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 							unsigned num_outputs = pEffect[ 0 ]->numOutputs;
 
 							pEffect[ 0 ]->processReplacing( pEffect[ 0 ], float_list_in, float_list_out, count_to_do );
-							pEffect[ 1 ]->processReplacing( pEffect[ 1 ], float_list_in, float_list_out + num_outputs, count_to_do );
-							pEffect[ 2 ]->processReplacing( pEffect[ 2 ], float_list_in, float_list_out + num_outputs * 2, count_to_do );
+							pEffect[ 1 ]->processReplacing( pEffect[ 1 ], float_list_in, float_list_out + num_outputs, count_to_do );							
 
 							pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
 							pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
-							pEffect[ 2 ]->dispatcher( pEffect[ 2 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+							
 
 							idle_run -= count_to_do;
 						}
 					}
 				}
 
-				VstEvents * events[ 3 ] = {0};
+				VstEvents * events[ 2 ] = {0};
 
 				if ( evChain )
 				{
@@ -913,25 +937,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 						}
 
 						pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effProcessEvents, 0, 0, events[ 1 ], 0 );
-					}
-
-					if ( event_count[ 2 ] )
-					{
-						events[ 2 ] = ( VstEvents * ) malloc( sizeof(VstInt32) + sizeof(VstIntPtr) + sizeof(VstEvent*) * event_count[ 2 ] );
-
-						events[ 2 ]->numEvents = event_count[ 2 ];
-						events[ 2 ]->reserved = 0;
-
-						ev = evChain;
-
-						for ( unsigned i = 0; ev; )
-						{
-							if ( ev->port == 2 ) events[ 2 ]->events[ i++ ] = (VstEvent*) &ev->ev;
-							ev = ev->next;
-						}
-
-						pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effProcessEvents, 0, 0, events[ 2 ], 0 );
-					}
+					}					
 
 				}
 
@@ -940,13 +946,12 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				{
 					pEffect[ 0 ]->dispatcher( pEffect[ 0 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
-					pEffect[ 2 ]->dispatcher( pEffect[ 2 ], DECLARE_VST_DEPRECATED (effIdle), 0, 0, 0, 0 );
+					
 
 					if ( !idle_started )
 					{
 						if ( events[ 0 ] ) pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effProcessEvents, 0, 0, events[ 0 ], 0 );
-						if ( events[ 1 ] ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effProcessEvents, 0, 0, events[ 1 ], 0 );
-						if ( events[ 2 ] ) pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effProcessEvents, 0, 0, events[ 2 ], 0 );
+						if ( events[ 1 ] ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effProcessEvents, 0, 0, events[ 1 ], 0 );						
 
 						idle_started = true;
 					}
@@ -962,8 +967,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					unsigned num_outputs = pEffect[ 0 ]->numOutputs;
 
 					pEffect[ 0 ]->processReplacing( pEffect[ 0 ], float_list_in, float_list_out, count_to_do );
-					pEffect[ 1 ]->processReplacing( pEffect[ 1 ], float_list_in, float_list_out + num_outputs, count_to_do );
-					pEffect[ 2 ]->processReplacing( pEffect[ 2 ], float_list_in, float_list_out + num_outputs * 2, count_to_do );
+					pEffect[ 1 ]->processReplacing( pEffect[ 1 ], float_list_in, float_list_out + num_outputs, count_to_do );					
 
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 					float * out = &sample_buffer.front() + samples_buffered * max_num_outputs;
@@ -1002,8 +1006,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 				}
 
 				if ( events[ 0 ] ) free( events[ 0 ] );
-				if ( events[ 1 ] ) free( events[ 1 ] );
-				if ( events[ 2 ] ) free( events[ 2 ] );
+				if ( events[ 1 ] ) free( events[ 1 ] );				
 
 				freeChain();
 			}
@@ -1020,11 +1023,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 	}
 
 exit:
-	if ( pEffect[ 2 ] )
-	{
-		if ( blState.size() ) pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effStopProcess, 0, 0, 0, 0 );
-		pEffect[ 2 ]->dispatcher( pEffect[ 2 ], effClose, 0, 0, 0, 0 );
-	}
+	
 	if ( pEffect[ 1 ] )
 	{
 		if ( blState.size() ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStopProcess, 0, 0, 0, 0 );
