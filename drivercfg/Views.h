@@ -59,11 +59,15 @@ void settings_load(VSTDriver * effect)
 				vector<uint8_t> chunk;
 				chunk.resize( chunk_size );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-				if (chunk_size) file.read( (char*) &chunk.front(), chunk_size );
-				if (effect) effect->setChunk( &chunk.front(), (unsigned int)chunk_size );
+				if (chunk_size) {
+					file.read( (char*) &chunk.front(), chunk_size );
+					if (effect) effect->setChunk( &chunk.front(), (unsigned int)chunk_size );
+				}
 #else
-				if (chunk_size) file.read( (char*) chunk.data(), chunk_size );
-				if (effect) effect->setChunk( chunk.data(), (unsigned int)chunk_size );
+				if (chunk_size) {
+					file.read( (char*) chunk.data(), chunk_size );
+					if (effect) effect->setChunk( chunk.data(), (unsigned int)chunk_size );
+				}
 #endif
 			}
 			file.close();
@@ -80,7 +84,7 @@ void settings_save(VSTDriver * effect)
 	ULONG size;
 	CRegKeyEx reg;
 	wstring fname;
-	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WOW64_32KEY); // falco fix: otherwise reg.QueryStringValue gets back an ACCESS_DENIED(5) error.
 	if (lResult == ERROR_SUCCESS){
 		lResult = reg.QueryStringValue(L"plugin",NULL,&size);
 		if (lResult == ERROR_SUCCESS) {
@@ -113,8 +117,9 @@ using namespace utf8util;
 
 class CView1 : public CDialogImpl<CView1>
 {
+	
 	CEdit vst_info;
-	CButton vst_load, vst_configure;
+	CButton vst_load, vst_configure, vst_showvst;
 	CStatic vst_vendor, vst_effect, vst_product;
 	TCHAR vst_path[MAX_PATH];
 	VSTDriver * effect;
@@ -124,6 +129,7 @@ public:
 	   MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView1)
 	   COMMAND_ID_HANDLER(IDC_VSTLOAD,OnButtonAdd)
 	   COMMAND_ID_HANDLER(IDC_VSTCONFIG,OnButtonConfig)
+	   COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)
    END_MSG_MAP()
 
    CView1() { effect = NULL; }
@@ -134,12 +140,17 @@ public:
 	   long lResult;
 	   vst_path[0] = 0;
 	   ULONG size;
+	   DWORD showVstDialog; 
 	   CRegKeyEx reg;
 	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver");
 	   if (lResult == ERROR_SUCCESS){
 		   lResult = reg.QueryStringValue(L"plugin",NULL,&size);
 		   if (lResult == ERROR_SUCCESS) {
 			   reg.QueryStringValue(L"plugin",vst_path,&size);
+		   }
+		   lResult = reg.QueryDWORDValue(L"ShowVstDialog",showVstDialog);
+		   if (lResult == ERROR_SUCCESS) {
+			   vst_showvst.SetCheck(showVstDialog);
 		   }
 		   reg.Close();
 		   vst_info.SetWindowText(vst_path);
@@ -165,13 +176,24 @@ public:
 			   long lResult;
 			   CRegKeyEx reg;
 			   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
-			   reg.SetStringValue(L"plugin",szFileName);
+			   reg.SetStringValue(L"plugin",szFileName);			   
 			   reg.Close();
 			   vst_info.SetWindowText(szFileName);
 			   vst_configure.EnableWindow(effect->hasEditor());
 		   }
 		   // do stuff
 	   }
+	   return 0;
+   }
+   
+   LRESULT OnClickedSHOWVST(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+   {
+	   long lResult;
+	   CRegKeyEx reg;
+	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	   reg.SetDWORDValue(L"ShowVstDialog",vst_showvst.GetCheck());
+	   reg.Close();
+	
 	   return 0;
    }
 
@@ -196,7 +218,7 @@ public:
 
    BOOL load_vst(TCHAR * szPluginPath)
    {
-	   free_vst();
+	   if(effect) free_vst(); // falco fix: otherwise an empty save occures at every start.
 	   effect = new VSTDriver;
 	   if (!effect->OpenVSTDriver(szPluginPath))
 	   {
@@ -230,7 +252,8 @@ public:
 	LRESULT OnInitDialogView1(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
 		effect = NULL;
-		vst_load= GetDlgItem(IDC_VSTLOAD);
+		vst_showvst = GetDlgItem(IDC_SHOWVST);
+		vst_load = GetDlgItem(IDC_VSTLOAD);
 		vst_info = GetDlgItem(IDC_VSTLOADED);
 		vst_configure = GetDlgItem(IDC_VSTCONFIG);
 		vst_effect = GetDlgItem(IDC_EFFECT);
@@ -243,6 +266,7 @@ public:
 		load_settings();
 		return TRUE;
 	}
+
 };
 
 
