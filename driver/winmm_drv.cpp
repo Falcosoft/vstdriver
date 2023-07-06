@@ -30,11 +30,11 @@ static int driverCount;
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ){
     if (fdwReason == DLL_PROCESS_ATTACH){
         hinst_vst_driver = hinstDLL;
-        DisableThreadLibraryCalls(hinstDLL);
+        //DisableThreadLibraryCalls(hinstDLL);
     }else if(fdwReason == DLL_PROCESS_DETACH){
-        ;
-		if (synthOpened)
-			midiSynth.Close();
+        //;
+		//if (synthOpened)
+		//	midiSynth.Close();
     }
     return TRUE;
 }
@@ -98,6 +98,7 @@ STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwP
 	case DRV_DISABLE:
 		return DRV_OK;
 	case DRV_FREE:
+		if (synthOpened) midiSynth.Close();
 		return DRV_OK;
 	case DRV_REMOVE:
 		return DRV_OK;
@@ -231,14 +232,15 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 	MIDIHDR *midiHdr;
 	Driver *driver = &drivers[uDeviceID];
 	DWORD instance;
+	DWORD res;
 	switch (uMsg) {
 	case MODM_OPEN:
 		if (!synthOpened) {
-			if (midiSynth.Init() != 0) return MMSYSERR_ERROR;
+			if (midiSynth.Init(uDeviceID) != 0) return MMSYSERR_ERROR;
 			synthOpened = true;
 		}
-		instance = NULL;
-		DWORD res;
+		instance = NULL;		
+		
 		res = OpenDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
 		driver->clients[*(LONG *)dwUser].synth_instance = instance;
 		return res;
@@ -247,8 +249,18 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		if (driver->clients[dwUser].allocated == false) {
 			return MMSYSERR_ERROR;
 		}
-		if (synthOpened) midiSynth.Reset(uDeviceID);
-		return CloseDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
+		
+		res = CloseDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
+		if (synthOpened) 
+		{			
+			 midiSynth.Reset(uDeviceID);
+
+			 if(drivers[0].clientCount == 0 && drivers[1].clientCount == 0 ) {
+				midiSynth.Close();
+				synthOpened = false;
+			 }
+		}
+		return res;
 
 	case MODM_PREPARE:
 		return MMSYSERR_NOTSUPPORTED;

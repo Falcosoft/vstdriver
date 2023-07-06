@@ -29,7 +29,9 @@ private:
 	unsigned int midiLatency, midiLatencyMS;
 	unsigned int bufferSize, bufferSizeMS;
 	unsigned int chunkSize, chunkSizeMS;
+	bool useRingBuffer;
 	bool resetEnabled;
+	bool usingFloat;
 	float outputGain;
 
 	short *buffer;
@@ -45,9 +47,10 @@ private:
 
 public:
 	static MidiSynth &getInstance();
-	int Init();
+	int Init(unsigned uDeviceID);
 	void Close();
 	int Reset(unsigned uDeviceID);
+	void RenderAvailableSpace();
 	void Render(short *bufpos, DWORD totalFrames);
 	void RenderFloat(float *bufpos, DWORD totalFrames);
 	void PushMIDI(unsigned uDeviceID, DWORD msg);

@@ -18,16 +18,8 @@
 
 #undef GetMessage
 
-#define BASSDEF(f) (WINAPI *f)	// define the BASS functions as pointers
-#define BASSWASAPIDEF(f) (WINAPI *f)
-#define LOADBASSFUNCTION(f) *((void**)&f)=GetProcAddress(bass,#f)
-#define LOADBASSWASAPIFUNCTION(f) *((void**)&f)=GetProcAddress(basswasapi,#f)
-#include <bass.h>
-#include <basswasapi.h>
-
 #include "VSTDriver.h"
 
-extern "C" { extern HINSTANCE hinst_vst_driver; }
 
 namespace VSTMIDIDRV {
 
@@ -42,6 +34,7 @@ private:
     {
         void * sysex;
         DWORD msg;
+		DWORD timestamp;
         DWORD port_type;
     };
 	message stream[maxPos];
@@ -56,7 +49,7 @@ public:
 		endpos = 0;
 	}
 
-	DWORD PutMessage(DWORD port, DWORD msg) {
+	DWORD PutMessage(DWORD port, DWORD msg, DWORD timestamp) {
 		unsigned int newEndpos = endpos;
 
 		newEndpos++;
@@ -66,12 +59,13 @@ public:
 			return -1;
         stream[endpos].sysex = 0;
 		stream[endpos].msg = msg;	// ok to put data and update endpos
-        stream[endpos].port_type = port;
+		stream[endpos].timestamp = timestamp;
+		stream[endpos].port_type = port;
 		endpos = newEndpos;
 		return 0;
 	}
     
-    DWORD PutSysex(DWORD port, unsigned char * sysex, DWORD sysex_len)
+    DWORD PutSysex(DWORD port, unsigned char * sysex, DWORD sysex_len, DWORD timestamp)
     {
         unsigned int newEndpos = endpos;
         void * sysexCopy;
@@ -90,6 +84,7 @@ public:
         
         stream[endpos].sysex = sysexCopy;
         stream[endpos].msg = sysex_len;
+		stream[endpos].timestamp = timestamp;
         stream[endpos].port_type = port | 0x80000000;
         endpos = newEndpos;
         return 0;
@@ -120,11 +115,19 @@ public:
 		startpos++;
 		if (startpos == maxPos) // check for buffer rolloff
 			startpos = 0;
+	}	
+
+	DWORD PeekMessageTime() {
+		if (startpos == endpos) // check for buffer empty
+			return (DWORD)-1;
+		return stream[startpos].timestamp;
 	}
 
-	DWORD PeekMessageCount() {
-		if (endpos < startpos) return endpos + maxPos - startpos;
-		else return endpos - startpos;
+	DWORD PeekMessageTimeAt(unsigned int pos) {
+		if (startpos == endpos) // check for buffer empty
+			return -1;
+		unsigned int peekPos = (startpos + pos) % maxPos;
+		return stream[peekPos].timestamp;
 	}
 } midiStream;
 
@@ -153,219 +156,191 @@ public:
 
 static class WaveOutWin32 {
 private:
-	HINSTANCE   bass;			// bass handle
-	HINSTANCE   basswasapi;        // basswasapi handle
-
-	HSTREAM     hStOutput;
-
-	bool        soundOutFloat;
-	DWORD       wasapiBits;
+	HWAVEOUT	hWaveOut;
+	WAVEHDR* WaveHdr;
+	HANDLE		hEvent;
+	DWORD		chunks;
+	DWORD		prevPlayPos;
+	DWORD		getPosWraps;
+	bool		stopProcessing;
+	bool        usingFloat;
 
 public:
-	WaveOutWin32() : bass(0), basswasapi(0), hStOutput(0) { }
-
-	int Init(unsigned int bufferSize, unsigned int chunkSize, unsigned int sampleRate) {
-		TCHAR installpath[MAX_PATH] = {0};
-		TCHAR basspath[MAX_PATH];
-		TCHAR basswasapipath[MAX_PATH];
-
-		soundOutFloat = false;
-
-		GetModuleFileName(hinst_vst_driver, installpath, MAX_PATH);
-        lstrcpy(basswasapipath, installpath);
-		PathRemoveFileSpec(installpath);
-        TCHAR *fnpart = basswasapipath + lstrlen(installpath);
-        TCHAR *fnend = fnpart + lstrlen(fnpart);
-        while (fnend > fnpart && *fnend != _T('.'))
-          fnend--;
-        if (fnend != fnpart)
-          *fnend = _T('\0');
-
-		lstrcpy(basspath, installpath);
-        lstrcat(basspath, fnpart);
-		lstrcat(basspath, _T("\\bass.dll"));
-		if (!(bass=LoadLibrary(basspath))) {
-          lstrcpy(basspath, installpath);
-          lstrcat(basspath, _T("\\bass.dll"));
-          if (!(bass=LoadLibrary(basspath))) {
-            OutputDebugString(_T("Failed to load BASS.dll.\n"));
-            return -1;
-            }
-        else
-          lstrcat(installpath, fnpart);
+	int Init(void* buffer, unsigned int bufferSize, unsigned int chunkSize, bool useRingBuffer, unsigned int sampleRate, bool useFloat) {
+		DWORD callbackType = CALLBACK_NULL;
+		DWORD_PTR callback = NULL;
+		usingFloat = useFloat;
+		hEvent = NULL;
+		if (!useRingBuffer) {
+			hEvent = CreateEvent(NULL, false, true, NULL);
+			callback = (DWORD_PTR)hEvent;
+			callbackType = CALLBACK_EVENT;
 		}
 
-		lstrcpy(basswasapipath, installpath);
-		lstrcat(basswasapipath, _T("\\basswasapi.dll"));
-		basswasapi=LoadLibrary(basswasapipath);
+		PCMWAVEFORMAT wFormat = { WAVE_FORMAT_PCM, 2, sampleRate, sampleRate * 4, 4, 16 };
+		WAVEFORMATEX wFormatFloat = { WAVE_FORMAT_IEEE_FLOAT, 2, sampleRate, sampleRate * 8, 8, 32, 0 };
 
-		LOADBASSFUNCTION(BASS_SetConfig);
-		LOADBASSFUNCTION(BASS_Init);
-		LOADBASSFUNCTION(BASS_Free);
-		LOADBASSFUNCTION(BASS_StreamCreate);
-		LOADBASSFUNCTION(BASS_StreamFree);
-		LOADBASSFUNCTION(BASS_ChannelPlay);
-		LOADBASSFUNCTION(BASS_ChannelStop);
-		LOADBASSFUNCTION(BASS_ChannelPause);
-
-		if (basswasapi) {
-			LOADBASSWASAPIFUNCTION(BASS_WASAPI_Init);
-			LOADBASSWASAPIFUNCTION(BASS_WASAPI_Free);
-			LOADBASSWASAPIFUNCTION(BASS_WASAPI_Start);
-			LOADBASSWASAPIFUNCTION(BASS_WASAPI_Stop);
-			LOADBASSWASAPIFUNCTION(BASS_WASAPI_GetInfo);
+		// Open waveout device
+		int wResult = waveOutOpen(&hWaveOut, WAVE_MAPPER, useFloat ? &wFormatFloat : (LPWAVEFORMATEX)&wFormat, callback, (DWORD_PTR)&midiSynth, callbackType);
+		if (wResult != MMSYSERR_NOERROR) {
+			MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			return 2;
 		}
 
-		BASS_SetConfig(BASS_CONFIG_UPDATEPERIOD, 5);
-
-		if (BASS_Init(basswasapi ? 0 : -1, sampleRate, bufferSize, NULL, NULL)) {
-			if (basswasapi) {
-				BASS_WASAPI_INFO winfo;
-				if (!BASS_WASAPI_Init(-1, 0, 2, BASS_WASAPI_EVENT, (float)bufferSize * 0.001f, (float)chunkSize * 0.001f, WasapiProc, this))
-					return -2;
-				if (!BASS_WASAPI_GetInfo(&winfo)) {
-					BASS_WASAPI_Free();
-					return -3;
-				}
-				sampleRate = winfo.freq;
-				soundOutFloat = false;
-				switch (winfo.format) {
-				case BASS_WASAPI_FORMAT_8BIT:
-					wasapiBits = 8;
-					break;
-
-				case BASS_WASAPI_FORMAT_16BIT:
-					wasapiBits = 16;
-					break;
-
-				case BASS_WASAPI_FORMAT_24BIT:
-					wasapiBits = 24;
-					break;
-
-				case BASS_WASAPI_FORMAT_32BIT:
-					wasapiBits = 32;
-					break;
-
-				case BASS_WASAPI_FORMAT_FLOAT:
-					soundOutFloat = TRUE;
-					break;
-				}
+		// Prepare headers
+		chunks = useRingBuffer ? 1 : bufferSize / chunkSize;
+		WaveHdr = new WAVEHDR[chunks];
+		LPSTR chunkStart = (LPSTR)buffer;
+		DWORD chunkBytes = (useFloat ? 8 : 4) * chunkSize;
+		DWORD bufferBytes = (useFloat ? 8 : 4) * bufferSize;
+		for (UINT i = 0; i < chunks; i++) {
+			if (useRingBuffer) {
+				WaveHdr[i].dwBufferLength = bufferBytes;
+				WaveHdr[i].lpData = chunkStart;
+				WaveHdr[i].dwFlags = WHDR_BEGINLOOP | WHDR_ENDLOOP;
+				WaveHdr[i].dwLoops = -1L;
 			}
 			else {
-				hStOutput = BASS_StreamCreate(sampleRate, 2, ( soundOutFloat ? BASS_SAMPLE_FLOAT : 0 ), StreamProc, this);
-				if (!hStOutput) return -2;
+				WaveHdr[i].dwBufferLength = chunkBytes;
+				WaveHdr[i].lpData = chunkStart;
+				WaveHdr[i].dwFlags = 0L;
+				WaveHdr[i].dwLoops = 0L;
+				chunkStart += chunkBytes;
+			}
+			wResult = waveOutPrepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
+			if (wResult != MMSYSERR_NOERROR) {
+				MessageBox(NULL, L"Failed to Prepare Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				return 3;
 			}
 		}
-
-		return sampleRate;
+		stopProcessing = false;
+		return 0;
 	}
 
 	int Close() {
-		if (hStOutput)
-			BASS_ChannelStop(hStOutput);
-		else if (basswasapi)
-			BASS_WASAPI_Stop(TRUE);
-
-		if (hStOutput) {
-			BASS_StreamFree( hStOutput );
-			hStOutput = 0;
+		stopProcessing = true;
+		Sleep(80);
+		SetEvent(hEvent);
+		int wResult = waveOutReset(hWaveOut);
+		if (wResult != MMSYSERR_NOERROR) {
+			MessageBox(NULL, L"Failed to Reset WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			return 8;
 		}
 
-		if (basswasapi) {
-			BASS_WASAPI_Free();
-			FreeLibrary(basswasapi);
-			basswasapi = 0;
+		for (UINT i = 0; i < chunks; i++) {
+			wResult = waveOutUnprepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
+			if (wResult != MMSYSERR_NOERROR) {
+				MessageBox(NULL, L"Failed to Unprepare Wave Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				return 8;
+			}
 		}
-		if ( bass ) {
-			BASS_Free();
-			FreeLibrary(bass);
-			bass = 0;
-		}
+		delete[] WaveHdr;
+		WaveHdr = NULL;
 
+		wResult = waveOutClose(hWaveOut);
+		if (wResult != MMSYSERR_NOERROR) {
+			MessageBox(NULL, L"Failed to Close WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			return 8;
+		}
+		if (hEvent != NULL) {
+			CloseHandle(hEvent);
+			hEvent = NULL;
+		}
 		return 0;
 	}
 
 	int Start() {
-		if (hStOutput)
-			BASS_ChannelPlay(hStOutput, FALSE);
-		else if (basswasapi)
-			BASS_WASAPI_Start();
+		getPosWraps = 0;
+		prevPlayPos = 0;
+		for (UINT i = 0; i < chunks; i++) {
+			if (waveOutWrite(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+				MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				return 4;
+			}
+		}
+		_beginthread(RenderingThread, 16384, this);
 		return 0;
 	}
 
 	int Pause() {
-		if (hStOutput)
-			BASS_ChannelPause(hStOutput);
-		else if (basswasapi)
-			BASS_WASAPI_Stop(FALSE);
+		if (waveOutPause(hWaveOut) != MMSYSERR_NOERROR) {
+			MessageBox(NULL, L"Failed to Pause wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			return 9;
+		}
 		return 0;
 	}
 
 	int Resume() {
-		Start();
+		if (waveOutRestart(hWaveOut) != MMSYSERR_NOERROR) {
+			MessageBox(NULL, L"Failed to Resume wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			return 9;
+		}
 		return 0;
 	}
 
-	static DWORD CALLBACK StreamProc(HSTREAM handle, void *buffer, DWORD length, void *user) {
-		WaveOutWin32 * _this = (WaveOutWin32 *)user;
-		if (_this->soundOutFloat) {
-			midiSynth.RenderFloat((float *)buffer, length / 8);
-		} else {
-			midiSynth.Render((short *)buffer, length / 4);
+	UINT64 GetPos() {
+		MMTIME mmTime;
+		mmTime.wType = TIME_SAMPLES;
+
+		if (waveOutGetPosition(hWaveOut, &mmTime, sizeof MMTIME) != MMSYSERR_NOERROR) {
+			MessageBox(NULL, L"Failed to get current playback position", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			return 10;
 		}
-		return length;
+		if (mmTime.wType != TIME_SAMPLES) {
+			MessageBox(NULL, L"Failed to get # of samples played", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+			return 10;
+		}
+
+		// Deal with waveOutGetPosition() wraparound. For 16-bit stereo output, it equals 2^27,
+		// presumably caused by the internal 32-bit counter of bits played.
+		// The output of that nasty waveOutGetPosition() isn't monotonically increasing
+		// even during 2^27 samples playback, so we have to ensure the difference is big enough...
+		int delta = mmTime.u.sample - prevPlayPos;
+		if (usingFloat) {
+			if (delta < -(1 << 25)) {
+				std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
+				++getPosWraps;
+			}
+			prevPlayPos = mmTime.u.sample;
+			return mmTime.u.sample + getPosWraps * (1 << 26);
+		}
+		else {
+			if (delta < -(1 << 26)) {
+				std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
+				++getPosWraps;
+			}
+			prevPlayPos = mmTime.u.sample;
+			return mmTime.u.sample + getPosWraps * (1 << 27);
+		}
 	}
 
-	static DWORD CALLBACK WasapiProc(void *buffer, DWORD length, void *user)
-	{
-		WaveOutWin32 * _this = (WaveOutWin32 *)user;
-		if (_this->soundOutFloat || _this->wasapiBits == 16)
-			return StreamProc(NULL, buffer, length, user);
-		else
-		{
-			int bytes_per_sample = _this->wasapiBits / 8;
-			int bytes_done = 0;
-			while (length)
-			{
-				unsigned short sample_buffer[1024];
-				int length_todo = (length / bytes_per_sample);
-				if (length_todo > 512) length_todo = 512;
-				int bytes_done_this = StreamProc(NULL, sample_buffer, length_todo * 4, 0);
-				if (bytes_done_this <= 0) return bytes_done;
-				if (bytes_per_sample == 4)
-				{
-					unsigned int * out = (unsigned int *) buffer;
-					for (int i = 0; i < bytes_done_this; i += 2)
-					{
-						*out++ = sample_buffer[i / 2] << 16;
-					}
-					buffer = out;
-				}
-				else if (bytes_per_sample == 3)
-				{
-					unsigned char * out = (unsigned char *) buffer;
-					for (int i = 0; i < bytes_done_this; i += 2)
-					{
-						int sample = sample_buffer[i / 2];
-						*out++ = 0;
-						*out++ = sample & 0xFF;
-						*out++ = (sample >> 8) & 0xFF;
-					}
-					buffer = out;
-				}
-				else if (bytes_per_sample == 1)
-				{
-					unsigned char * out = (unsigned char *) buffer;
-					for (int i = 0; i < bytes_done_this; i += 2)
-					{
-						*out++ = (sample_buffer[i / 2] >> 8) & 0xFF;
-					}
-					buffer = out;
-				}
-				bytes_done += (bytes_done_this / 2) * bytes_per_sample;
-				length -= (bytes_done_this / 2) * bytes_per_sample;
+	static void RenderingThread(void* pthis) {
+		WaveOutWin32* _this = (WaveOutWin32*)pthis;
+		if (waveOut.chunks == 1) {
+			// Rendering using single looped ring buffer
+			while (!waveOut.stopProcessing) {
+				midiSynth.RenderAvailableSpace();
 			}
-			return bytes_done;
+		}
+		else {
+			while (!waveOut.stopProcessing) {
+				bool allBuffersRendered = true;
+				for (UINT i = 0; i < waveOut.chunks; i++) {
+					if (waveOut.WaveHdr[i].dwFlags & WHDR_DONE) {
+						allBuffersRendered = false;
+						if (_this->usingFloat)
+							midiSynth.RenderFloat((float*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / 8);
+						else
+							midiSynth.Render((short*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / 4);
+						if (waveOutWrite(waveOut.hWaveOut, &waveOut.WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+							MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						}
+					}
+				}
+				if (allBuffersRendered) {
+					WaitForSingleObject(waveOut.hEvent, INFINITE);
+				}
+			}
 		}
 	}
 } waveOut;
@@ -377,60 +352,116 @@ MidiSynth &MidiSynth::getInstance() {
 	return *instance;
 }
 
+// Renders all the available space in the single looped ring buffer
+void MidiSynth::RenderAvailableSpace() {
+	DWORD playPos = waveOut.GetPos() % bufferSize;
+	DWORD framesToRender;
+
+	if (playPos < framesRendered) {
+		// Buffer wrap, render 'till the end of the buffer
+		framesToRender = bufferSize - framesRendered;
+	}
+	else {
+		framesToRender = playPos - framesRendered;
+		if (framesToRender < chunkSize) {
+			Sleep(1 + (chunkSize - framesToRender) * 1000 / sampleRate);
+			return;
+		}
+	}
+	if (usingFloat)
+		midiSynth.RenderFloat(bufferf + 2 * framesRendered, framesToRender);
+	else
+		midiSynth.Render(buffer + 2 * framesRendered, framesToRender);
+}
+
 // Renders totalFrames frames starting from bufpos
 // The number of frames rendered is added to the global counter framesRendered
 void MidiSynth::Render(short *bufpos, DWORD totalFrames) {
-	DWORD count;
-	// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-	while ((count = midiStream.PeekMessageCount())) {
-		DWORD msg;
-		DWORD sysex_len;
-		DWORD port;
-		unsigned char * sysex;
+	while (totalFrames > 0) {
+		DWORD timeStamp;
+		// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
+		while ((timeStamp = midiStream.PeekMessageTime()) == framesRendered) {
+			DWORD msg;
+			DWORD sysex_len;
+			DWORD port;
+			unsigned char* sysex;
+			synthMutex.Enter();
+			midiStream.GetMessage(port, msg, sysex, sysex_len);
+			
+			if (msg && !sysex)
+			{
+				vstDriver->ProcessMIDIMessage(port, msg);
+			}
+			else if (!msg && sysex && sysex_len)
+			{
+				vstDriver->ProcessSysEx(port, sysex, sysex_len);
+				free(sysex);
+			}
+			synthMutex.Leave();
+		}
+
+		// Find out how many frames to render. The value of timeStamp == -1 indicates the MIDI buffer is empty
+		DWORD framesToRender = timeStamp - framesRendered;
+		if (framesToRender > totalFrames) {
+			// MIDI message is too far - render the rest of frames
+			framesToRender = totalFrames;
+		}
 		synthMutex.Enter();
-		midiStream.GetMessage(port, msg, sysex, sysex_len);
-		if (msg && !sysex)
-		{
-			vstDriver->ProcessMIDIMessage(port, msg);
-		}
-		else if (!msg && sysex && sysex_len)
-		{
-			vstDriver->ProcessSysEx(port, sysex, sysex_len);
-			free(sysex);
-		}
+		vstDriver->Render(bufpos, framesToRender);
 		synthMutex.Leave();
+		framesRendered += framesToRender;
+		bufpos += framesToRender * 2;
+		totalFrames -= framesToRender;
 	}
 
-	synthMutex.Enter();
-	vstDriver->Render(bufpos, totalFrames);
-	synthMutex.Leave();
+	// Wrap framesRendered counter
+	if (framesRendered >= bufferSize) {
+		framesRendered -= bufferSize;
+	}
 }
 
 void MidiSynth::RenderFloat(float *bufpos, DWORD totalFrames) {
-	DWORD count;
-	// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-	while ((count = midiStream.PeekMessageCount())) {
-		DWORD msg;
-		DWORD sysex_len;
-		DWORD port;
-		unsigned char * sysex;
+	while (totalFrames > 0) {
+		DWORD timeStamp;
+		// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
+		while ((timeStamp = midiStream.PeekMessageTime()) == framesRendered) {
+			DWORD msg;
+			DWORD sysex_len;
+			DWORD port;
+			unsigned char* sysex;
+			synthMutex.Enter();
+			midiStream.GetMessage(port, msg, sysex, sysex_len);
+						
+			if (msg && !sysex)
+			{
+				vstDriver->ProcessMIDIMessage(port, msg);
+			}
+			else if (!msg && sysex && sysex_len)
+			{
+				vstDriver->ProcessSysEx(port, sysex, sysex_len);
+				free(sysex);
+			}
+			synthMutex.Leave();
+		}
+
+		// Find out how many frames to render. The value of timeStamp == -1 indicates the MIDI buffer is empty
+		DWORD framesToRender = timeStamp - framesRendered;
+		if (framesToRender > totalFrames) {
+			// MIDI message is too far - render the rest of frames
+			framesToRender = totalFrames;
+		}
 		synthMutex.Enter();
-		midiStream.GetMessage(port, msg, sysex, sysex_len);
-		if (msg && !sysex)
-		{
-			vstDriver->ProcessMIDIMessage(port, msg);
-		}
-		else if (!msg && sysex && sysex_len)
-		{
-			vstDriver->ProcessSysEx(port, sysex, sysex_len);
-			free(sysex);
-		}
+		vstDriver->RenderFloat(bufpos, framesToRender);
 		synthMutex.Leave();
+		framesRendered += framesToRender;
+		bufpos += framesToRender * 2;
+		totalFrames -= framesToRender;
 	}
 
-	synthMutex.Enter();
-	vstDriver->RenderFloat(bufpos, totalFrames);
-	synthMutex.Leave();
+	// Wrap framesRendered counter
+	if (framesRendered >= bufferSize) {
+		framesRendered -= bufferSize;
+	}
 }
 
 unsigned int MidiSynth::MillisToFrames(unsigned int millis) {
@@ -438,46 +469,67 @@ unsigned int MidiSynth::MillisToFrames(unsigned int millis) {
 }
 
 void MidiSynth::LoadSettings() {
-	sampleRate = 44100;
-	bufferSizeMS = 60;
+	sampleRate = 48000;
+	bufferSizeMS = 80;
 	bufferSize = MillisToFrames(bufferSizeMS);
-	chunkSizeMS = 10;
+	chunkSizeMS = 20;
 	chunkSize = MillisToFrames(chunkSizeMS);
 	midiLatencyMS = 0;
 	midiLatency = MillisToFrames(midiLatencyMS);
+	useRingBuffer = false;
+	if (!useRingBuffer) {
+		// Number of chunks should be ceil(bufferSize / chunkSize)
+		DWORD chunks = (bufferSize + chunkSize - 1) / chunkSize;
+		// Refine bufferSize as chunkSize * number of chunks, no less then the specified value
+		bufferSize = chunks * chunkSize;
+	}
 }
 
-BOOL IsVistaOrNewer(){
+BOOL IsXPOrNewer(){
 	OSVERSIONINFOEX osvi;
 	BOOL bOsVersionInfoEx;
 	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
 	if (bOsVersionInfoEx == FALSE) return FALSE;
-	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId &&
-		osvi.dwMajorVersion > 5)
+	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && ((osvi.dwMajorVersion > 5) || (osvi.dwMajorVersion == 5 && osvi.dwMinorVersion >= 1)))
 		return TRUE;
 	return FALSE;
 }
 
-int MidiSynth::Init() {
+int MidiSynth::Init(unsigned uDeviceID) {
 	LoadSettings();
+
+	usingFloat = IsXPOrNewer();
+
+
+	if (usingFloat)
+		bufferf = new float[2 * bufferSize];
+	else
+		buffer = new short[2 * bufferSize]; // each frame consists of two samples for both the Left and Right channels
+
 
 	// Init synth
 	if (synthMutex.Init()) {
 		return 1;
 	}
 
-	INT wResult = waveOut.Init(bufferSizeMS, chunkSizeMS, sampleRate);
-	if (wResult < 0) return -wResult;
-	sampleRate = wResult;
+	UINT wResult = waveOut.Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, useRingBuffer, sampleRate, usingFloat);
+	if (wResult) return wResult;
 
 	vstDriver = new VSTDriver;
-	if (!vstDriver->OpenVSTDriver(NULL, sampleRate)) {
+	if (!vstDriver->OpenVSTDriver(NULL, sampleRate, uDeviceID)) {
 		delete vstDriver;
 		vstDriver = NULL;
 		return 1;
 	}
+
+	// Start playing stream
+	if (usingFloat)
+		memset(bufferf, 0, bufferSize * sizeof(float) * 2);
+	else
+		memset(buffer, 0, bufferSize * sizeof(short) * 2);
+	framesRendered = 0;
 
 	wResult = waveOut.Start();
 	return wResult;
@@ -498,13 +550,13 @@ int MidiSynth::Reset(unsigned uDeviceID) {
 
 void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg) {
 	synthMutex.Enter();
-    midiStream.PutMessage(uDeviceID, msg);
+    midiStream.PutMessage(uDeviceID, msg, (waveOut.GetPos() + midiLatency) % bufferSize);
 	synthMutex.Leave();
 }
 
 void MidiSynth::PlaySysex(unsigned uDeviceID, unsigned char *bufpos, DWORD len) {
 	synthMutex.Enter();
-    midiStream.PutSysex(uDeviceID, bufpos, len);
+    midiStream.PutSysex(uDeviceID, bufpos, len, (waveOut.GetPos() + midiLatency) % bufferSize);
 	synthMutex.Leave();
 }
 

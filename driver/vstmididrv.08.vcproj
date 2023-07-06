@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="Windows-1252"?>
 <VisualStudioProject
 	ProjectType="Visual C++"
-	Version="9,00"
+	Version="8,00"
 	Name="vstmididrv"
 	ProjectGUID="{34769F76-3AAD-4151-AD26-06ADBEBDE49B}"
 	RootNamespace="vstmididrv"
-	TargetFrameworkVersion="196613"
 	>
 	<Platforms>
 		<Platform
@@ -66,7 +65,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="dxguid.lib winmm.lib Shlwapi.lib"
+				AdditionalDependencies="winmm.lib Shlwapi.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
 				AdditionalLibraryDirectories="$(DXSDK_DIR)lib\x86;..\external_packages\lib"
@@ -92,6 +91,9 @@
 			/>
 			<Tool
 				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -174,6 +176,9 @@
 				Name="VCAppVerifierTool"
 			/>
 			<Tool
+				Name="VCWebDeploymentTool"
+			/>
+			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
@@ -226,7 +231,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="dxguid.lib winmm.lib Shlwapi.lib"
+				AdditionalDependencies="winmm.lib Shlwapi.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
 				AdditionalLibraryDirectories="$(DXSDK_DIR)lib\x86;..\external_packages\lib"
@@ -254,6 +259,9 @@
 			/>
 			<Tool
 				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -309,7 +317,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="dxguid.lib winmm.lib Shlwapi.lib"
+				AdditionalDependencies="winmm.lib Shlwapi.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
 				AdditionalLibraryDirectories="$(DXSDK_DIR)lib\x64;..\external_packages\lib64"
@@ -337,6 +345,9 @@
 			/>
 			<Tool
 				Name="VCAppVerifierTool"
+			/>
+			<Tool
+				Name="VCWebDeploymentTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"

@@ -74,7 +74,7 @@ public:
 	VSTDriver();
 	~VSTDriver();
 	void CloseVSTDriver();
-	BOOL OpenVSTDriver(TCHAR * szPath = NULL, int sampleRate = 44100);
+	BOOL OpenVSTDriver(TCHAR * szPath = NULL, int sampleRate = 48000, unsigned int uDeviceID = 255);
 	void ResetDriver();
 	void ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1);
 	void ProcessSysEx(DWORD dwPort, const unsigned char *sysexbuffer, int exlen);
@@ -93,7 +93,7 @@ public:
 
 	// editor
 	bool hasEditor();
-	void displayEditorModal();
+	void displayEditorModal(unsigned int uDeviceID = 255);
 };
 
 #endif
