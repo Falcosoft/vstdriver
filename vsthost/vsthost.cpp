@@ -2,6 +2,7 @@
 //
 
 #include "stdafx.h"
+#include <process.h>
 
 // #define LOG_EXCHANGE
 // #define LOG
@@ -14,6 +15,8 @@ enum
 
 bool need_idle = false;
 bool idle_started = false;
+
+HWND editorHandle[2] = {0, 0};
 
 static char * dll_dir = NULL;
 
@@ -208,9 +211,11 @@ INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch(msg)
 	{
 	case WM_INITDIALOG :
-		{
-			SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
+		{			
 			effect = (AEffect*)lParam;		
+			editorHandle[*(int*)effect->user] = hwnd;
+
+			SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);	
 			
 			wchar_t wText[18] = L"VST Editor port ";
 			wchar_t intCnst[] = {'A' + *(int*)effect->user };
@@ -239,6 +244,7 @@ INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					SetWindowPos (hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
 				}
 			}
+			SetForegroundWindow(hwnd);
 		}
 		break;
 	case WM_TIMER :
@@ -253,8 +259,9 @@ INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			if(effect)
 			{
 				effect->dispatcher (effect, effEditClose, 0, 0, 0, 0);
+				editorHandle[*(int*)effect->user] = 0;
 			}
-
+			
 			EndDialog (hwnd, IDOK);
 		}
 		break;
@@ -475,13 +482,14 @@ LONG __stdcall myExceptFilterProc( LPEXCEPTION_POINTERS param )
 
 #pragma comment(lib, "Winmm")
 
-LPTIMECALLBACK TimeProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
+static void EditorThread(void* threadparam)
 {
+	Sleep(100);
 	MyDLGTEMPLATE vstiEditor;
-	AEffect* pEffect = (AEffect*)dwUser;
+	AEffect* pEffect = (AEffect*)threadparam;
 	vstiEditor.style = WS_POPUPWINDOW | WS_DLGFRAME | WS_MINIMIZEBOX | WS_SYSMENU | WS_CAPTION | DS_MODALFRAME | DS_CENTER;
 	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
-	return 0;
+	_endthread();		
 }
 
 int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow )
@@ -695,18 +703,12 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 			}
 			break;
 		
-		case 10: // Display Editor Modal
-		{
-			if (pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor)
-			{
-				uint32_t size = get_code();
-				if (size != sizeof(port_num))
-				{
-					code = 10;
-					goto exit;
-				}
+		case 10: // Display Editor Modal in separate thread
+		{			
+			port_num = get_code();
 
-				port_num = get_code();
+			if (pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor)
+			{				
 
 				if (port_num && !pEffect[1])
 				{
@@ -720,8 +722,8 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					pEffect[1]->dispatcher(pEffect[1], effOpen, 0, 0, 0, 0);
 					setChunk(pEffect[1], chunk);
 				}
-
-				timeSetEvent(100, 10, (LPTIMECALLBACK)TimeProc, (DWORD_PTR)pEffect[port_num], TIME_ONESHOT);
+				
+				_beginthread(EditorThread, 16384, pEffect[port_num]);
 			}
 
 			put_code(0);
@@ -745,28 +747,31 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 
 		case 6: // Reset
 			{				
-				if ( pEffect[ 1 ] )
+				port_num = get_code();
+				if(editorHandle[port_num] != 0) SendMessage(editorHandle[port_num], WM_CLOSE, 0, 0);
+
+				if ( pEffect[ port_num ] )
 				{
-					if ( blState.size() ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStopProcess, 0, 0, 0, 0 );
-					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effClose, 0, 0, 0, 0 );
-					pEffect[ 1 ] = NULL;
+					if ( blState.size() ) pEffect[ port_num ]->dispatcher( pEffect[ port_num ], effStopProcess, 0, 0, 0, 0 );
+					pEffect[ port_num ]->dispatcher( pEffect[ port_num ], effClose, 0, 0, 0, 0 );
+					pEffect[ port_num ] = NULL;
 				}
-				if ( blState.size() ) pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effStopProcess, 0, 0, 0, 0 );
-				pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effClose, 0, 0, 0, 0 );
+				//if ( blState.size() ) pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effStopProcess, 0, 0, 0, 0 );
+				//pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effClose, 0, 0, 0, 0 );
 
 				blState.resize( 0 );
 
 				freeChain();
 
-				pEffect[ 0 ] = pMain( &audioMaster );
-				if ( !pEffect[ 0 ] )
+				pEffect[ port_num ] = pMain( &audioMaster );
+				if ( !pEffect[ port_num ] )
 				{
 					code = 8;
 					goto exit;
 				}
-				pEffect[ 0 ]->user = &effectData[ 0 ];
-				pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effOpen, 0, 0, 0, 0 );
-				setChunk( pEffect[ 0 ], chunk );
+				pEffect[ port_num ]->user = &effectData[ port_num ];
+				pEffect[ port_num ]->dispatcher( pEffect[ port_num ], effOpen, 0, 0, 0, 0 );
+				setChunk( pEffect[ port_num ], chunk );
 
 				put_code( 0 );
 			}
@@ -1023,7 +1028,9 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 	}
 
 exit:
-	
+	if(editorHandle[0] != 0) SendMessage(editorHandle[0], WM_CLOSE, 0, 0);
+	if(editorHandle[1] != 0) SendMessage(editorHandle[1], WM_CLOSE, 0, 0);
+
 	if ( pEffect[ 1 ] )
 	{
 		if ( blState.size() ) pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStopProcess, 0, 0, 0, 0 );
@@ -1049,8 +1056,8 @@ exit:
 		SetStdHandle( STD_INPUT_HANDLE, pipe_in );
 		SetStdHandle( STD_OUTPUT_HANDLE, pipe_out );
 	}
-
-    Log(_T("Exit with code %d\n"), code);
+    
+	Log(_T("Exit with code %d\n"), code);
 
 	return code;
 }
