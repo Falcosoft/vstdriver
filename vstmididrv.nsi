@@ -4,6 +4,17 @@
 ; The name of the installer
 Name "VST MIDI System Synth (Falcomod)"
 
+!define PRODUCT_VERSION "1.1"
+!define VERSION "1.1.0.0"
+!define PRODUCT_NAME "VST MIDI System Synth (Falcomod)"
+
+VIProductVersion "${VERSION}"
+VIFileVersion "${VERSION}"
+VIAddVersionKey "FileVersion" "${VERSION}"
+VIAddVersionKey "ProductVersion" "${PRODUCT_VERSION}"
+VIAddVersionKey "FileDescription" "${PRODUCT_NAME}"
+VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
+
 ;Directory of User-Mode MIDI Registration PlugIn
 !ifdef NSIS_UNICODE
   ; necessary for NSIS >= 3.07 which defaults to Unicode
