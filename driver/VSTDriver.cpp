@@ -520,8 +520,7 @@ void VSTDriver::displayEditorModal(unsigned int uDeviceID)
 	uint32_t code = uDeviceID == 255 ? 4 : 10;
 	process_write_code( code );
 	
-	if (uDeviceID != 255) {
-		process_write_code( sizeof(uint32_t) );
+	if (code == 10) {		
 		process_write_code( uDeviceID );
 	}
 
@@ -539,7 +538,7 @@ void VSTDriver::CloseVSTDriver() {
 	}
 }
 
-BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate, unsigned int uDeviceID) {
+BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 	CloseVSTDriver();
 
 	load_settings(szPath);
@@ -569,18 +568,7 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate, unsigned int uDevi
 				return FALSE;
 	        }
 
-		}
-		if (uDeviceID != 255) {
-			HKEY hKey;
-			long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
-			if (result == NO_ERROR) {
-				DWORD showVstDialog;
-				DWORD size = 4;
-				result = RegQueryValueEx(hKey, L"ShowVstDialog", NULL, NULL, (LPBYTE)&showVstDialog, &size);
-				if (result == NO_ERROR && showVstDialog) displayEditorModal(uDeviceID); 
-		}
-		}
-
+		}		
 		
 		return TRUE;
 	}
@@ -588,8 +576,9 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate, unsigned int uDevi
 	return FALSE;	
 }
 
-void VSTDriver::ResetDriver() {
+void VSTDriver::ResetDriver(unsigned int uDeviceID) {
 	process_write_code( 6 );
+	process_write_code( uDeviceID );
 	uint32_t code = process_read_code();
 	if ( code != 0 ) process_terminate();
 }

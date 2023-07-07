@@ -468,11 +468,35 @@ unsigned int MidiSynth::MillisToFrames(unsigned int millis) {
 	return UINT(sampleRate * millis / 1000.f);
 }
 
+DWORD GetSampleRate() {	
+	DWORD sampleRate = 48000;
+	HKEY hKey;
+	
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+	if (result == NO_ERROR) {		
+		DWORD size = 4;
+		RegQueryValueEx(hKey, L"SampleRate", NULL, NULL, (LPBYTE)&sampleRate, &size);		
+	}
+	return sampleRate;
+}
+
+DWORD GetBufferSize() {
+	DWORD bufferSize = 80;
+	HKEY hKey;
+	
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+	if (result == NO_ERROR) {		
+		DWORD size = 4;
+		RegQueryValueEx(hKey, L"BufferSize", NULL, NULL, (LPBYTE)&bufferSize, &size);		
+	}
+	return bufferSize;
+}
+
 void MidiSynth::LoadSettings() {
-	sampleRate = 48000;
-	bufferSizeMS = 80;
+	sampleRate = GetSampleRate();
+	bufferSizeMS = GetBufferSize();
 	bufferSize = MillisToFrames(bufferSizeMS);
-	chunkSizeMS = 20;
+	chunkSizeMS = bufferSizeMS / 4;
 	chunkSize = MillisToFrames(chunkSizeMS);
 	midiLatencyMS = 0;
 	midiLatency = MillisToFrames(midiLatencyMS);
@@ -497,6 +521,24 @@ BOOL IsXPOrNewer(){
 	return FALSE;
 }
 
+BOOL IsShowVSTDialog(){
+	HKEY hKey;
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+	if (result == NO_ERROR) {
+		DWORD showVstDialog;
+		DWORD size = 4;
+		result = RegQueryValueEx(hKey, L"ShowVstDialog", NULL, NULL, (LPBYTE)&showVstDialog, &size);
+		if (result == NO_ERROR && showVstDialog) return TRUE;
+		return FALSE;
+	}
+
+}
+
+void MidiSynth::InitDialog(unsigned uDeviceID) {
+  
+	if(IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID);
+}
+
 int MidiSynth::Init(unsigned uDeviceID) {
 	LoadSettings();
 
@@ -518,11 +560,13 @@ int MidiSynth::Init(unsigned uDeviceID) {
 	if (wResult) return wResult;
 
 	vstDriver = new VSTDriver;
-	if (!vstDriver->OpenVSTDriver(NULL, sampleRate, uDeviceID)) {
+	if (!vstDriver->OpenVSTDriver(NULL, sampleRate)) {
 		delete vstDriver;
 		vstDriver = NULL;
 		return 1;
 	}
+
+	InitDialog(uDeviceID);
 
 	// Start playing stream
 	if (usingFloat)
@@ -540,7 +584,7 @@ int MidiSynth::Reset(unsigned uDeviceID) {
 	if (wResult) return wResult;
 
 	synthMutex.Enter();
-	vstDriver->ResetDriver();
+	vstDriver->ResetDriver(uDeviceID);
 	midiStream.Reset();
 	synthMutex.Leave();
 

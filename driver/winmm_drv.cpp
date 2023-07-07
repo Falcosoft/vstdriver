@@ -239,6 +239,10 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 			if (midiSynth.Init(uDeviceID) != 0) return MMSYSERR_ERROR;
 			synthOpened = true;
 		}
+		else {
+			midiSynth.InitDialog(uDeviceID);
+		}
+
 		instance = NULL;		
 		
 		res = OpenDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);

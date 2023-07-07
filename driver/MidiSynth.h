@@ -48,6 +48,7 @@ private:
 public:
 	static MidiSynth &getInstance();
 	int Init(unsigned uDeviceID);
+	void InitDialog(unsigned uDeviceID);
 	void Close();
 	int Reset(unsigned uDeviceID);
 	void RenderAvailableSpace();
