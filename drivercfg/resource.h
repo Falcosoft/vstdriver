@@ -24,7 +24,6 @@
 #define IDC_TAB1                        1009
 #define IDC_TAB                         1009
 #define IDC_CPUUSAGE                    1009
-#define IDC_SHOW1                       1009
 #define IDC_SHOWVST                     1009
 #define IDC_VOICES3                     1010
 #define IDC_VOLUME                      1010
@@ -36,6 +35,10 @@
 #define IDC_PRODUCT                     1017
 #define IDC_BUTTON1                     1018
 #define IDC_VSTCONFIG                   1018
+#define IDC_SAMPLERATE                  1021
+#define IDC_BUFFERSIZE                  1022
+#define IDC_STSR                        1023
+#define IDC_STBS                        1024
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
@@ -45,7 +48,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        131
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1020
+#define _APS_NEXT_CONTROL_VALUE         1025
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

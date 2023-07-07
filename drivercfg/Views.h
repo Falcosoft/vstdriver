@@ -119,9 +119,11 @@ class CView1 : public CDialogImpl<CView1>
 {
 	
 	CEdit vst_info;
+	CComboBox vst_buffer_size, vst_sample_rate;
 	CButton vst_load, vst_configure, vst_showvst;
-	CStatic vst_vendor, vst_effect, vst_product;
+	CStatic vst_vendor, vst_effect;
 	TCHAR vst_path[MAX_PATH];
+
 	VSTDriver * effect;
 public:
    enum { IDD = IDD_MAIN };
@@ -130,6 +132,8 @@ public:
 	   COMMAND_ID_HANDLER(IDC_VSTLOAD,OnButtonAdd)
 	   COMMAND_ID_HANDLER(IDC_VSTCONFIG,OnButtonConfig)
 	   COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)
+	   COMMAND_HANDLER(IDC_SAMPLERATE, CBN_SELCHANGE, OnCbnSelchangeSamplerate)
+	   COMMAND_HANDLER(IDC_BUFFERSIZE, CBN_SELCHANGE, OnCbnSelchangeBuffersize)
    END_MSG_MAP()
 
    CView1() { effect = NULL; }
@@ -140,7 +144,8 @@ public:
 	   long lResult;
 	   vst_path[0] = 0;
 	   ULONG size;
-	   DWORD showVstDialog; 
+	   DWORD showVstDialog, sampleRate, bufferSize; 
+	   wchar_t tmpBuff[34];
 	   CRegKeyEx reg;
 	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver");
 	   if (lResult == ERROR_SUCCESS){
@@ -152,6 +157,16 @@ public:
 		   if (lResult == ERROR_SUCCESS) {
 			   vst_showvst.SetCheck(showVstDialog);
 		   }
+		   lResult = reg.QueryDWORDValue(L"SampleRate",sampleRate);
+		   if (lResult == ERROR_SUCCESS) {			   
+			   vst_sample_rate.SelectString(-1, _ultow(sampleRate, tmpBuff, 10));
+			   
+		   }
+		   lResult = reg.QueryDWORDValue(L"BufferSize",bufferSize);
+		   if (lResult == ERROR_SUCCESS) {
+			    vst_buffer_size.SelectString(-1, _ultow(bufferSize, tmpBuff, 10));
+		   }
+
 		   reg.Close();
 		   vst_info.SetWindowText(vst_path);
 		  load_vst(vst_path);
@@ -197,6 +212,32 @@ public:
 	   return 0;
    }
 
+   LRESULT OnCbnSelchangeSamplerate(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+   {
+	   long lResult;
+	   CRegKeyEx reg;
+	   wchar_t tmpBuff[8];
+	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	   vst_sample_rate.GetWindowTextW(tmpBuff, 8);
+	   reg.SetDWORDValue(L"SampleRate",wcstol(tmpBuff, NULL, 10));
+	   reg.Close();
+
+	   return 0;
+   } 
+
+   LRESULT OnCbnSelchangeBuffersize(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+   {
+	   long lResult;
+	   CRegKeyEx reg;
+	   wchar_t tmpBuff[8];
+	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	   vst_buffer_size.GetWindowTextW(tmpBuff, 8);
+	   reg.SetDWORDValue(L"BufferSize",wcstol(tmpBuff, NULL, 10));
+	   reg.Close();
+
+	   return 0;
+   }   
+
    LRESULT OnButtonConfig(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/ )
    {
 	   if(effect && effect->hasEditor())
@@ -227,8 +268,7 @@ public:
 		   if (szPluginPath && *szPluginPath)
 			   MessageBox(L"This is NOT a VSTi synth!");
 		   vst_effect.SetWindowText(L"No VSTi loaded");
-		   vst_vendor.SetWindowText(L"No VSTi loaded");
-		   vst_product.SetWindowText(L"No VSTi loaded");
+		   vst_vendor.SetWindowText(L"No VSTi loaded");		   
 		   vst_info.SetWindowText(L"No VSTi loaded");
 		   return FALSE;
 	   }
@@ -239,10 +279,7 @@ public:
 	   vst_effect.SetWindowText(effect_str.c_str());
 	   effect->getVendorString(conv);
 	   wstring vendor_str = utf16_from_ansi(conv);
-	   vst_vendor.SetWindowText(vendor_str.c_str());
-	   effect->getProductString(conv);
-	   wstring product_str = utf16_from_ansi(conv);
-	   vst_product.SetWindowText(product_str.c_str());
+	   vst_vendor.SetWindowText(vendor_str.c_str());	  
 
 	   settings_load( effect );
 
@@ -252,17 +289,37 @@ public:
 	LRESULT OnInitDialogView1(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
 		effect = NULL;
+		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
+        vst_buffer_size = GetDlgItem(IDC_BUFFERSIZE);
 		vst_showvst = GetDlgItem(IDC_SHOWVST);
 		vst_load = GetDlgItem(IDC_VSTLOAD);
 		vst_info = GetDlgItem(IDC_VSTLOADED);
 		vst_configure = GetDlgItem(IDC_VSTCONFIG);
 		vst_effect = GetDlgItem(IDC_EFFECT);
-		vst_vendor = GetDlgItem(IDC_VENDOR);
-		vst_product = GetDlgItem(IDC_PRODUCT);
+		vst_vendor = GetDlgItem(IDC_VENDOR);		
 		vst_effect.SetWindowText(L"No VSTi loaded");
-		vst_vendor.SetWindowText(L"No VSTi loaded");
-		vst_product.SetWindowText(L"No VSTi loaded");
+		vst_vendor.SetWindowText(L"No VSTi loaded");		
 		vst_info.SetWindowText(L"No VSTi loaded");
+        
+		vst_sample_rate.AddString(L"22050");
+		vst_sample_rate.AddString(L"32000");
+		vst_sample_rate.AddString(L"44100");
+		vst_sample_rate.AddString(L"48000");
+		vst_sample_rate.AddString(L"49716");
+		vst_sample_rate.AddString(L"96000");
+		vst_sample_rate.SelectString(-1, L"48000");
+
+		vst_buffer_size.AddString(L"40");
+		vst_buffer_size.AddString(L"60");
+		vst_buffer_size.AddString(L"80");
+		vst_buffer_size.AddString(L"100");
+		vst_buffer_size.AddString(L"120");
+		vst_buffer_size.AddString(L"140");
+		vst_buffer_size.AddString(L"160");
+		vst_buffer_size.AddString(L"180");
+		vst_buffer_size.AddString(L"200");
+		vst_buffer_size.SelectString(-1, L"80");
+		
 		load_settings();
 		return TRUE;
 	}
