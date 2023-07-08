@@ -315,6 +315,7 @@ public:
 	}
 
 	static void RenderingThread(void* pthis) {
+		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 		WaveOutWin32* _this = (WaveOutWin32*)pthis;
 		if (waveOut.chunks == 1) {
 			// Rendering using single looped ring buffer

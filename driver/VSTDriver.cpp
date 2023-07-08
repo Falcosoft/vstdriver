@@ -302,7 +302,8 @@ bool VSTDriver::process_create()
 
 #ifdef NDEBUG
 	SetPriorityClass( hProcess, GetPriorityClass( GetCurrentProcess() ) );
-	SetThreadPriority( hThread, GetThreadPriority( GetCurrentThread() ) );
+	//SetThreadPriority( hThread, GetThreadPriority( GetCurrentThread() ) );
+	SetThreadPriority( hThread, THREAD_PRIORITY_HIGHEST );
 #endif
 
 	uint32_t code = process_read_code();
