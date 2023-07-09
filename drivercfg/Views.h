@@ -121,7 +121,7 @@ class CView1 : public CDialogImpl<CView1>
 	CEdit vst_info;
 	CComboBox vst_buffer_size, vst_sample_rate;
 	CButton vst_load, vst_configure, vst_showvst;
-	CStatic vst_vendor, vst_effect;
+	CStatic vst_vendor, vst_effect, file_info;
 	TCHAR vst_path[MAX_PATH];
 
 	VSTDriver * effect;
@@ -286,9 +286,55 @@ public:
 	   return TRUE;
    }
 
+    #pragma comment(lib,"Version.lib") 
+    wchar_t* GetFileVersion(wchar_t* Result)
+    {
+        DWORD               dwSize = 0;
+        BYTE* pVersionInfo = NULL;
+        VS_FIXEDFILEINFO* pFileInfo = NULL;
+        UINT                pLenFileInfo = 0;
+        wchar_t tmpBuff[MAX_PATH];
+
+        GetModuleFileName(NULL, tmpBuff, MAX_PATH);
+               
+        dwSize = GetFileVersionInfoSize(tmpBuff, NULL);
+        if (dwSize == 0)
+        {           
+            return NULL;
+        }
+
+        pVersionInfo = new BYTE[dwSize]; 
+
+        if (!GetFileVersionInfo(tmpBuff, 0, dwSize, pVersionInfo))
+        {           
+            delete[] pVersionInfo;
+            return NULL;
+        }
+
+        if (!VerQueryValue(pVersionInfo, TEXT("\\"), (LPVOID*)&pFileInfo, &pLenFileInfo))
+        {            
+            delete[] pVersionInfo;
+            return NULL;
+        }      
+
+        lstrcat(Result, L"version: ");
+        lstrcat(Result, _ultow((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, 10));
+        lstrcat(Result, L".");
+        lstrcat(Result, _ultow((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, 10));
+        lstrcat(Result, L".");
+        lstrcat(Result, _ultow((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, 10));
+        lstrcat(Result, L".");
+        lstrcat(Result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+        
+        return Result;
+    }
+
+
 	LRESULT OnInitDialogView1(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
+		wchar_t fileversionBuff[32] = { 0 };
 		effect = NULL;
+
 		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
         vst_buffer_size = GetDlgItem(IDC_BUFFERSIZE);
 		vst_showvst = GetDlgItem(IDC_SHOWVST);
@@ -296,7 +342,10 @@ public:
 		vst_info = GetDlgItem(IDC_VSTLOADED);
 		vst_configure = GetDlgItem(IDC_VSTCONFIG);
 		vst_effect = GetDlgItem(IDC_EFFECT);
-		vst_vendor = GetDlgItem(IDC_VENDOR);		
+		vst_vendor = GetDlgItem(IDC_VENDOR);
+		file_info = GetDlgItem(IDC_FILEVERSION);
+
+		file_info.SetWindowText(GetFileVersion(fileversionBuff));
 		vst_effect.SetWindowText(L"No VSTi loaded");
 		vst_vendor.SetWindowText(L"No VSTi loaded");		
 		vst_info.SetWindowText(L"No VSTi loaded");
