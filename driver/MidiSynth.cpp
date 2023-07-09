@@ -19,6 +19,7 @@
 #undef GetMessage
 
 #include "VSTDriver.h"
+#include <math.h>
 
 
 namespace VSTMIDIDRV {
@@ -408,7 +409,7 @@ void MidiSynth::Render(short *bufpos, DWORD totalFrames) {
 			framesToRender = totalFrames;
 		}
 		synthMutex.Enter();
-		vstDriver->Render(bufpos, framesToRender);
+		vstDriver->Render(bufpos, framesToRender, outputGain);
 		synthMutex.Leave();
 		framesRendered += framesToRender;
 		bufpos += framesToRender * 2;
@@ -452,7 +453,7 @@ void MidiSynth::RenderFloat(float *bufpos, DWORD totalFrames) {
 			framesToRender = totalFrames;
 		}
 		synthMutex.Enter();
-		vstDriver->RenderFloat(bufpos, framesToRender);
+		vstDriver->RenderFloat(bufpos, framesToRender, outputGain);
 		synthMutex.Leave();
 		framesRendered += framesToRender;
 		bufpos += framesToRender * 2;
@@ -493,7 +494,20 @@ DWORD GetBufferSize() {
 	return bufferSize;
 }
 
+int GetGain() {
+	int gain = 1;
+	HKEY hKey;
+	
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+	if (result == NO_ERROR) {		
+		DWORD size = 4;
+		RegQueryValueEx(hKey, L"Gain", NULL, NULL, (LPBYTE)&gain, &size);		
+	}
+	return gain;
+}
+
 void MidiSynth::LoadSettings() {
+	outputGain = pow(10.0f, GetGain() * 0.05f);
 	sampleRate = GetSampleRate();
 	bufferSizeMS = GetBufferSize();
 	bufferSize = MillisToFrames(bufferSizeMS);

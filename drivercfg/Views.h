@@ -122,6 +122,7 @@ class CView1 : public CDialogImpl<CView1>
 	CComboBox vst_buffer_size, vst_sample_rate;
 	CButton vst_load, vst_configure, vst_showvst;
 	CStatic vst_vendor, vst_effect, file_info;
+	CTrackBarCtrl volume_slider;
 	TCHAR vst_path[MAX_PATH];
 
 	VSTDriver * effect;
@@ -134,6 +135,7 @@ public:
 	   COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)
 	   COMMAND_HANDLER(IDC_SAMPLERATE, CBN_SELCHANGE, OnCbnSelchangeSamplerate)
 	   COMMAND_HANDLER(IDC_BUFFERSIZE, CBN_SELCHANGE, OnCbnSelchangeBuffersize)
+	   MESSAGE_HANDLER(WM_HSCROLL, OnHScroll)
    END_MSG_MAP()
 
    CView1() { effect = NULL; }
@@ -144,27 +146,31 @@ public:
 	   long lResult;
 	   vst_path[0] = 0;
 	   ULONG size;
-	   DWORD showVstDialog, sampleRate, bufferSize; 
+	   DWORD reg_value; 
 	   wchar_t tmpBuff[34];
 	   CRegKeyEx reg;
 	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver");
 	   if (lResult == ERROR_SUCCESS){
+		   
 		   lResult = reg.QueryStringValue(L"plugin",NULL,&size);
 		   if (lResult == ERROR_SUCCESS) {
 			   reg.QueryStringValue(L"plugin",vst_path,&size);
 		   }
-		   lResult = reg.QueryDWORDValue(L"ShowVstDialog",showVstDialog);
+		   lResult = reg.QueryDWORDValue(L"ShowVstDialog",reg_value);
 		   if (lResult == ERROR_SUCCESS) {
-			   vst_showvst.SetCheck(showVstDialog);
+			   vst_showvst.SetCheck(reg_value);
 		   }
-		   lResult = reg.QueryDWORDValue(L"SampleRate",sampleRate);
+		   lResult = reg.QueryDWORDValue(L"SampleRate",reg_value);
 		   if (lResult == ERROR_SUCCESS) {			   
-			   vst_sample_rate.SelectString(-1, _ultow(sampleRate, tmpBuff, 10));
-			   
+			   vst_sample_rate.SelectString(-1, _ultow(reg_value, tmpBuff, 10));			   
 		   }
-		   lResult = reg.QueryDWORDValue(L"BufferSize",bufferSize);
+		   lResult = reg.QueryDWORDValue(L"BufferSize",reg_value);
 		   if (lResult == ERROR_SUCCESS) {
-			    vst_buffer_size.SelectString(-1, _ultow(bufferSize, tmpBuff, 10));
+			    vst_buffer_size.SelectString(-1, _ultow(reg_value, tmpBuff, 10));
+		   }
+		   lResult = reg.QueryDWORDValue(L"Gain",reg_value);
+		   if (lResult == ERROR_SUCCESS) {
+			   volume_slider.SetPos((int)reg_value);
 		   }
 
 		   reg.Close();
@@ -236,7 +242,23 @@ public:
 	   reg.Close();
 
 	   return 0;
-   }   
+   } 
+
+   LRESULT CView1::OnHScroll(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled) 
+   {	   
+	   if ((HWND)lParam == volume_slider.m_hWnd && LOWORD(wParam) == SB_ENDSCROLL)
+	   {
+		   int vol;
+		   long lResult;
+		   CRegKeyEx reg;
+	       wchar_t tmpBuff[8];
+	       lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	       vol = volume_slider.GetPos();
+	       reg.SetDWORDValue(L"Gain", (DWORD)vol);
+	       reg.Close();
+	   }
+	   return 0;
+   }
 
    LRESULT OnButtonConfig(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/ )
    {
@@ -344,6 +366,7 @@ public:
 		vst_effect = GetDlgItem(IDC_EFFECT);
 		vst_vendor = GetDlgItem(IDC_VENDOR);
 		file_info = GetDlgItem(IDC_FILEVERSION);
+		volume_slider = GetDlgItem(IDC_VOLUME);
 
 		file_info.SetWindowText(GetFileVersion(fileversionBuff));
 		vst_effect.SetWindowText(L"No VSTi loaded");
@@ -356,6 +379,7 @@ public:
 		vst_sample_rate.AddString(L"48000");
 		vst_sample_rate.AddString(L"49716");
 		vst_sample_rate.AddString(L"96000");
+		vst_sample_rate.AddString(L"192000");
 		vst_sample_rate.SelectString(-1, L"48000");
 
 		vst_buffer_size.AddString(L"40");
@@ -368,11 +392,13 @@ public:
 		vst_buffer_size.AddString(L"180");
 		vst_buffer_size.AddString(L"200");
 		vst_buffer_size.SelectString(-1, L"80");
+
+        volume_slider.SetRange(-12, 12);
+		volume_slider.SetPos(0);	
 		
 		load_settings();
 		return TRUE;
 	}
-
 };
 
 
