@@ -13,7 +13,7 @@ And finally:
 Parts Copyright (c) 2021 Hermann Seib
 
 After the above:
-Parts Copyright (c) 2023 Zolt·n Bacsko (Falcosoft) 
+Parts Copyright (c) 2023 Zolt√°n Bacsko (Falcosoft) 
 
 ## Building
 
@@ -50,7 +50,7 @@ Both the bass library and the basswasapi library are needed.
 
 I am not sure whether this is really based on the latest kode54 version; there's an installer available on the Internet that seems to have been built in November 2018. Unfortunately, authoritative sources for that cannot be found.
 
-Falcosoft:
+## Falcosoft:
 The version forked by Arakula (Hermann Seib) used the Bass/Basswasapi libraries to produce audio.
 There were 2 serious problems with this approach:
 
@@ -65,6 +65,7 @@ Both situations can cause subtle and hard to debug problems.
 2. Midi precision depends on Bass update periods that are 5-10 ms at best case. 
 This Midi precision depends on Bass update periods problem has already been fixed by Ian for BassMidi (async mode) and by me in my Bass_VST version but unfortunately none of them applies to VST Midi drivers using Bass libraries. 
 https://www.un4seen.com/forum/?topic=18485.msg129797#msg129797
+
 https://www.un4seen.com/forum/?topic=19639.msg137463#msg137463
 
 Interestingly the previous version that used traditional WaveOut also used timestamped Midi messages and waveOutGetPosition to achieve perfect Midi timing/precision.
