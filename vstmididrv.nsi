@@ -4,14 +4,13 @@
 ; The name of the installer
 Name "VST MIDI System Synth (Falcomod)"
 
-!define PRODUCT_VERSION "1.1"
-!define VERSION "1.1.0.0"
+!getdllversion "output\vstmididrvcfg.exe" expv_
 !define PRODUCT_NAME "VST MIDI System Synth (Falcomod)"
 
-VIProductVersion "${VERSION}"
-VIFileVersion "${VERSION}"
-VIAddVersionKey "FileVersion" "${VERSION}"
-VIAddVersionKey "ProductVersion" "${PRODUCT_VERSION}"
+VIProductVersion "${expv_1}.${expv_2}.${expv_3}.${expv_4}"
+VIFileVersion "${expv_1}.${expv_2}.${expv_3}.${expv_4}"
+VIAddVersionKey "FileVersion" "${expv_1}.${expv_2}.${expv_3}.${expv_4}"
+VIAddVersionKey "ProductVersion" "${expv_1}.${expv_2}"
 VIAddVersionKey "FileDescription" "${PRODUCT_NAME}"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
 
