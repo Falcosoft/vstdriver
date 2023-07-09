@@ -239,7 +239,7 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 			if (midiSynth.Init(uDeviceID) != 0) return MMSYSERR_ERROR;
 			synthOpened = true;
 		}
-		else {
+		else if (!drivers[uDeviceID].clientCount) {
 			midiSynth.InitDialog(uDeviceID);
 		}
 
@@ -257,9 +257,9 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		res = CloseDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
 		if (synthOpened) 
 		{			
-			 midiSynth.Reset(uDeviceID);
+			 if(!drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
 
-			 if(drivers[0].clientCount == 0 && drivers[1].clientCount == 0 ) {
+			 if(!drivers[0].clientCount && !drivers[1].clientCount) {
 				midiSynth.Close();
 				synthOpened = false;
 			 }
