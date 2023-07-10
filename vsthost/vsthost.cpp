@@ -847,9 +847,9 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effMainsChanged, 0, 1, 0, 0 );
 					pEffect[ 1 ]->dispatcher( pEffect[ 1 ], effStartProcess, 0, 0, 0, 0 );					
 
-					size_t buffer_size = sizeof(float*) * ( pEffect[ 0 ]->numInputs + pEffect[ 0 ]->numOutputs * 3 ); // float lists
+					size_t buffer_size = sizeof(float*) * ( pEffect[ 0 ]->numInputs + pEffect[ 0 ]->numOutputs * 2 ); // float lists
 					buffer_size += sizeof(float) * BUFFER_SIZE;                                // null input
-					buffer_size += sizeof(float) * BUFFER_SIZE * pEffect[ 0 ]->numOutputs * 3;          // outputs
+					buffer_size += sizeof(float) * BUFFER_SIZE * pEffect[ 0 ]->numOutputs * 2;          // outputs
 
 					blState.resize( buffer_size );
 
@@ -859,11 +859,11 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					float_list_in  = (float**) blState.data();
 #endif
 					float_list_out = float_list_in + pEffect[ 0 ]->numInputs;
-					float_null     = (float*) ( float_list_out + pEffect[ 0 ]->numOutputs * 3 );
+					float_null     = (float*) ( float_list_out + pEffect[ 0 ]->numOutputs * 2 );
 					float_out      = float_null + BUFFER_SIZE;
 
 					for ( VstInt32 i = 0; i < pEffect[ 0 ]->numInputs; ++i )      float_list_in [ i ] = float_null;
-					for ( VstInt32 i = 0; i < pEffect[ 0 ]->numOutputs * 3; ++i ) float_list_out[ i ] = float_out + BUFFER_SIZE * i;
+					for ( VstInt32 i = 0; i < pEffect[ 0 ]->numOutputs * 2; ++i ) float_list_out[ i ] = float_out + BUFFER_SIZE * i;
 
 					memset( float_null, 0, sizeof(float) * BUFFER_SIZE );
 
@@ -984,9 +984,9 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					{
 						for ( unsigned i = 0; i < count_to_do; ++i )
 						{
-							float sample = ( float_out[ i ] + float_out[ i + BUFFER_SIZE * num_outputs ] + float_out[ i + BUFFER_SIZE * num_outputs * 2 ] );
+							float sample = ( float_out[ i ] + float_out[ i + BUFFER_SIZE * num_outputs ] );
 							out[ 0 ] = sample;
-							sample = ( float_out[ i + BUFFER_SIZE ] + float_out[ i + BUFFER_SIZE + BUFFER_SIZE * num_outputs ] + float_out[ i + BUFFER_SIZE + BUFFER_SIZE * num_outputs * 2 ] );
+							sample = ( float_out[ i + BUFFER_SIZE ] + float_out[ i + BUFFER_SIZE + BUFFER_SIZE * num_outputs ] );
 							out[ 1 ] = sample;
 							out += 2;
 						}
@@ -995,7 +995,7 @@ int CALLBACK _tWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpC
 					{
 						for ( unsigned i = 0; i < count_to_do; ++i )
 						{
-							float sample = ( float_out[ i ] + float_out[ i + BUFFER_SIZE * num_outputs ] + float_out[ i + BUFFER_SIZE * num_outputs * 2 ] );
+							float sample = ( float_out[ i ] + float_out[ i + BUFFER_SIZE * num_outputs ] );
 							out[ 0 ] = sample;
 							out++;
 						}
