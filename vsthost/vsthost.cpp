@@ -247,6 +247,29 @@ INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			SetForegroundWindow(hwnd);
 		}
 		break;
+	case WM_SIZE: //Fixes SC-VA display bug after parts section opened/closed
+		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+		if (effect && wParam == SIZE_RESTORED)
+		{
+			ERect* eRect = 0;
+			effect->dispatcher(effect, effEditGetRect, 0, 0, &eRect, 0);
+			if (eRect)
+			{
+				int width = eRect->right - eRect->left;
+				int height = eRect->bottom - eRect->top;
+				if (width < 50)
+					width = 50;
+				if (height < 50)
+					height = 50;
+				RECT wRect;
+				SetRect(&wRect, 0, 0, width, height);
+				AdjustWindowRectEx(&wRect, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
+				width = wRect.right - wRect.left;
+				height = wRect.bottom - wRect.top;
+				SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
+			}
+		}
+		break;	
 	case WM_TIMER :
 		effect = (AEffect*)GetWindowLongPtr(hwnd,GWLP_USERDATA);
 		if(effect)
