@@ -160,12 +160,11 @@ private:
 	HWAVEOUT	hWaveOut;
 	WAVEHDR* WaveHdr;
 	HANDLE		hEvent;
+	HANDLE		hThread;
 	DWORD		chunks;	
 	//DWORD		getPosWraps;	
 	bool        usingFloat;
-	WORD		channels;
-	DWORD       buffersize;
-	DWORD       samplerate;
+	WORD		channels;	
 
 	volatile UINT64 prevPlayPos;
 	volatile bool	stopProcessing;
@@ -176,6 +175,7 @@ public:
 		DWORD_PTR callback = NULL;
 		usingFloat = useFloat;
 		hEvent = NULL;
+		hThread = NULL;
 		if (!useRingBuffer) {
 			hEvent = CreateEvent(NULL, false, true, NULL);
 			callback = (DWORD_PTR)hEvent;
@@ -187,9 +187,7 @@ public:
 		struct __declspec(uuid("00000003-0000-0010-8000-00aa00389b71")) KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT;
 		#define KSDATAFORMAT_SUBTYPE_IEEE_FLOAT __uuidof(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT)		
 
-		channels = channelCount;
-		buffersize = bufferSize;
-		samplerate = sampleRate;
+		channels = channelCount;		
 
 		PCMWAVEFORMAT wFormat = { WAVE_FORMAT_PCM, channels, sampleRate, sampleRate * channels * 2, channels * 2, 16 };
 		WAVEFORMATEXTENSIBLE wFormatFloat;
@@ -247,7 +245,10 @@ public:
 	int Close() {
 		stopProcessing = true;		
 		SetEvent(hEvent);
-		Sleep(buffersize / samplerate * 1000);
+		if (hThread != NULL) {
+			WaitForSingleObject(hThread, 2000);
+			hThread = NULL;
+		}
 		int wResult = waveOutReset(hWaveOut);
 		if (wResult != MMSYSERR_NOERROR) {
 			MessageBox(NULL, L"Failed to Reset WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
@@ -285,7 +286,7 @@ public:
 				return 4;
 			}
 		}
-		_beginthread(RenderingThread, 16384, this);
+		hThread = (HANDLE)_beginthread(RenderingThread, 16384, this);
 		return 0;
 	}
 
