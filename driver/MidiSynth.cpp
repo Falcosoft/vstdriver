@@ -35,7 +35,7 @@ private:
     {
         void * sysex;
         DWORD msg;
-		DWORD timestamp;
+        DWORD timestamp;
         DWORD port_type;
     };
 	message stream[maxPos];
@@ -85,7 +85,7 @@ public:
         
         stream[endpos].sysex = sysexCopy;
         stream[endpos].msg = sysex_len;
-		stream[endpos].timestamp = timestamp;
+        stream[endpos].timestamp = timestamp;
         stream[endpos].port_type = port | 0x80000000;
         endpos = newEndpos;
         return 0;
@@ -160,14 +160,18 @@ private:
 	HWAVEOUT	hWaveOut;
 	WAVEHDR* WaveHdr;
 	HANDLE		hEvent;
-	DWORD		chunks;
-	DWORD		prevPlayPos;
-	DWORD		getPosWraps;
-	bool		stopProcessing;
+	DWORD		chunks;	
+	//DWORD		getPosWraps;	
 	bool        usingFloat;
+	WORD		channels;
+	DWORD       buffersize;
+	DWORD       samplerate;
+
+	volatile UINT64 prevPlayPos;
+	volatile bool	stopProcessing;
 
 public:
-	int Init(void* buffer, unsigned int bufferSize, unsigned int chunkSize, bool useRingBuffer, unsigned int sampleRate, bool useFloat) {
+	int Init(void* buffer, unsigned int bufferSize, unsigned int chunkSize, bool useRingBuffer, unsigned int sampleRate, bool useFloat, WORD channelCount) {
 		DWORD callbackType = CALLBACK_NULL;
 		DWORD_PTR callback = NULL;
 		usingFloat = useFloat;
@@ -178,11 +182,33 @@ public:
 			callbackType = CALLBACK_EVENT;
 		}
 
-		PCMWAVEFORMAT wFormat = { WAVE_FORMAT_PCM, 2, sampleRate, sampleRate * 4, 4, 16 };
-		WAVEFORMATEX wFormatFloat = { WAVE_FORMAT_IEEE_FLOAT, 2, sampleRate, sampleRate * 8, 8, 32, 0 };
+		//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;
+
+		struct __declspec(uuid("00000003-0000-0010-8000-00aa00389b71")) KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT;
+		#define KSDATAFORMAT_SUBTYPE_IEEE_FLOAT __uuidof(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT)		
+
+		channels = channelCount;
+		buffersize = bufferSize;
+		samplerate = sampleRate;
+
+		PCMWAVEFORMAT wFormat = { WAVE_FORMAT_PCM, channels, sampleRate, sampleRate * channels * 2, channels * 2, 16 };
+		WAVEFORMATEXTENSIBLE wFormatFloat;
+		memset( &wFormatFloat, 0, sizeof(wFormatFloat));
+
+		wFormatFloat.Format.cbSize = sizeof(wFormatFloat) - sizeof(wFormatFloat.Format);
+		wFormatFloat.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+		wFormatFloat.Format.nChannels = channels;
+		wFormatFloat.Format.nSamplesPerSec = sampleRate;		
+		wFormatFloat.Format.wBitsPerSample = 32;
+		wFormatFloat.Format.nBlockAlign = wFormatFloat.Format.nChannels * wFormatFloat.Format.wBitsPerSample / 8;
+		wFormatFloat.Format.nAvgBytesPerSec = wFormatFloat.Format.nBlockAlign * wFormatFloat.Format.nSamplesPerSec;
+		wFormatFloat.dwChannelMask = channels == 2 ? SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;		
+		wFormatFloat.Samples.wValidBitsPerSample = wFormatFloat.Format.wBitsPerSample;	
+		wFormatFloat.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;	
+		
 
 		// Open waveout device
-		int wResult = waveOutOpen(&hWaveOut, WAVE_MAPPER, useFloat ? &wFormatFloat : (LPWAVEFORMATEX)&wFormat, callback, (DWORD_PTR)&midiSynth, callbackType);
+		int wResult = waveOutOpen(&hWaveOut, WAVE_MAPPER, useFloat ? &wFormatFloat.Format : (LPWAVEFORMATEX)&wFormat, callback, (DWORD_PTR)&midiSynth, callbackType);
 		if (wResult != MMSYSERR_NOERROR) {
 			MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 			return 2;
@@ -192,8 +218,8 @@ public:
 		chunks = useRingBuffer ? 1 : bufferSize / chunkSize;
 		WaveHdr = new WAVEHDR[chunks];
 		LPSTR chunkStart = (LPSTR)buffer;
-		DWORD chunkBytes = (useFloat ? 8 : 4) * chunkSize;
-		DWORD bufferBytes = (useFloat ? 8 : 4) * bufferSize;
+		DWORD chunkBytes = (useFloat ? sizeof(float) * channels : sizeof(short) * channels) * chunkSize;
+		DWORD bufferBytes = (useFloat ? sizeof(float) * channels : sizeof(short) * channels) * bufferSize;
 		for (UINT i = 0; i < chunks; i++) {
 			if (useRingBuffer) {
 				WaveHdr[i].dwBufferLength = bufferBytes;
@@ -219,9 +245,9 @@ public:
 	}
 
 	int Close() {
-		stopProcessing = true;
-		Sleep(80);
+		stopProcessing = true;		
 		SetEvent(hEvent);
+		Sleep(buffersize / samplerate * 1000);
 		int wResult = waveOutReset(hWaveOut);
 		if (wResult != MMSYSERR_NOERROR) {
 			MessageBox(NULL, L"Failed to Reset WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
@@ -251,7 +277,7 @@ public:
 	}
 
 	int Start() {
-		getPosWraps = 0;
+		//getPosWraps = 0;
 		prevPlayPos = 0;
 		for (UINT i = 0; i < chunks; i++) {
 			if (waveOutWrite(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
@@ -279,11 +305,24 @@ public:
 		return 0;
 	}
 
-	UINT64 GetPos() {
+	UINT64 GetPos(WORD channels) {		
+		
+		DWORD WRAP_BITS = 27;
+		if(usingFloat) WRAP_BITS--;
+		if(channels == 4) WRAP_BITS--;
+
+		UINT64 WRAP_MASK = (1 << WRAP_BITS) - 1;
+		int WRAP_THRESHOLD = 1 << (WRAP_BITS - 1);
+
+		// Taking a snapshot to avoid possible thread interference
+		UINT64 playPositionSnapshot = prevPlayPos;
+		DWORD wrapCount = DWORD(playPositionSnapshot >> WRAP_BITS);
+		DWORD wrappedPosition = DWORD(playPositionSnapshot & WRAP_MASK);
+
 		MMTIME mmTime;
 		mmTime.wType = TIME_SAMPLES;
 
-		if (waveOutGetPosition(hWaveOut, &mmTime, sizeof MMTIME) != MMSYSERR_NOERROR) {
+		if (waveOutGetPosition(hWaveOut, &mmTime, sizeof(MMTIME)) != MMSYSERR_NOERROR) {
 			MessageBox(NULL, L"Failed to get current playback position", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 			return 10;
 		}
@@ -291,29 +330,31 @@ public:
 			MessageBox(NULL, L"Failed to get # of samples played", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 			return 10;
 		}
+		mmTime.u.sample &= WRAP_MASK;
 
 		// Deal with waveOutGetPosition() wraparound. For 16-bit stereo output, it equals 2^27,
 		// presumably caused by the internal 32-bit counter of bits played.
 		// The output of that nasty waveOutGetPosition() isn't monotonically increasing
 		// even during 2^27 samples playback, so we have to ensure the difference is big enough...
-		int delta = mmTime.u.sample - prevPlayPos;
-		if (usingFloat) {
-			if (delta < -(1 << 25)) {
-				std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
-				++getPosWraps;
-			}
-			prevPlayPos = mmTime.u.sample;
-			return mmTime.u.sample + getPosWraps * (1 << 26);
+		int delta = mmTime.u.sample - wrappedPosition;
+		if (delta < -WRAP_THRESHOLD) {
+#ifdef _DEBUG
+			std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
+#endif
+			++wrapCount;
+		} else if (delta < 0) {
+			// This ensures the return is monotonically increased
+#ifdef _DEBUG
+			std::cout << "VST MIDI Driver: GetPos() went back by " << delta << " samples\n";
+#endif
+			return playPositionSnapshot;
 		}
-		else {
-			if (delta < -(1 << 26)) {
-				std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
-				++getPosWraps;
-			}
-			prevPlayPos = mmTime.u.sample;
-			return mmTime.u.sample + getPosWraps * (1 << 27);
-		}
-	}
+		prevPlayPos = playPositionSnapshot = mmTime.u.sample + (wrapCount << WRAP_BITS);
+		
+		std::cout << "VST MIDI Driver: GetPos()" << playPositionSnapshot << "\n";
+		
+		return playPositionSnapshot;
+	}	
 
 	static void RenderingThread(void* pthis) {
 		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
@@ -331,15 +372,17 @@ public:
 					if (waveOut.WaveHdr[i].dwFlags & WHDR_DONE) {
 						allBuffersRendered = false;
 						if (_this->usingFloat)
-							midiSynth.RenderFloat((float*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / 8);
+							midiSynth.RenderFloat((float*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / (sizeof(float) * _this->channels));
 						else
-							midiSynth.Render((short*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / 4);
+							midiSynth.Render((short*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / (sizeof(short) * _this->channels));
 						if (waveOutWrite(waveOut.hWaveOut, &waveOut.WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
 							MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 						}
 					}
 				}
 				if (allBuffersRendered) {
+				// Ensure the playback position is monitored frequently enough in order not to miss a wraparound
+					waveOut.GetPos(_this->channels);
 					WaitForSingleObject(waveOut.hEvent, INFINITE);
 				}
 			}
@@ -356,7 +399,7 @@ MidiSynth &MidiSynth::getInstance() {
 
 // Renders all the available space in the single looped ring buffer
 void MidiSynth::RenderAvailableSpace() {
-	DWORD playPos = waveOut.GetPos() % bufferSize;
+	DWORD playPos = waveOut.GetPos(channels) % bufferSize;
 	DWORD framesToRender;
 
 	if (playPos < framesRendered) {
@@ -371,9 +414,9 @@ void MidiSynth::RenderAvailableSpace() {
 		}
 	}
 	if (usingFloat)
-		midiSynth.RenderFloat(bufferf + 2 * framesRendered, framesToRender);
+		midiSynth.RenderFloat(bufferf + channels * framesRendered, framesToRender);
 	else
-		midiSynth.Render(buffer + 2 * framesRendered, framesToRender);
+		midiSynth.Render(buffer + channels * framesRendered, framesToRender);
 }
 
 // Renders totalFrames frames starting from bufpos
@@ -409,10 +452,10 @@ void MidiSynth::Render(short *bufpos, DWORD totalFrames) {
 			framesToRender = totalFrames;
 		}
 		synthMutex.Enter();
-		vstDriver->Render(bufpos, framesToRender, outputGain);
+		vstDriver->Render(bufpos, framesToRender, outputGain, channels);
 		synthMutex.Leave();
 		framesRendered += framesToRender;
-		bufpos += framesToRender * 2;
+		bufpos += framesToRender * channels;
 		totalFrames -= framesToRender;
 	}
 
@@ -453,10 +496,10 @@ void MidiSynth::RenderFloat(float *bufpos, DWORD totalFrames) {
 			framesToRender = totalFrames;
 		}
 		synthMutex.Enter();
-		vstDriver->RenderFloat(bufpos, framesToRender, outputGain);
+		vstDriver->RenderFloat(bufpos, framesToRender, outputGain, channels);
 		synthMutex.Leave();
 		framesRendered += framesToRender;
-		bufpos += framesToRender * 2;
+		bufpos += framesToRender * channels;
 		totalFrames -= framesToRender;
 	}
 
@@ -506,7 +549,21 @@ int GetGain() {
 	return gain;
 }
 
+WORD GetChannelCount() {
+	WORD channels = 2;
+	DWORD enabled = 0;
+	HKEY hKey;	
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+	if (result == NO_ERROR) {		
+		DWORD size = 4;
+		RegQueryValueEx(hKey, L"Use4ChannelMode", NULL, NULL, (LPBYTE)&enabled, &size);		
+	}
+	channels = enabled ? 4 : 2; 
+	return channels;
+}
+
 void MidiSynth::LoadSettings() {
+	channels = GetChannelCount();
 	outputGain = pow(10.0f, GetGain() * 0.05f);
 	sampleRate = GetSampleRate();
 	bufferSizeMS = GetBufferSize();
@@ -561,9 +618,9 @@ int MidiSynth::Init(unsigned uDeviceID) {
 
 
 	if (usingFloat)
-		bufferf = new float[2 * bufferSize];
+		bufferf = new float[channels * bufferSize];
 	else
-		buffer = new short[2 * bufferSize]; // each frame consists of two samples for both the Left and Right channels
+		buffer = new short[channels * bufferSize]; // each frame consists of two samples for both the Left and Right channels
 
 
 	// Init synth
@@ -571,7 +628,7 @@ int MidiSynth::Init(unsigned uDeviceID) {
 		return 1;
 	}
 
-	UINT wResult = waveOut.Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, useRingBuffer, sampleRate, usingFloat);
+	UINT wResult = waveOut.Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, useRingBuffer, sampleRate, usingFloat, channels);
 	if (wResult) return wResult;
 
 	vstDriver = new VSTDriver;
@@ -581,13 +638,13 @@ int MidiSynth::Init(unsigned uDeviceID) {
 		return 1;
 	}
 
-	InitDialog(uDeviceID);
+	InitDialog(uDeviceID); 
 
 	// Start playing stream
 	if (usingFloat)
-		memset(bufferf, 0, bufferSize * sizeof(float) * 2);
+		memset(bufferf, 0, bufferSize * sizeof(float) * channels);
 	else
-		memset(buffer, 0, bufferSize * sizeof(short) * 2);
+		memset(buffer, 0, bufferSize * sizeof(short) * channels);
 	framesRendered = 0;
 
 	wResult = waveOut.Start();
@@ -609,13 +666,13 @@ int MidiSynth::Reset(unsigned uDeviceID) {
 
 void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg) {
 	synthMutex.Enter();
-    midiStream.PutMessage(uDeviceID, msg, (waveOut.GetPos() + midiLatency) % bufferSize);
+    midiStream.PutMessage(uDeviceID, msg, (waveOut.GetPos(channels) + midiLatency) % bufferSize);
 	synthMutex.Leave();
 }
 
 void MidiSynth::PlaySysex(unsigned uDeviceID, unsigned char *bufpos, DWORD len) {
 	synthMutex.Enter();
-    midiStream.PutSysex(uDeviceID, bufpos, len, (waveOut.GetPos() + midiLatency) % bufferSize);
+	midiStream.PutSysex(uDeviceID, bufpos, len, (waveOut.GetPos(channels) + midiLatency) % bufferSize);
 	synthMutex.Leave();
 }
 

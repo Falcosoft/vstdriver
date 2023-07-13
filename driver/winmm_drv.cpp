@@ -33,8 +33,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ){
         //DisableThreadLibraryCalls(hinstDLL);
     }else if(fdwReason == DLL_PROCESS_DETACH){
         //;
-		//if (synthOpened)
-		//	midiSynth.Close();
+   //if (synthOpened)
+   //	midiSynth.Close();
     }
     return TRUE;
 }

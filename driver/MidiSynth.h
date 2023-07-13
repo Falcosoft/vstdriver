@@ -33,6 +33,7 @@ private:
 	bool resetEnabled;
 	bool usingFloat;
 	float outputGain;
+	WORD channels;
 
 	short *buffer;
 	float *bufferf;

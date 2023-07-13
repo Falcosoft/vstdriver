@@ -3,10 +3,9 @@
 // Used by drivercfg.rc
 //
 #define VERSION_PATCH                   0
-#define VERSION_BUILD                   0
 #define VERSION_MAJOR                   1
-#define IDC_MYICON                      2
-#define VERSION_MINOR                   2
+#define VERSION_BUILD                   1
+#define VERSION_MINOR                   3
 #define IDD_ADVANCED                    102
 #define IDD_ABOUTBOX                    103
 #define IDD_MAIN                        103
@@ -30,6 +29,8 @@
 #define IDC_CPUUSAGE                    1009
 #define IDC_SHOWVST                     1009
 #define IDC_VSTLOADED                   1010
+#define IDC_SHOWVST2                    1011
+#define IDC_USE4CH                      1011
 #define IDC_VSTPRODUCT                  1013
 #define IDC_VSTLOAD                     1014
 #define IDC_VENDOR                      1015

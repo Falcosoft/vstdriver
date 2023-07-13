@@ -120,7 +120,7 @@ class CView1 : public CDialogImpl<CView1>
 	
 	CEdit vst_info;
 	CComboBox vst_buffer_size, vst_sample_rate;
-	CButton vst_load, vst_configure, vst_showvst;
+	CButton vst_load, vst_configure, vst_showvst, vst_4chmode;
 	CStatic vst_vendor, vst_effect, file_info;
 	CTrackBarCtrl volume_slider;
 	TCHAR vst_path[MAX_PATH];
@@ -136,6 +136,7 @@ public:
 	   COMMAND_HANDLER(IDC_SAMPLERATE, CBN_SELCHANGE, OnCbnSelchangeSamplerate)
 	   COMMAND_HANDLER(IDC_BUFFERSIZE, CBN_SELCHANGE, OnCbnSelchangeBuffersize)
 	   MESSAGE_HANDLER(WM_HSCROLL, OnHScroll)
+	   COMMAND_HANDLER(IDC_USE4CH, BN_CLICKED, OnBnClickedUse4ch)
    END_MSG_MAP()
 
    CView1() { effect = NULL; }
@@ -160,6 +161,10 @@ public:
 		   if (lResult == ERROR_SUCCESS) {
 			   vst_showvst.SetCheck(reg_value);
 		   }
+		   lResult = reg.QueryDWORDValue(L"Use4ChannelMode",reg_value);
+		   if (lResult == ERROR_SUCCESS) {
+			   vst_4chmode.SetCheck(reg_value);
+		   }		   
 		   lResult = reg.QueryDWORDValue(L"SampleRate",reg_value);
 		   if (lResult == ERROR_SUCCESS) {			   
 			   vst_sample_rate.SelectString(-1, _ultow(reg_value, tmpBuff, 10));			   
@@ -216,6 +221,17 @@ public:
 	   reg.Close();
 	
 	   return 0;
+   }
+
+   LRESULT OnBnClickedUse4ch(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+   {
+	   long lResult;
+	   CRegKeyEx reg;
+	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	   reg.SetDWORDValue(L"Use4ChannelMode",vst_4chmode.GetCheck());
+	   reg.Close();	
+
+       return 0;
    }
 
    LRESULT OnCbnSelchangeSamplerate(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
@@ -360,6 +376,7 @@ public:
 		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
         vst_buffer_size = GetDlgItem(IDC_BUFFERSIZE);
 		vst_showvst = GetDlgItem(IDC_SHOWVST);
+		vst_4chmode = GetDlgItem(IDC_USE4CH);
 		vst_load = GetDlgItem(IDC_VSTLOAD);
 		vst_info = GetDlgItem(IDC_VSTLOADED);
 		vst_configure = GetDlgItem(IDC_VSTCONFIG);

@@ -603,34 +603,35 @@ void VSTDriver::ProcessSysEx(DWORD dwPort, const unsigned char *sysexbuffer,int 
 	if ( code != 0 ) process_terminate();
 }
 
-void VSTDriver::RenderFloat(float * samples, int len, float volume) {
-	process_write_code( 9 );
+void VSTDriver::RenderFloat(float * samples, int len, float volume, WORD channels) {
+	uint32_t opCode = channels == 2 ? 9 : 11; 
+	process_write_code( opCode );
 	process_write_code( len );
 
 	uint32_t code = process_read_code();
 	if ( code != 0 ) {
 		process_terminate();
-		memset( samples, 0, sizeof(*samples) * len * uNumOutputs );
+		memset( samples, 0, sizeof(*samples) * len * uNumOutputs * channels / 2);
 		return;
 	}
 
 	while ( len ) {
 		unsigned len_to_do = len;
 		if ( len_to_do > 4096 ) len_to_do = 4096;
-		process_read_bytes( samples, sizeof(*samples) * len_to_do * uNumOutputs );
-		for ( unsigned i = 0; i < len_to_do * uNumOutputs; i++ ) samples[ i ] *= volume;
-		samples += len_to_do * uNumOutputs;
+		process_read_bytes( samples, sizeof(*samples) * len_to_do * uNumOutputs * channels / 2);
+		for ( unsigned i = 0; i < len_to_do * uNumOutputs * channels / 2; i++ ) samples[ i ] *= volume;
+		samples += len_to_do * uNumOutputs * channels / 2;
 		len -= len_to_do;
 	}
 }
 
-void VSTDriver::Render(short * samples, int len, float volume)
+void VSTDriver::Render(short * samples, int len, float volume, WORD channels)
 {
 	float * float_out = (float *) _alloca( 512 * uNumOutputs * sizeof(*float_out) );
 	while ( len > 0 )
 	{
 		int len_todo = len > 512 ? 512 : len;
-		RenderFloat( float_out, len_todo, volume );
+		RenderFloat( float_out, len_todo, volume, channels );
 		for ( unsigned int i = 0; i < len_todo * uNumOutputs; i++ )
 		{
 			int sample = (int)( float_out[i] * 32768.f );
