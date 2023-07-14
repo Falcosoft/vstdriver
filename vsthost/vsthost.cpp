@@ -13,6 +13,43 @@ enum
 	BUFFER_SIZE = 4096
 };
 
+enum Command : uint32_t
+{
+    GetChunkData = 1,
+    SetChunkData = 2,
+    HasEditor = 3,
+    DisplayEditorModal = 4,
+    SetSampleRate = 5,
+    Reset = 6,
+    SendMidiEvent = 7,
+    SendMidiSysExEvent = 8,
+    RenderAudioSamples = 9,
+    DisplayEditorModalThreaded = 10,
+    RenderAudioSamples4channel = 11,
+};
+
+enum Response : uint32_t
+{
+    NoError = 0,
+    CannotLoadVstiDll = 6,
+    CannotGetProcAddress = 7,
+    NotAVsti = 8,
+    CannotReset = 8,
+    VstiIsNotAMidiSynth = 9,
+    CannotSetSampleRate = 10,
+    CommandUnknown = 12,
+};
+
+enum Error : uint32_t
+{
+    InvalidCommandLineArguments = 1,
+    MalformedChecksum = 2,
+    ChecksumMismatch = 3,
+    Comctl32LoadFailed = 4,
+    ComInitializationFailed = 5,
+};
+
+
 bool need_idle = false;
 bool idle_started = false;
 
@@ -552,11 +589,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	int argc = 0;
 	LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 
-	if (argv == NULL || argc != 3) return 1;
+	if (argv == NULL || argc != 3) return Error::InvalidCommandLineArguments;
 
 	wchar_t* end_char = 0;
 	unsigned in_sum = wcstoul(argv[2], &end_char, 16);
-	if (end_char == argv[2] || *end_char) return 2;
+	if (end_char == argv[2] || *end_char) return Error::MalformedChecksum;;
 
 	unsigned test_sum = 0;
 	end_char = argv[1];
@@ -566,10 +603,10 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	}
 
 #ifdef NDEBUG
-	if (test_sum != in_sum) return 3;
+	if (test_sum != in_sum) return  Error::ChecksumMismatch;
 #endif
 
-	unsigned code = 0;
+	unsigned code = Response::NoError;
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
@@ -599,10 +636,10 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		INITCOMMONCONTROLSEX icc;
 		icc.dwSize = sizeof(icc);
 		icc.dwICC = ICC_WIN95_CLASSES | ICC_COOL_CLASSES | ICC_STANDARD_CLASSES;
-		if (!InitCommonControlsEx(&icc)) return 4;
+		if (!InitCommonControlsEx(&icc)) return Error::Comctl32LoadFailed;
 	}
 
-	if (FAILED(CoInitialize(NULL))) return 5;
+	if (FAILED(CoInitialize(NULL))) return Error::ComInitializationFailed;
 
 #ifndef _DEBUG
 #ifdef MINIDUMP
@@ -622,7 +659,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	hDll = LoadLibraryW(argv[1]);
 	if (!hDll)
 	{
-		code = 6;
+		code = Response::CannotLoadVstiDll;
 		goto exit;
 	}
 
@@ -631,7 +668,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		pMain = (main_func)GetProcAddress(hDll, "main");
 	if (!pMain)
 	{
-		code = 7;
+		code = Response::CannotGetProcAddress;
 		goto exit;
 	}
 
@@ -643,7 +680,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 	if (!pEffect[0] || pEffect[0]->magic != kEffectMagic)
 	{
-		code = 8;
+		code = Response::NotAVsti;
 		goto exit;
 	}
 
@@ -654,14 +691,14 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	if (pEffect[0]->dispatcher(pEffect[0], effGetPlugCategory, 0, 0, 0, 0) != kPlugCategSynth ||
 		pEffect[0]->dispatcher(pEffect[0], effCanDo, 0, 0, "receiveVstMidiEvent", 0) < 1)
 	{
-		code = 9;
+		code = Response::VstiIsNotAMidiSynth;
 		goto exit;
 	}
 
 	pEffect[1] = pMain(&audioMaster);
 	if (!pEffect[1])
 	{
-		code = 8;
+		code = Response::NotAVsti;
 		goto exit;
 	}
 
@@ -689,7 +726,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		vendor_version = (uint32_t)pEffect[0]->dispatcher(pEffect[0], effGetVendorVersion, 0, 0, 0, 0);
 		unique_id = pEffect[0]->uniqueID;
 
-		put_code(0);
+		put_code(Response::NoError);
 		put_code(name_string_length);
 		put_code(vendor_string_length);
 		put_code(product_string_length);
@@ -717,19 +754,21 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		switch (command)
 		{
-		case 1: // Get Chunk
-			getChunk(pEffect[0], chunk);
+		case Command::GetChunkData: // Get Chunk
+			{
+				getChunk(pEffect[0], chunk);
 
-			put_code(0);
-			put_code((uint32_t)chunk.size());
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
-			if (chunk.size()) put_bytes(&chunk.front(), (uint32_t)chunk.size());
+				put_code(Response::NoError);
+				put_code((uint32_t)chunk.size());
+#if	(defined(_MSC_VER) && (_MSC_VER < 1600))
+				if (chunk.size()) put_bytes(&chunk.front(), (uint32_t)chunk.size());
 #else
-			if (chunk.size()) put_bytes(chunk.data(), (uint32_t)chunk.size());
+				if (chunk.size()) put_bytes(chunk.data(), (uint32_t)chunk.size());
 #endif
+			}
 			break;
 
-		case 2: // Set Chunk
+		case Command::SetChunkData: // Set Chunk
 			{
 				uint32_t size = get_code();
 				chunk.resize(size);
@@ -742,20 +781,20 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				setChunk(pEffect[0], chunk);
 				setChunk(pEffect[1], chunk);
 
-				put_code(0);
+				put_code(Response::NoError);
 			}
 			break;
 
-		case 3: // Has Editor
+		case Command::HasEditor: // Has Editor
 			{
 				uint32_t has_editor = (pEffect[0]->flags & effFlagsHasEditor) ? 1 : 0;
 
-				put_code(0);
+				put_code(Response::NoError);
 				put_code(has_editor);
 			}
 			break;
 
-		case 4: // Display Editor Modal
+		case Command::DisplayEditorModal: // Display Editor Modal
 			{
 				if (pEffect[0]->flags & effFlagsHasEditor)
 				{
@@ -767,11 +806,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					setChunk(pEffect[1], chunk);
 				}
 
-				put_code(0);
+				put_code(Response::NoError);
 			}
 			break;
 
-		case 10: // Display Editor Modal in separate thread
+		case Command::DisplayEditorModalThreaded: // Display Editor Modal in separate thread
 			{
 				port_num = get_code();
 
@@ -781,26 +820,26 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					//Sleep(100);
 				}
 
-				put_code(0);
+				put_code(Response::NoError);
 			}
 			break;
 
-		case 5: // Set Sample Rate
+		case Command::SetSampleRate: // Set Sample Rate
 			{
 				uint32_t size = get_code();
 				if (size != sizeof(sample_rate))
 				{
-					code = 10;
+					code = Response::CannotSetSampleRate;
 					goto exit;
 				}
 
 				sample_rate = get_code();
 
-				put_code(0);
+				put_code(Response::NoError);
 			}
 			break;
 
-		case 6: // Reset
+		case Command::Reset: // Reset
 			{
 				port_num = get_code();
 				if (editorHandle[port_num] != 0) SendMessage(editorHandle[port_num], WM_CLOSE, 0, 0);
@@ -821,18 +860,18 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				pEffect[port_num] = pMain(&audioMaster);
 				if (!pEffect[port_num])
 				{
-					code = 8;
+					code = Response::CannotReset;
 					goto exit;
 				}
 				pEffect[port_num]->user = &effectData[port_num];
 				pEffect[port_num]->dispatcher(pEffect[port_num], effOpen, 0, 0, 0, 0);
 				setChunk(pEffect[port_num], chunk);
 
-				put_code(0);
+				put_code(Response::NoError);
 			}
 			break;
 
-		case 7: // Send MIDI Event
+		case Command::SendMidiEvent: // Send MIDI Event
 			{
 				myVstEvent* ev = (myVstEvent*)calloc(sizeof(myVstEvent), 1);
 				if (evTail) evTail->next = ev;
@@ -847,11 +886,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
 				memcpy(&ev->ev.midiEvent.midiData, &b, 3);
 
-				put_code(0);
+				put_code(Response::NoError);
 			}
 			break;
 
-		case 8: // Send System Exclusive Event
+		case Command::SendMidiSysExEvent: // Send System Exclusive Event
 			{
 				myVstEvent* ev = (myVstEvent*)calloc(sizeof(myVstEvent), 1);
 				if (evTail) evTail->next = ev;
@@ -871,11 +910,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 				get_bytes(ev->ev.sysexEvent.sysexDump, size);
 
-				put_code(0);
+				put_code(Response::NoError);
 			}
 			break;
 
-		case 9: // Render Samples
+		case Command::RenderAudioSamples: // Render Samples
 			{		
 				if (!blState.size())
 				{
@@ -1006,7 +1045,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 				uint32_t count = get_code();
 
-				put_code(0);
+				put_code(Response::NoError);
 
 				while (count)
 				{
@@ -1059,7 +1098,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			}
 			break;
 
-		case 11: // Render Samples for 4 channel mode
+		case Command::RenderAudioSamples4channel: // Render Samples for 4 channel mode
 			{		
 				if (!blState.size())
 				{
@@ -1190,7 +1229,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 				uint32_t count = get_code();
 
-				put_code(0);
+				put_code(Response::NoError);
 
 				while (count)
 				{
@@ -1250,7 +1289,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			break;
 
 		default:
-			code = 12;
+			code = Response::CommandUnknown;;
 			goto exit;
 			break;
 		}

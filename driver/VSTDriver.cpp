@@ -17,6 +17,24 @@
 #include "VSTDriver.h"
 
  #include <assert.h>
+ 
+enum Command : uint32_t
+{
+    Exit = 0,
+    GetChunkData = 1,
+    SetChunkData = 2,
+    HasEditor = 3,
+    DisplayEditorModal = 4,
+    SetSampleRate = 5,
+    Reset = 6,
+    SendMidiEvent = 7,
+    SendMidiSysExEvent = 8,
+    RenderAudioSamples = 9,
+    DisplayEditorModalThreaded = 10,
+    RenderAudioSamples4channel = 11,
+};
+
+const uint32_t NoError = 0;
 
 VSTDriver::VSTDriver() {
 	szPluginPath = NULL;
@@ -344,7 +362,7 @@ void VSTDriver::process_terminate()
 {
 	if ( hProcess )
 	{
-		process_write_code( 0 );
+		process_write_code( Command::Exit );
 		WaitForSingleObject( hProcess, 5000 );
 		TerminateProcess( hProcess, 0 );
 		CloseHandle( hThread );
@@ -479,11 +497,11 @@ long VSTDriver::getUniqueID()
 
 void VSTDriver::getChunk( std::vector<uint8_t> & out )
 {
-	process_write_code( 1 );
+	process_write_code( Command::GetChunkData );
 
 	uint32_t code = process_read_code();
 
-	if ( code == 0 )
+	if ( code == NoError )
 	{
 		uint32_t size = process_read_code();
 
@@ -496,18 +514,18 @@ void VSTDriver::getChunk( std::vector<uint8_t> & out )
 
 void VSTDriver::setChunk( const void * in, unsigned size )
 {
-	process_write_code( 2 );
+	process_write_code( Command::SetChunkData );
 	process_write_code( size );
 	process_write_bytes( in, size );
 	uint32_t code = process_read_code();
-	if ( code != 0 ) process_terminate();
+	if ( code != NoError ) process_terminate();
 }
 
 bool VSTDriver::hasEditor()
 {
-	process_write_code( 3 );
+	process_write_code( Command::HasEditor );
 	uint32_t code = process_read_code();
-	if ( code != 0 )
+	if ( code != NoError )
 	{
 		process_terminate();
 		return false;
@@ -518,15 +536,15 @@ bool VSTDriver::hasEditor()
 
 void VSTDriver::displayEditorModal(unsigned int uDeviceID)
 {
-	uint32_t code = uDeviceID == 255 ? 4 : 10;
+	uint32_t code = uDeviceID == 255 ? Command::DisplayEditorModal : Command::DisplayEditorModalThreaded;
 	process_write_code( code );
 	
-	if (code == 10) {		
+	if (code == Command::DisplayEditorModalThreaded) {		
 		process_write_code( uDeviceID );
 	}
 
 	code = process_read_code();
-	if ( code != 0 ) process_terminate();
+	if ( code != NoError ) process_terminate();
 }
 
 void VSTDriver::CloseVSTDriver() {
@@ -545,18 +563,18 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 	load_settings(szPath);
 
 	if ( process_create() ) {
-		process_write_code( 5 );
+		process_write_code( Command::SetSampleRate );
 		process_write_code( sizeof(uint32_t ) );
 		process_write_code( sampleRate );
 
 		uint32_t code = process_read_code();
-		if ( code != 0 ) {
+		if ( code != NoError ) {
 			process_terminate();
 			return FALSE;
 		}
 
         if (blChunk.size()) {
-			process_write_code( 2 );
+			process_write_code( Command::SetChunkData );
 			process_write_code( (uint32_t)blChunk.size() );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 			if (blChunk.size()) process_write_bytes( &blChunk.front(), (uint32_t)blChunk.size() );
@@ -564,7 +582,7 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 			if (blChunk.size()) process_write_bytes( blChunk.data(), (uint32_t)blChunk.size() );
 #endif
 			code = process_read_code();
-			if ( code != 0 ) {
+			if ( code != NoError ) {
 				process_terminate();
 				return FALSE;
 	        }
@@ -578,38 +596,38 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 }
 
 void VSTDriver::ResetDriver(unsigned int uDeviceID) {
-	process_write_code( 6 );
+	process_write_code( Command::Reset );
 	process_write_code( uDeviceID );
 	uint32_t code = process_read_code();
-	if ( code != 0 ) process_terminate();
+	if ( code != NoError ) process_terminate();
 }
 
 void VSTDriver::ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1) {
 	dwParam1 = ( dwParam1 & 0xFFFFFF ) | ( dwPort << 24 );
-	process_write_code( 7 );
+	process_write_code( Command::SendMidiEvent );
 	process_write_code( dwParam1 );
 
 	uint32_t code = process_read_code();
-	if ( code != 0 ) process_terminate();
+	if ( code != NoError ) process_terminate();
 }
 
 void VSTDriver::ProcessSysEx(DWORD dwPort, const unsigned char *sysexbuffer,int exlen) {
 	dwPort = ( dwPort << 24 ) | ( exlen & 0xFFFFFF );
-	process_write_code( 8 );
+	process_write_code( Command::SendMidiSysExEvent );
 	process_write_code( dwPort );
 	process_write_bytes( sysexbuffer, exlen );
 
 	uint32_t code = process_read_code();
-	if ( code != 0 ) process_terminate();
+	if ( code != NoError ) process_terminate();
 }
 
 void VSTDriver::RenderFloat(float * samples, int len, float volume, WORD channels) {
-	uint32_t opCode = channels == 2 ? 9 : 11; 
+	uint32_t opCode = channels == 2 ? Command::RenderAudioSamples : Command::RenderAudioSamples4channel; 
 	process_write_code( opCode );
 	process_write_code( len );
 
 	uint32_t code = process_read_code();
-	if ( code != 0 ) {
+	if ( code != NoError ) {
 		process_terminate();
 		memset( samples, 0, sizeof(*samples) * len * uNumOutputs * channels / 2);
 		return;
