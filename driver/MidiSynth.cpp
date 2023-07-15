@@ -352,7 +352,9 @@ public:
 		}
 		prevPlayPos = playPositionSnapshot = mmTime.u.sample + (wrapCount << WRAP_BITS);
 		
+#ifdef _DEBUG
 		std::cout << "VST MIDI Driver: GetPos()" << playPositionSnapshot << "\n";
+#endif
 		
 		return playPositionSnapshot;
 	}	
