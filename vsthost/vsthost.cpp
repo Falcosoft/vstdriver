@@ -13,40 +13,46 @@ enum
 	BUFFER_SIZE = 4096
 };
 
-enum Command : uint32_t
-{
-    GetChunkData = 1,
-    SetChunkData = 2,
-    HasEditor = 3,
-    DisplayEditorModal = 4,
-    SetSampleRate = 5,
-    Reset = 6,
-    SendMidiEvent = 7,
-    SendMidiSysExEvent = 8,
-    RenderAudioSamples = 9,
-    DisplayEditorModalThreaded = 10,
-    RenderAudioSamples4channel = 11,
+namespace Command {
+	enum : uint32_t
+	{
+		GetChunkData = 1,
+		SetChunkData = 2,
+		HasEditor = 3,
+		DisplayEditorModal = 4,
+		SetSampleRate = 5,
+		Reset = 6,
+		SendMidiEvent = 7,
+		SendMidiSysExEvent = 8,
+		RenderAudioSamples = 9,
+		DisplayEditorModalThreaded = 10,
+		RenderAudioSamples4channel = 11,
+	};
 };
 
-enum Response : uint32_t
-{
-    NoError = 0,
-    CannotLoadVstiDll = 6,
-    CannotGetProcAddress = 7,
-    NotAVsti = 8,
-    CannotReset = 8,
-    VstiIsNotAMidiSynth = 9,
-    CannotSetSampleRate = 10,
-    CommandUnknown = 12,
+namespace Response {
+	enum : uint32_t
+	{
+		NoError = 0,
+		CannotLoadVstiDll = 6,
+		CannotGetProcAddress = 7,
+		NotAVsti = 8,
+		CannotReset = 8,
+		VstiIsNotAMidiSynth = 9,
+		CannotSetSampleRate = 10,
+		CommandUnknown = 12,
+	};
 };
 
-enum Error : uint32_t
-{
-    InvalidCommandLineArguments = 1,
-    MalformedChecksum = 2,
-    ChecksumMismatch = 3,
-    Comctl32LoadFailed = 4,
-    ComInitializationFailed = 5,
+namespace Error {
+	enum : uint32_t
+	{
+		InvalidCommandLineArguments = 1,
+		MalformedChecksum = 2,
+		ChecksumMismatch = 3,
+		Comctl32LoadFailed = 4,
+		ComInitializationFailed = 5,
+	};
 };
 
 

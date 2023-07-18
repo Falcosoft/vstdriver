@@ -13,6 +13,7 @@
 #define IDI_SMALL                       108
 #define IDR_MAINFRAME                   128
 #define IDD_MAINDLG                     130
+#define IDD_SOUND                       131
 #define IDC_SFLIST                      1000
 #define IDC_ADDSF                       1001
 #define IDC_RMSF                        1002
@@ -38,12 +39,15 @@
 #define IDC_PRODUCT                     1017
 #define IDC_BUTTON1                     1018
 #define IDC_VSTCONFIG                   1018
+#define IDC_LIST1                       1019
+#define IDC_COMBO1                      1020
 #define IDC_SAMPLERATE                  1021
 #define IDC_BUFFERSIZE                  1022
 #define IDC_STSR                        1023
 #define IDC_STBS                        1024
 #define IDC_FILEVERSION                 1025
 #define IDC_VOLUME                      1027
+#define IDC_ASIOCTRLP                   1028
 #define IDC_STATIC                      -1
 
 // Next default values for new objects

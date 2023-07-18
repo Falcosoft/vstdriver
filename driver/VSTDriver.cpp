@@ -16,22 +16,24 @@
 
 #include "VSTDriver.h"
 
- #include <assert.h>
- 
-enum Command : uint32_t
-{
-    Exit = 0,
-    GetChunkData = 1,
-    SetChunkData = 2,
-    HasEditor = 3,
-    DisplayEditorModal = 4,
-    SetSampleRate = 5,
-    Reset = 6,
-    SendMidiEvent = 7,
-    SendMidiSysExEvent = 8,
-    RenderAudioSamples = 9,
-    DisplayEditorModalThreaded = 10,
-    RenderAudioSamples4channel = 11,
+#include <assert.h>
+
+namespace Command {
+	enum : uint32_t
+	{
+		Exit = 0,
+		GetChunkData = 1,
+		SetChunkData = 2,
+		HasEditor = 3,
+		DisplayEditorModal = 4,
+		SetSampleRate = 5,
+		Reset = 6,
+		SendMidiEvent = 7,
+		SendMidiSysExEvent = 8,
+		RenderAudioSamples = 9,
+		DisplayEditorModalThreaded = 10,
+		RenderAudioSamples4channel = 11,
+	};
 };
 
 const uint32_t NoError = 0;

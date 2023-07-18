@@ -13,7 +13,7 @@
 #pragma once
 
 
-BOOL IsWin8OrNewer()
+/*BOOL IsWin8OrNewer()
 {
 	OSVERSIONINFOEX osvi;
 	BOOL bOsVersionInfoEx;
@@ -26,6 +26,22 @@ BOOL IsWin8OrNewer()
 		(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion > 1)))
 		return TRUE;
 	return FALSE;
+}*/
+
+//Setting Midi mapper value this simple way does not work on Win XP either but on XP you can do it properly with built-in control panel anyway...
+BOOL IsWinVistaOrWin7()  
+{
+	OSVERSIONINFOEX osvi;
+	BOOL bOsVersionInfoEx;
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
+	if (bOsVersionInfoEx == FALSE) return FALSE;
+	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId &&
+		((osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 0) ||
+		(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 1)))
+		return TRUE;
+	return FALSE;
 }
 
 class CMainDlg : public CDialogImpl<CMainDlg>, public CUpdateUI<CMainDlg>,
@@ -36,6 +52,7 @@ public:
 	CDialogTabCtrl m_ctrlTab;
 	CView1 m_view1;
 	CView2 m_view2;
+	CView3 m_view3;
 
 	virtual BOOL PreTranslateMessage(MSG* pMsg)
 	{
@@ -55,7 +72,8 @@ public:
 		MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
 		COMMAND_ID_HANDLER(IDOK, OnOK)
 		COMMAND_ID_HANDLER(IDCANCEL, OnCancel)
-		REFLECT_NOTIFICATIONS();
+		NOTIFY_HANDLER(IDC_TAB, TCN_SELCHANGE, OnTcnSelchangeTab)
+		REFLECT_NOTIFICATIONS();		
 	END_MSG_MAP()
 
 // Handler prototypes (uncomment arguments if needed):
@@ -74,16 +92,20 @@ public:
 		SetIcon(hIconSmall, FALSE);
 		m_ctrlTab.SubclassWindow(GetDlgItem(IDC_TAB));
 		m_view1.Create(m_hWnd);
-		if (!IsWin8OrNewer())
-		m_view2.Create(m_hWnd);
+		
+		if (IsWinVistaOrWin7()) m_view2.Create(m_hWnd);
+		
+		m_view3.Create(m_hWnd);
 		TCITEM tci = { 0 };
 		tci.mask = TCIF_TEXT;
 		tci.pszText = _T("VST settings");
 		m_ctrlTab.InsertItem(0, &tci, m_view1);
-		if (!IsWin8OrNewer())
+		tci.pszText = _T("OutPut devices");
+		m_ctrlTab.InsertItem(1, &tci, m_view3);
+		if (IsWinVistaOrWin7())
 		{
-			tci.pszText = _T("Advanced");
-			m_ctrlTab.InsertItem(1, &tci, m_view2);
+			tci.pszText = _T("Windows MIDI");
+			m_ctrlTab.InsertItem(2, &tci, m_view2);
 		}
 		
 		m_ctrlTab.SetCurSel(0);
@@ -97,6 +119,22 @@ public:
 		UIAddChildWindowContainer(m_hWnd);
 
 		return TRUE;
+	}
+
+	LRESULT OnTcnSelchangeTab(int idCtrl, LPNMHDR pNMHDR, BOOL& bHandled)
+	{
+	
+		BOOL dummy;
+		if(m_ctrlTab.GetCurSel() == 0 && m_view3.DriverChanged)
+		{
+			m_view1.ResetBufferSizes();
+			m_view1.OnCbnSelchangeBuffersize(0, 0, 0, dummy);
+			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);
+			m_view3.DriverChanged = false;
+		}
+		
+        bHandled = false;
+	    return 1;
 	}
 
 	LRESULT OnDestroy(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)

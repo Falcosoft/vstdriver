@@ -32,6 +32,7 @@ private:
 	bool useRingBuffer;
 	bool resetEnabled;
 	bool usingFloat;
+	bool useAsio;
 	float outputGain;
 	WORD channels;
 
@@ -54,7 +55,7 @@ public:
 	int Reset(unsigned uDeviceID);
 	void RenderAvailableSpace();
 	void Render(short *bufpos, DWORD totalFrames);
-	void RenderFloat(float *bufpos, DWORD totalFrames);
+	void RenderFloat(float *bufpos, DWORD totalFrames);	
 	void PushMIDI(unsigned uDeviceID, DWORD msg);
 	void PlaySysex(unsigned uDeviceID, unsigned char *bufpos, DWORD len);
 };

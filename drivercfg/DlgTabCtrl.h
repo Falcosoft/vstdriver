@@ -275,7 +275,7 @@ public:
       while( m_ctrlViews.GetItemCount() > 0 ) m_ctrlViews.RemoveItem(0);
       return TBase::DeleteAllItems();
    }
-   int SetCurSel(int iTab)
+   int SetCurSel(int iTab, bool sendNotify = true)
    {
       // Trigger first tab selection
       int iLastTab = TBase::SetCurSel(iTab);
@@ -283,7 +283,7 @@ public:
          // Tab controls will not send notifications on TCM_SETCURSEL.
          // I hate that! So I'll send it instead...
          NMHDR nmh = { m_hWnd, (UINT_PTR)GetDlgCtrlID(), TCN_SELCHANGE };
-         ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh);
+        if(sendNotify) ::SendMessage(GetParent(), WM_NOTIFY, nmh.idFrom, (LPARAM) &nmh); //falco: it's better to be an option
       }
       return iLastTab;
    }
