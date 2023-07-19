@@ -461,6 +461,8 @@ namespace VSTMIDIDRV{
 		unsigned int samplerate;
 
 		volatile DWORD startTime;
+		volatile LARGE_INTEGER startTimeQp;
+		double	queryPerformanceUnit;
 
 		TCHAR installPath[MAX_PATH];
 		TCHAR bassAsioPath[MAX_PATH];
@@ -661,7 +663,18 @@ namespace VSTMIDIDRV{
 		{
 			if (bassAsio)
 			{
-				startTime = timeGetTime();
+				queryPerformanceUnit = 0.0;
+				LARGE_INTEGER tmpFreq;
+				if(QueryPerformanceFrequency(&tmpFreq)) 
+				{
+					queryPerformanceUnit = 1.0 / (tmpFreq.QuadPart * 0.001);
+					QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&startTimeQp));
+				}
+				else 
+				{
+					startTime = timeGetTime();
+				}
+
 				if(!BASS_ASIO_Start(buflen, 0)) return -2;
 			}
 
@@ -682,7 +695,8 @@ namespace VSTMIDIDRV{
 		{
 			if (bassAsio)
 			{
-				startTime = timeGetTime();
+				if(queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&startTimeQp));
+				else startTime = timeGetTime();
 				//BASS_ASIO_ChannelReset(FALSE, -1, BASS_ASIO_RESET_PAUSE);
 			}
 
@@ -691,7 +705,14 @@ namespace VSTMIDIDRV{
 
 		DWORD GetPos()
 		{
-			DWORD res = (timeGetTime() - startTime) * (samplerate / 1000.0f);
+			DWORD res;
+			if(queryPerformanceUnit != 0.0)
+			{
+				LARGE_INTEGER tmpCounter;
+				QueryPerformanceCounter(&tmpCounter);
+				res = DWORD((tmpCounter.QuadPart - startTimeQp.QuadPart) * queryPerformanceUnit * (samplerate * 0.001));
+			}
+			else res = DWORD((timeGetTime() - startTime) * (samplerate * 0.001));
 			//std::cout << "VST MIDI Driver: GetPos(): " << res << "\n";
 			return res;
 		}
@@ -702,12 +723,14 @@ namespace VSTMIDIDRV{
 			if (_this->soundOutFloat)
 			{
 				midiSynth.RenderFloat((float*)buffer, length / (sizeof(float) * _this->channels));
-				_this->startTime = timeGetTime();
+				if(_this->queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&_this->startTimeQp));
+				else _this->startTime = timeGetTime();			
 			}
 			else
-			{
+			{				
 				midiSynth.Render((short*)buffer, length / (sizeof(short) * _this->channels));
-				_this->startTime = timeGetTime();
+				if(_this->queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&_this->startTimeQp));
+				else _this->startTime = timeGetTime();
 			}
 			return length;
 		}
@@ -1021,6 +1044,7 @@ namespace VSTMIDIDRV{
 		// Start playing stream
 		if (useAsio) {
 			wResult = bassAsioOut.Start();
+			if (wResult) bassAsioOut.Close();
 		}
 		else {
 			if (usingFloat)
