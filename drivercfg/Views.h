@@ -24,6 +24,11 @@ extern "C" HINSTANCE hinst_vst_driver = NULL;
 
 static HINSTANCE bassasio = NULL;       // bassasio handle  
 
+static bool isASIO = false;
+static bool is4chMode = false;
+static DWORD portBOffsetVal = 2;
+
+
 struct MyDLGTEMPLATE: DLGTEMPLATE
 {
 	WORD ext[3];
@@ -73,8 +78,6 @@ static bool IsASIO()
 
 	return false;	
 }
-
-static bool isASIO = false;
 
 static void settings_load(VSTDriver * effect)
 {
@@ -238,6 +241,7 @@ public:
 		   lResult = reg.QueryDWORDValue(L"Use4ChannelMode",reg_value);
 		   if (lResult == ERROR_SUCCESS) {
 			   vst_4chmode.SetCheck(reg_value);
+			   if (reg_value) is4chMode = true;
 		   }		   
 		   lResult = reg.QueryDWORDValue(L"SampleRate",reg_value);
 		   if (lResult == ERROR_SUCCESS) {			   
@@ -250,6 +254,10 @@ public:
 		   lResult = reg.QueryDWORDValue(L"Gain",reg_value);
 		   if (lResult == ERROR_SUCCESS) {
 			   volume_slider.SetPos((int)reg_value);
+		   }
+		   lResult = reg.QueryDWORDValue(L"PortBOffset",reg_value);
+		   if (lResult == ERROR_SUCCESS) {
+			   portBOffsetVal = reg_value;
 		   }
 
 		   reg.Close();
@@ -304,6 +312,7 @@ public:
 	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
 	   reg.SetDWORDValue(L"Use4ChannelMode",vst_4chmode.GetCheck());
 	   reg.Close();	
+	   is4chMode = vst_4chmode.GetCheck();
 
        return 0;
    }
@@ -457,12 +466,18 @@ public:
 			vst_buffer_size.AddString(L"20");
 			vst_buffer_size.AddString(L"30");
 			vst_buffer_size.AddString(L"40");			
-			vst_buffer_size.SelectString(-1, L"Default");
-			vst_4chmode.SetWindowTextW(L"4 channel mode (port A: ASIO ch + 0/1; port B: ASIO ch + 2/3)");
+			vst_buffer_size.SelectString(-1, L"Default");			
 
 			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+			CString selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
+			int selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);
 			int selectedOutputDriverInt = _wtoi(selectedOutputDriver.GetString());
+			
+			wchar_t tmpBuff[64];
+			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, selectedOutputChannelInt + portBOffsetVal, selectedOutputChannelInt + portBOffsetVal + 1); 
+			vst_4chmode.SetWindowTextW(tmpBuff);
+			
 			BASS_ASIO_Init(selectedOutputDriverInt, 0);			
 
 			if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
@@ -531,6 +546,11 @@ public:
 		vst_buffer_size.ResetContent();
 		
 		CString selectedDriverMode = LoadOutputDriver(L"Driver Mode");
+		CString selectedOutputDriver;
+		CString selectedOutputChannel;
+		int selectedOutputChannelInt;
+		int selectedOutputDriverInt;
+
 		if (isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0) 
 		{
 			vst_buffer_size.AddString(L"Default");
@@ -542,11 +562,13 @@ public:
 			vst_buffer_size.AddString(L"30");
 			vst_buffer_size.AddString(L"40");			
 			vst_buffer_size.SelectString(-1, L"Default");
-			vst_4chmode.SetWindowTextW(L"4 channel mode (port A: ASIO ch + 0/1; port B: ASIO ch + 2/3)");
-
-			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+			
+			selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+			selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
+			selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);
-			int selectedOutputDriverInt = _wtoi(selectedOutputDriver.GetString());
+			selectedOutputDriverInt = _wtoi(selectedOutputDriver.GetString());
+				
 			BASS_ASIO_Init(selectedOutputDriverInt, 0);			
 
 			if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
@@ -588,6 +610,14 @@ public:
 		volume_slider.SetPos(0);	
 		
 		load_settings();
+
+		if (isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0) 
+		{
+			wchar_t tmpBuff[64];
+			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, selectedOutputChannelInt + portBOffsetVal, selectedOutputChannelInt + portBOffsetVal + 1); 
+			vst_4chmode.SetWindowTextW(tmpBuff);
+		}
+        
 		return TRUE;
 	}
 };
@@ -595,11 +625,13 @@ public:
 class CView3 : public CDialogImpl<CView3>
 {
     CListBox playbackDevices;
-    CComboBox driverMode;
+    CComboBox driverMode, portbOffset;
 	CButton asio_openctlp;
+	CStatic portbOffsetText;
+	bool driverChanged;
+	unsigned int *drvChArr;
            
-public:
-	bool DriverChanged;
+public:	
 
     enum
     {
@@ -611,17 +643,46 @@ public:
 		COMMAND_ID_HANDLER(IDC_ASIOCTRLP, OnButtonOpen)
         COMMAND_HANDLER(IDC_COMBO1, CBN_SELCHANGE, OnCbnSelchangeCombo1)
         COMMAND_HANDLER(IDC_LIST1, LBN_SELCHANGE, OnLbnSelchangeList1)
-    END_MSG_MAP()
+		//COMMAND_HANDLER(IDC_COMBO_PORTB, CBN_EDITCHANGE, OnCbnEditchangeComboPortb)
+		COMMAND_HANDLER(IDC_COMBO_PORTB, CBN_SELCHANGE, OnCbnSelchangeComboPortb)
+	END_MSG_MAP()
 
     CView3()
     {		
-		DriverChanged = false;
+		driverChanged = false;
+		drvChArr = NULL;
+
     }
 
     ~CView3()
     {
+		if(drvChArr) delete [] drvChArr;
 		        
-    }	
+    }
+
+	bool GetDriverChanged() 
+	{
+		return driverChanged;
+	}
+
+	void SetDriverChanged(bool changed) 
+	{
+		driverChanged = changed;
+	}
+	
+	void ShowPortBControls(bool show) 
+	{
+		if (show)
+			{
+				portbOffset.ShowWindow(SW_SHOW);
+				portbOffsetText.ShowWindow(SW_SHOW);
+			}
+			else 
+			{
+				portbOffset.ShowWindow(SW_HIDE);
+				portbOffsetText.ShowWindow(SW_HIDE);
+			}
+	}
 
 	bool SaveOutputDriver(CString valueName, CString value)
 	{
@@ -642,10 +703,9 @@ public:
 
         return result == NO_ERROR;
     }
-
+	
 	void LoadWaveOutDrivers()
 	{
-
 		CString deviceItem;
         CString deviceName;
 		WAVEOUTCAPSW caps;
@@ -660,7 +720,7 @@ public:
 		
 		}		
 		
-	}
+	}	
 
 	void LoadAsioDrivers() 
 	{        
@@ -669,7 +729,12 @@ public:
         CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
 
         BASS_ASIO_DEVICEINFO asioDeviceInfo;
+		int count = 0;
+		for (int i = 0; BASS_ASIO_GetDeviceInfo(i, &asioDeviceInfo); i++)
+		count++;
 
+		drvChArr = new unsigned int[count];
+		
         for (size_t deviceId = 0; BASS_ASIO_Init(deviceId, 0); ++deviceId)
         {
             BASS_ASIO_GetDeviceInfo(deviceId, &asioDeviceInfo);
@@ -678,6 +743,7 @@ public:
 
             BASS_ASIO_INFO info;
             BASS_ASIO_GetInfo(&info);
+			drvChArr[deviceId] = info.outputs;
 
             BASS_ASIO_CHANNELINFO channelInfo;
 
@@ -696,19 +762,32 @@ public:
             }
 
             BASS_ASIO_Free();
-        }
-    }	
+		}
+		int drvId = wcstol(selectedOutputDriver.Left(2), NULL, 10);
+		unsigned int portCount = drvChArr[drvId];
+		portbOffset.ResetContent();
+		wchar_t tmpBuff[8];
+		for (unsigned int i = 1; i < portCount / 2; i++)
+		{
+			portbOffset.AddString(_ultow(i * 2, tmpBuff, 10));						
+		}
+		if (portbOffset.SelectString(-1,_ultow(portBOffsetVal, tmpBuff, 10)) ==  CB_ERR)
+			portbOffset.SelectString(-1, L"2");
+
+	}	
 
     LRESULT OnInitDialogView3(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
     {
         playbackDevices = GetDlgItem(IDC_LIST1);
         driverMode = GetDlgItem(IDC_COMBO1);
+		portbOffset = GetDlgItem(IDC_COMBO_PORTB);
+		portbOffsetText = GetDlgItem(IDC_STATIC_PORTB);
 		asio_openctlp = GetDlgItem(IDC_ASIOCTRLP);
         
 		driverMode.AddString(L"WinMM WaveOut"); 
 			
-		if (isASIO)	driverMode.AddString(L"Bass ASIO");        
-
+		if (isASIO)	driverMode.AddString(L"Bass ASIO");
+	
 		CString selectedDriverMode = LoadOutputDriver(L"Driver Mode");
 	
 		if (isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0) {
@@ -716,6 +795,12 @@ public:
 			driverMode.SelectString(0, L"Bass ASIO");
 			LoadAsioDrivers();
 			asio_openctlp.ShowWindow(SW_SHOW);
+			if (is4chMode) {
+				portbOffsetText.ShowWindow(SW_SHOW);
+				portbOffset.ShowWindow(SW_SHOW);
+			}
+
+
 		}
 		else {
 			selectedDriverMode = L"WinMM WaveOut";
@@ -772,17 +857,19 @@ public:
             {
                 playbackDevices.ResetContent();
 
-				DriverChanged = true;
+				driverChanged = true;
 
                 if (newDriverMode.CompareNoCase(L"Bass ASIO") == 0)
                 {
                     LoadAsioDrivers();
 					asio_openctlp.ShowWindow(SW_SHOW);
+					if(is4chMode) ShowPortBControls(true);
                 }
                 else
                 {
                     LoadWaveOutDrivers();
 					asio_openctlp.ShowWindow(SW_HIDE);
+					ShowPortBControls(false);
                 }
 
                 SaveOutputDriver(L"Driver Mode", newDriverMode);
@@ -814,7 +901,23 @@ public:
                 if (selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0)
                 {
                     SaveOutputDriver(L"Bass ASIO", selectedOutputDriver);
-					DriverChanged = true;
+					driverChanged = true;									
+	   
+	                int drvId = wcstol(selectedOutputDriver.Left(2), NULL, 10);
+					unsigned int portCount = drvChArr[drvId];
+					portbOffset.ResetContent();
+					wchar_t tmpBuff[8];
+					for (unsigned int i = 1; i < portCount / 2; i++)
+					{
+						portbOffset.AddString(_ultow(i * 2, tmpBuff, 10));						
+					}
+					if (portbOffset.SelectString(-1,_ultow(portBOffsetVal, tmpBuff, 10)) ==  CB_ERR)
+					{
+						portbOffset.SelectString(-1, L"2");
+						BOOL dummy;
+						OnCbnSelchangeComboPortb(0, 0, 0, dummy);
+					}
+										
                 }
                 else
                 {
@@ -825,6 +928,29 @@ public:
 
         return 0;
     }
+
+	LRESULT CView3::OnCbnEditchangeComboPortb(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{	
+
+		//OnCbnSelchangeComboPortb(wNotifyCode, wID, hWndCtl, bHandled);   
+		return 0;
+	}
+
+	LRESULT CView3::OnCbnSelchangeComboPortb(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+	   long lResult;
+	   CRegKeyEx reg;
+	   wchar_t tmpBuff[8];
+	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	   portbOffset.GetWindowTextW(tmpBuff, 8);
+	   portBOffsetVal = wcstol(tmpBuff, NULL, 10);
+	   reg.SetDWORDValue(L"PortBOffset", portBOffsetVal);
+	   reg.Close();
+	   driverChanged = true;
+	   
+	   return 0;
+	}
+
 };
 
 

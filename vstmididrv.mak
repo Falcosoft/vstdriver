@@ -68,14 +68,26 @@ $(TARGET): vstmididrv.mak \
         output\vstmididrv.dll \
         output\vsthost32.exe \
         output\vstmididrvcfg.exe \
+        output\bassasio.dll \
         output\64\vstmididrv.dll \
-        output\64\vsthost64.exe 
+        output\64\bassasio.dll \
+        output\64\vsthost64.exe \
+        output\64\vstmididrvcfg.exe 
         $(MKNSIS) vstmididrv.nsi
 
 #------------------------------------------------------------------------------
 # subtargets that need manual copying
 #------------------------------------------------------------------------------
 
+output\bassasio.dll: external_packages\lib\bassasio.dll
+        @copy /y external_packages\lib\bassasio.dll output\bassasio.dll
+
+output\64\bassasio.dll: external_packages\lib64\bassasio.dll
+        @copy /y external_packages\lib64\bassasio.dll output\64\bassasio.dll
+
+      
+       
+  
 
 
 !ENDIF // NSIS found

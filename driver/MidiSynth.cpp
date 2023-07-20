@@ -568,6 +568,19 @@ namespace VSTMIDIDRV{
 			selectedChannelId = _wtoi(schannelid.c_str());
 		}
 
+		DWORD GetPortBOffset()
+		{
+			DWORD portbOffset = 2;
+			HKEY hKey;
+
+			long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+			if (result == NO_ERROR) {
+				DWORD size = 4;
+				RegQueryValueEx(hKey, L"PortBOffset", NULL, NULL, (LPBYTE)&portbOffset, &size);
+			}
+			return portbOffset;
+		}
+
 	public:
 		BassAsioOut()
 		{
@@ -625,11 +638,12 @@ namespace VSTMIDIDRV{
 				if (!BASS_ASIO_ChannelJoin(FALSE, (channelId + 1) % info.outputs, channelId)) return -2;
 
 				if (channels == 4) {
+					DWORD offset = GetPortBOffset();
 					// Join the next channel to it (quad left)
-					if (!BASS_ASIO_ChannelJoin(FALSE, (channelId + 2) % info.outputs, channelId)) return -2;
+					if (!BASS_ASIO_ChannelJoin(FALSE, (channelId + offset) % info.outputs, channelId)) return -2;
 
 					// Join the next channel to it (quad right)
-					if (!BASS_ASIO_ChannelJoin(FALSE, (channelId + 3) % info.outputs, channelId)) return -2;
+					if (!BASS_ASIO_ChannelJoin(FALSE, (channelId + offset + 1) % info.outputs, channelId)) return -2;
 				}
 
 			}
@@ -861,7 +875,7 @@ namespace VSTMIDIDRV{
 
 	unsigned int MidiSynth::MillisToFrames(unsigned int millis){
 		return UINT(sampleRate * millis / 1000.f);
-	}
+	}	
 
 	DWORD GetSampleRate(){
 		DWORD sampleRate = 48000;

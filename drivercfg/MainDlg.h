@@ -90,6 +90,10 @@ public:
 		SetIcon(hIcon, TRUE);
 		HICON hIconSmall = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
 		SetIcon(hIconSmall, FALSE);
+#ifdef WIN64
+
+		SetWindowText(L"VSTi Driver Configuration (x64)");
+#endif		
 		m_ctrlTab.SubclassWindow(GetDlgItem(IDC_TAB));
 		m_view1.Create(m_hWnd);
 		
@@ -125,12 +129,17 @@ public:
 	{
 	
 		BOOL dummy;
-		if(m_ctrlTab.GetCurSel() == 0 && m_view3.DriverChanged)
+		if(m_ctrlTab.GetCurSel() == 0 && m_view3.GetDriverChanged())
 		{
 			m_view1.ResetBufferSizes();
 			m_view1.OnCbnSelchangeBuffersize(0, 0, 0, dummy);
 			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);
-			m_view3.DriverChanged = false;
+			m_view3.SetDriverChanged(false);
+		}
+		else if (m_ctrlTab.GetCurSel() == 1)
+		{
+			CString selectedDriverMode = LoadOutputDriver(L"Driver Mode");
+		  	m_view3.ShowPortBControls(isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0 && is4chMode);	
 		}
 		
         bHandled = false;
