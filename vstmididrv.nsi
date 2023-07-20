@@ -189,9 +189,12 @@ REGDONE:
   ${If} ${RunningX64}
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe"'
     WriteRegStr HKLM "Software\VST MIDI Driver" "path" "$WINDIR\SysWow64\vstmididrv"
+    SetOutPath "$WINDIR\SysWow64\vstmididrv" 
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Uninstall.lnk" "$WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe" "" "$WINDIR\SysWow64\vstmididrvuninstall.exe" 0
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe" 0
+    SetOutPath "$WINDIR\System32\vstmididrv" 
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver (x64).lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
+    SetOutPath "$WINDIR\SysNative\vstmididrv" 
   ${Else}
     WriteRegStr HKLM "Software\VST MIDI Driver" "path" "$WINDIR\System32\vstmididrv"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe"'
