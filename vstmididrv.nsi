@@ -129,7 +129,7 @@ Section "Needed (required)"
     File output\vsthost32.exe
     File output\64\vsthost64.exe
     
-    ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "seib.info" "ROOT\vstmididrv"
+    ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "falcosoft" "ROOT\vstmididrv"
     pop $2
     pop $0
     pop $1
@@ -164,7 +164,7 @@ Section "Needed (required)"
     File $%TEMP%\vstmididrvuninstall.exe
 !endif
     
-    ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "seib.info" "ROOT\vstmididrv"
+    ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "falcosoft" "ROOT\vstmididrv"
     pop $2
     pop $0
     pop $1

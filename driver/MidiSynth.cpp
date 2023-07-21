@@ -1003,6 +1003,8 @@ namespace VSTMIDIDRV{
 
 	int MidiSynth::Init(unsigned uDeviceID){
 		LoadSettings();
+		midiVol[0] = 1.0f;
+		midiVol[1] = 1.0f;
 
 		usingFloat = IsXPOrNewer();
 		useAsio = UseAsio();
@@ -1086,7 +1088,16 @@ namespace VSTMIDIDRV{
 	}
 
 	void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg){
-		synthMutex.Enter();
+		
+		if (midiVol[uDeviceID] != 1.0f) {
+			if ((msg & 0xF0) == 0x90 ) {				
+				unsigned char velocity = ((unsigned char*)(&msg))[2]; 
+				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : max(int(velocity * midiVol[uDeviceID]), 1);		  
+				((unsigned char*)(&msg))[2] = velocity;				
+			}
+		}
+
+		synthMutex.Enter();		
 
 		if (useAsio) midiStream.PutMessage(uDeviceID, msg, min(bassAsioOut.GetPos() + midiLatency, bufferSize - 1));
 		else midiStream.PutMessage(uDeviceID, msg, (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize));
@@ -1101,6 +1112,10 @@ namespace VSTMIDIDRV{
 		else midiStream.PutSysex(uDeviceID, bufpos, len, (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize));
 
 		synthMutex.Leave();
+	}
+
+	void MidiSynth::SetVolume(unsigned uDeviceID, float volume){
+	    midiVol[uDeviceID] = volume;
 	}
 
 	void MidiSynth::Close(){

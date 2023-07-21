@@ -16,6 +16,7 @@
  */
 
 #include "stdafx.h"
+#include <math.h>
 
 extern "C" { HINSTANCE hinst_vst_driver = 0; }
 
@@ -43,6 +44,7 @@ struct Driver {
 	bool open;
 	int clientCount;
 	HDRVR hdrvr;
+	DWORD volume;
 	struct Client {
 		bool allocated;
 		DWORD_PTR instance;
@@ -77,6 +79,7 @@ STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwP
 		drivers[driverNum].open = true;
 		drivers[driverNum].clientCount = 0;
 		drivers[driverNum].hdrvr = hdrvr;
+		drivers[driverNum].volume = 0xFFFFFFFF;
 		driverCount++;
 		return DRV_OK;
 	case DRV_INSTALL:
@@ -134,7 +137,7 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 		myCapsA->wVoices = 0;
 		myCapsA->wNotes = 0;
 		myCapsA->wChannelMask = 0xffff;
-		myCapsA->dwSupport = 0;
+		myCapsA->dwSupport = MIDICAPS_VOLUME;
 		return MMSYSERR_NOERROR;
 
 	case (sizeof(MIDIOUTCAPSW)):
@@ -148,7 +151,7 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 		myCapsW->wVoices = 0;
 		myCapsW->wNotes = 0;
 		myCapsW->wChannelMask = 0xffff;
-		myCapsW->dwSupport = 0;
+		myCapsW->dwSupport = MIDICAPS_VOLUME;
 		return MMSYSERR_NOERROR;
 
 	case (sizeof(MIDIOUTCAPS2A)):
@@ -162,7 +165,7 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 		myCaps2A->wVoices = 0;
 		myCaps2A->wNotes = 0;
 		myCaps2A->wChannelMask = 0xffff;
-		myCaps2A->dwSupport = 0;
+		myCaps2A->dwSupport = MIDICAPS_VOLUME;
 		return MMSYSERR_NOERROR;
 
 	case (sizeof(MIDIOUTCAPS2W)):
@@ -176,7 +179,7 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 		myCaps2W->wVoices = 0;
 		myCaps2W->wNotes = 0;
 		myCaps2W->wChannelMask = 0xffff;
-		myCaps2W->dwSupport = 0;
+		myCaps2W->dwSupport = MIDICAPS_VOLUME;
 		return MMSYSERR_NOERROR;
 
 	default:
@@ -259,7 +262,13 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		{			
 			 if(!drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
 
-			 if(!drivers[0].clientCount && !drivers[1].clientCount) {
+			 int clientCounts = 0;
+			 for (int driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
+				 clientCounts += drivers[driverNum].clientCount;
+				 if (clientCounts) break;
+			 }
+
+			 if(!clientCounts) {
 				midiSynth.Close();
 				synthOpened = false;
 			 }
@@ -295,9 +304,18 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		midiHdr->dwFlags &= ~MHDR_INQUEUE;
 		DoCallback(uDeviceID, dwUser, MOM_DONE, dwParam1, NULL);
  		return MMSYSERR_NOERROR;
+ 	
+	case MODM_GETVOLUME:
+		dwParam1 = driver->volume;
+		return MMSYSERR_NOERROR;	
+		
+	case MODM_SETVOLUME:
+		driver->volume = dwParam1;	 
+		midiSynth.SetVolume(uDeviceID, sqrt(float(LOWORD(dwParam1)) / 65535.f)); //falco: for separate port A/B note velocity
+		return MMSYSERR_NOERROR;	
 
 	case MODM_GETNUMDEVS:
-		return 0x2;
+		return MAX_DRIVERS;
 
 	default:
 		return MMSYSERR_NOERROR;

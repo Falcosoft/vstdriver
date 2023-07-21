@@ -34,6 +34,7 @@ private:
 	bool usingFloat;
 	bool useAsio;
 	float outputGain;
+	float midiVol[2];
 	WORD channels;
 
 	short *buffer;
@@ -58,6 +59,7 @@ public:
 	void RenderFloat(float *bufpos, DWORD totalFrames);	
 	void PushMIDI(unsigned uDeviceID, DWORD msg);
 	void PlaySysex(unsigned uDeviceID, unsigned char *bufpos, DWORD len);
+	void SetVolume(unsigned uDeviceID, float volume);
 };
 
 }
