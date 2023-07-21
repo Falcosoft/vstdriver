@@ -306,7 +306,7 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
  		return MMSYSERR_NOERROR;
  	
 	case MODM_GETVOLUME:
-		dwParam1 = driver->volume;
+	    *(DWORD*)dwParam1 = driver->volume;
 		return MMSYSERR_NOERROR;	
 		
 	case MODM_SETVOLUME:
