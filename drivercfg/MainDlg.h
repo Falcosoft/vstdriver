@@ -53,6 +53,7 @@ public:
 	CView1 m_view1;
 	CView2 m_view2;
 	CView3 m_view3;
+	CButton alwaysOnTop;
 
 	virtual BOOL PreTranslateMessage(MSG* pMsg)
 	{
@@ -73,6 +74,7 @@ public:
 		COMMAND_ID_HANDLER(IDOK, OnOK)
 		COMMAND_ID_HANDLER(IDCANCEL, OnCancel)
 		NOTIFY_HANDLER(IDC_TAB, TCN_SELCHANGE, OnTcnSelchangeTab)
+		COMMAND_HANDLER(IDC_ALWAYSONTOP, BN_CLICKED, OnBnClickedAlwaysOnTop)
 		REFLECT_NOTIFICATIONS();		
 	END_MSG_MAP()
 
@@ -84,6 +86,8 @@ public:
 	LRESULT OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
 		// center the dialog on the screen
+		alwaysOnTop = GetDlgItem(IDC_ALWAYSONTOP);
+		alwaysOnTop.SetCheck(1);
 		CenterWindow();
 		// set icons
 		HICON hIcon = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXICON), ::GetSystemMetrics(SM_CYICON));
@@ -174,5 +178,15 @@ public:
 	{
 		DestroyWindow();
 		::PostQuitMessage(nVal);
+	}
+
+	LRESULT CMainDlg::OnBnClickedAlwaysOnTop(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		if(alwaysOnTop.GetCheck())
+			SetWindowPos(HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+		else
+			SetWindowPos(HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);		
+
+		return 0;
 	}
 };
