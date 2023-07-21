@@ -5,7 +5,7 @@
 #define VERSION_PATCH                   0
 #define VERSION_MAJOR                   1
 #define VERSION_BUILD                   1
-#define VERSION_MINOR                   4
+#define VERSION_MINOR                   5
 #define IDD_ADVANCED                    102
 #define IDD_ABOUTBOX                    103
 #define IDD_MAIN                        103
@@ -51,7 +51,7 @@
 #define IDC_COMBO2                      1029
 #define IDC_COMBO_PORTB                 1029
 #define IDC_STATIC_PORTB                1030
-#define IDC_SPIN1                       1031
+#define IDC_ALWAYSONTOP                 1031
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
