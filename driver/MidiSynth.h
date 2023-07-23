@@ -23,6 +23,20 @@ class VSTDriver;
 
 namespace VSTMIDIDRV {
 
+	enum : unsigned int
+	{
+		FailedToOpen = 0,
+		FailedToPrepare = 1,
+		FailedToReset = 2,
+		FailedToUnprepare = 3,
+		FailedToClose = 4,
+		FailedToWrite = 5,
+		FailedToPause = 6,
+		FailedToResume = 7,
+		FailedToGetPosition = 8,
+		FailedToGetSamples = 9,
+	};
+
 class MidiSynth {
 private:
 	unsigned int sampleRate;
@@ -35,7 +49,7 @@ private:
 	bool useAsio;
 	float outputGain;
 	float midiVol[2];
-	WORD channels;
+	WORD channels;	
 
 	short *buffer;
 	float *bufferf;

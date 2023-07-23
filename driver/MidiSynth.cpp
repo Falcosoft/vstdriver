@@ -217,6 +217,7 @@ namespace VSTMIDIDRV{
 		//DWORD getPosWraps;
 		bool usingFloat;
 		WORD channels;
+		bool errorShown[10];
 
 		volatile UINT64 prevPlayPos;
 		volatile bool stopProcessing;
@@ -233,6 +234,7 @@ namespace VSTMIDIDRV{
 				callback = (DWORD_PTR)hEvent;
 				callbackType = CALLBACK_EVENT;
 			}
+			for (int i = 0; i < 10; i++) errorShown[i] = false;
 
 			//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;
 
@@ -260,7 +262,10 @@ namespace VSTMIDIDRV{
 			// Open waveout device
 			int wResult = waveOutOpen(&hWaveOut, GetWaveOutDeviceId(), useFloat ? &wFormatFloat.Format : (LPWAVEFORMATEX)&wFormat, callback, (DWORD_PTR)&midiSynth, callbackType);
 			if (wResult != MMSYSERR_NOERROR) {
-				MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				if (!errorShown[VSTMIDIDRV::FailedToOpen]) {
+					MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					errorShown[VSTMIDIDRV::FailedToOpen] = true;
+				}
 				return 2;
 			}
 
@@ -286,7 +291,11 @@ namespace VSTMIDIDRV{
 				}
 				wResult = waveOutPrepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
 				if (wResult != MMSYSERR_NOERROR) {
-					MessageBox(NULL, L"Failed to Prepare Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					if (!errorShown[VSTMIDIDRV::FailedToPrepare]) {
+						MessageBox(NULL, L"Failed to Prepare Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToPrepare] = true;
+					}
+					
 					return 3;
 				}
 			}
@@ -303,14 +312,22 @@ namespace VSTMIDIDRV{
 			}
 			int wResult = waveOutReset(hWaveOut);
 			if (wResult != MMSYSERR_NOERROR) {
-				MessageBox(NULL, L"Failed to Reset WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				if (!errorShown[VSTMIDIDRV::FailedToReset]) {
+						MessageBox(NULL, L"Failed to Reset WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToReset] = true;
+					}
+				
 				return 8;
 			}
 
 			for (UINT i = 0; i < chunks; i++) {
 				wResult = waveOutUnprepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
 				if (wResult != MMSYSERR_NOERROR) {
-					MessageBox(NULL, L"Failed to Unprepare Wave Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					if (!errorShown[VSTMIDIDRV::FailedToUnprepare]) {
+						MessageBox(NULL, L"Failed to Unprepare Wave Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToUnprepare] = true;
+					}
+					
 					return 8;
 				}
 			}
@@ -319,7 +336,11 @@ namespace VSTMIDIDRV{
 
 			wResult = waveOutClose(hWaveOut);
 			if (wResult != MMSYSERR_NOERROR) {
-				MessageBox(NULL, L"Failed to Close WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				if (!errorShown[VSTMIDIDRV::FailedToClose]) {
+						MessageBox(NULL, L"Failed to Close WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToClose] = true;
+					}
+				
 				return 8;
 			}
 			if (hEvent != NULL) {
@@ -334,7 +355,11 @@ namespace VSTMIDIDRV{
 			prevPlayPos = 0;
 			for (UINT i = 0; i < chunks; i++) {
 				if (waveOutWrite(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
-					MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					if (!errorShown[VSTMIDIDRV::FailedToWrite]) {
+						MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToWrite] = true;
+					}
+					
 					return 4;
 				}
 			}
@@ -344,7 +369,11 @@ namespace VSTMIDIDRV{
 
 		int Pause(){
 			if (waveOutPause(hWaveOut) != MMSYSERR_NOERROR) {
-				MessageBox(NULL, L"Failed to Pause wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				if (!errorShown[VSTMIDIDRV::FailedToPause]) {
+						MessageBox(NULL, L"Failed to Pause wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToPause] = true;
+					}
+				
 				return 9;
 			}
 			return 0;
@@ -352,7 +381,11 @@ namespace VSTMIDIDRV{
 
 		int Resume(){
 			if (waveOutRestart(hWaveOut) != MMSYSERR_NOERROR) {
-				MessageBox(NULL, L"Failed to Resume wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				if (!errorShown[VSTMIDIDRV::FailedToResume]) {
+						MessageBox(NULL, L"Failed to Resume wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToResume] = true;
+					}
+				
 				return 9;
 			}
 			return 0;
@@ -376,11 +409,19 @@ namespace VSTMIDIDRV{
 			mmTime.wType = TIME_SAMPLES;
 
 			if (waveOutGetPosition(hWaveOut, &mmTime, sizeof(MMTIME)) != MMSYSERR_NOERROR) {
-				MessageBox(NULL, L"Failed to get current playback position", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				if (!errorShown[VSTMIDIDRV::FailedToGetPosition]) {
+						MessageBox(NULL, L"Failed to get current playback position", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToGetPosition] = true;
+					}
+				
 				return 10;
 			}
 			if (mmTime.wType != TIME_SAMPLES) {
-				MessageBox(NULL, L"Failed to get # of samples played", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+				if (!errorShown[VSTMIDIDRV::FailedToGetSamples]) {
+						MessageBox(NULL, L"Failed to get # of samples played", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						errorShown[VSTMIDIDRV::FailedToGetSamples] = true;
+					}
+				
 				return 10;
 			}
 			mmTime.u.sample &= WRAP_MASK;
@@ -431,7 +472,11 @@ namespace VSTMIDIDRV{
 							else
 								midiSynth.Render((short*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / (sizeof(short) * _this->channels));
 							if (waveOutWrite(waveOut.hWaveOut, &waveOut.WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
-								MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+								if (!_this->errorShown[VSTMIDIDRV::FailedToWrite]) {
+									MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+									_this->errorShown[VSTMIDIDRV::FailedToWrite] = true;
+								}
+								
 							}
 						}
 					}
@@ -1038,7 +1083,7 @@ namespace VSTMIDIDRV{
 	int MidiSynth::Init(unsigned uDeviceID){
 		LoadSettings();
 		midiVol[0] = 1.0f;
-		midiVol[1] = 1.0f;
+		midiVol[1] = 1.0f;		
 
 		usingFloat = IsXPOrNewer();
 		useAsio = UseAsio();
