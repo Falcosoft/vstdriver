@@ -24,7 +24,7 @@ extern "C" HINSTANCE hinst_vst_driver = NULL;
 
 static HINSTANCE bassasio = NULL;       // bassasio handle  
 
-static bool isASIO = false;
+static BOOL isASIO = false;
 static bool is4chMode = false;
 static DWORD portBOffsetVal = 2;
 
@@ -49,7 +49,7 @@ std::wstring stripExtension(const std::wstring& fileName)
 	return fileName;
 }
 
-static bool IsASIO() 
+static BOOL IsASIO() 
 {		
 	TCHAR installpath[MAX_PATH];        
 	TCHAR bassasiopath[MAX_PATH];	
@@ -76,7 +76,7 @@ static bool IsASIO()
 		return BASS_ASIO_GetDeviceInfo(0, &info);			
 	}	
 
-	return false;	
+	return FALSE;	
 }
 
 static void settings_load(VSTDriver * effect)
@@ -312,7 +312,7 @@ public:
 	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
 	   reg.SetDWORDValue(L"Use4ChannelMode",vst_4chmode.GetCheck());
 	   reg.Close();	
-	   is4chMode = vst_4chmode.GetCheck();
+	   is4chMode = vst_4chmode.GetCheck() !=  BST_UNCHECKED;
 
        return 0;
    }
@@ -349,8 +349,7 @@ public:
 	   {
 		   int vol;
 		   long lResult;
-		   CRegKeyEx reg;
-	       wchar_t tmpBuff[8];
+		   CRegKeyEx reg;	       
 	       lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
 	       vol = volume_slider.GetPos();
 	       reg.SetDWORDValue(L"Gain", (DWORD)vol);
@@ -468,7 +467,11 @@ public:
 			vst_buffer_size.AddString(L"40");			
 			vst_buffer_size.SelectString(-1, L"Default");			
 
+#ifdef WIN64
+			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
+#else
 			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+#endif
 			CString selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
 			int selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);
@@ -478,18 +481,19 @@ public:
 			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, selectedOutputChannelInt + portBOffsetVal, selectedOutputChannelInt + portBOffsetVal + 1); 
 			vst_4chmode.SetWindowTextW(tmpBuff);
 			
-			BASS_ASIO_Init(selectedOutputDriverInt, 0);			
+			if (BASS_ASIO_Init(selectedOutputDriverInt, 0))
+			{
+				if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
+				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
+				if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(L"44100");
+				if(BASS_ASIO_CheckRate(48000.0))vst_sample_rate.AddString(L"48000");
+				if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(L"49716");
+				if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(L"96000");
+				if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(L"192000");
+				vst_sample_rate.SelectString(-1, L"48000");
 
-			if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
-			if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
-			if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(L"44100");
-			if(BASS_ASIO_CheckRate(48000.0))vst_sample_rate.AddString(L"48000");
-			if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(L"49716");
-			if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(L"96000");
-			if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(L"192000");
-			vst_sample_rate.SelectString(-1, L"48000");
-
-			BASS_ASIO_Free();
+				BASS_ASIO_Free();
+			}
 
 		}
 		else
@@ -563,24 +567,29 @@ public:
 			vst_buffer_size.AddString(L"40");			
 			vst_buffer_size.SelectString(-1, L"Default");
 			
+#ifdef WIN64
+			selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
+#else
 			selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+#endif
 			selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
 			selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);
 			selectedOutputDriverInt = _wtoi(selectedOutputDriver.GetString());
 				
-			BASS_ASIO_Init(selectedOutputDriverInt, 0);			
+			if (BASS_ASIO_Init(selectedOutputDriverInt, 0))	
+			{
+				if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
+				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
+				if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(L"44100");
+				if(BASS_ASIO_CheckRate(48000.0))vst_sample_rate.AddString(L"48000");
+				if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(L"49716");
+				if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(L"96000");
+				if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(L"192000");
+				vst_sample_rate.SelectString(-1, L"48000");
 
-			if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
-			if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
-			if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(L"44100");
-			if(BASS_ASIO_CheckRate(48000.0))vst_sample_rate.AddString(L"48000");
-			if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(L"49716");
-			if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(L"96000");
-			if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(L"192000");
-			vst_sample_rate.SelectString(-1, L"48000");
-
-			BASS_ASIO_Free();
+				BASS_ASIO_Free();
+			}
 		}
 		else
 		{
@@ -629,7 +638,7 @@ class CView3 : public CDialogImpl<CView3>
 	CButton asio_openctlp;
 	CStatic portbOffsetText;
 	bool driverChanged;
-	unsigned int *drvChArr;
+	std::vector<int> drvChArr;
            
 public:	
 
@@ -650,13 +659,11 @@ public:
     CView3()
     {		
 		driverChanged = false;
-		drvChArr = NULL;
-
+		drvChArr.reserve(8); //reasonable starting capacity
     }
 
     ~CView3()
-    {
-		if(drvChArr) delete [] drvChArr;
+    {		
 		        
     }
 
@@ -726,16 +733,25 @@ public:
 	{        
 		CString deviceItem;
         CString deviceName;
-        CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+#ifdef WIN64
+        CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
+#else
+		CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+#endif       
+		
+		/* not needed for a vector
+		DWORD deviceCount = 0;
+		for (int i = 0; BASS_ASIO_GetDeviceInfo(i, &asioDeviceInfo); i++)
+		{
+			deviceCount++;
+		}
+		*/
+		
+		playbackDevices.InitStorage(64, 64 * sizeof(TCHAR));
+		playbackDevices.SendMessageW(WM_SETREDRAW, FALSE, 0); //let's speed up ListBox drawing in case of many ASIO drivers/channels 
 
         BASS_ASIO_DEVICEINFO asioDeviceInfo;
-		int count = 0;
-		for (int i = 0; BASS_ASIO_GetDeviceInfo(i, &asioDeviceInfo); i++)
-		count++;
-
-		drvChArr = new unsigned int[count];
-		
-        for (size_t deviceId = 0; BASS_ASIO_Init(deviceId, 0); ++deviceId)
+		for (int deviceId = 0; BASS_ASIO_Init(deviceId, 0); ++deviceId)
         {
             BASS_ASIO_GetDeviceInfo(deviceId, &asioDeviceInfo);
 
@@ -743,11 +759,11 @@ public:
 
             BASS_ASIO_INFO info;
             BASS_ASIO_GetInfo(&info);
-			drvChArr[deviceId] = info.outputs;
+			drvChArr.push_back(info.outputs);
 
             BASS_ASIO_CHANNELINFO channelInfo;
 
-            for (size_t channel = 0; BASS_ASIO_ChannelGetInfo(FALSE, channel, &channelInfo); ++channel)
+            for (DWORD channel = 0; BASS_ASIO_ChannelGetInfo(FALSE, channel, &channelInfo); ++channel)
             {
                 deviceItem.Format(L"%02d.%02d - %s %s", deviceId, channel, deviceName, CString(channelInfo.name));
                
@@ -763,7 +779,14 @@ public:
 
             BASS_ASIO_Free();
 		}
-		int drvId = wcstol(selectedOutputDriver.Left(2), NULL, 10);
+
+		playbackDevices.SendMessageW(WM_SETREDRAW, TRUE, 0);
+		playbackDevices.RedrawWindow(NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+		
+		DWORD drvId = wcstol(selectedOutputDriver.Left(2), NULL, 10);
+		
+		if (drvId >= drvChArr.size()) return;
+		
 		unsigned int portCount = drvChArr[drvId];
 		portbOffset.ResetContent();
 		wchar_t tmpBuff[8];
@@ -815,11 +838,15 @@ public:
 	LRESULT OnButtonOpen(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/ )
 	{
 		CString deviceName;
-        CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+#ifdef WIN64
+        CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
+#else
+		CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+#endif
 
 		 BASS_ASIO_DEVICEINFO asioDeviceInfo;
 
-        for (size_t deviceId = 0; BASS_ASIO_Init(deviceId, 0); ++deviceId)
+        for (int deviceId = 0; BASS_ASIO_Init(deviceId, 0); ++deviceId)
         {
             BASS_ASIO_GetDeviceInfo(deviceId, &asioDeviceInfo);
 
@@ -900,10 +927,16 @@ public:
 
                 if (selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0)
                 {
-                    SaveOutputDriver(L"Bass ASIO", selectedOutputDriver);
+                    
+#ifdef WIN64
+					SaveOutputDriver(L"Bass ASIO x64", selectedOutputDriver);
+#else
+					SaveOutputDriver(L"Bass ASIO", selectedOutputDriver);
+#endif
 					driverChanged = true;									
 	   
-	                int drvId = wcstol(selectedOutputDriver.Left(2), NULL, 10);
+	                DWORD drvId = wcstol(selectedOutputDriver.Left(2), NULL, 10);
+					if (drvId >= drvChArr.size()) return 0;
 					unsigned int portCount = drvChArr[drvId];
 					portbOffset.ResetContent();
 					wchar_t tmpBuff[8];

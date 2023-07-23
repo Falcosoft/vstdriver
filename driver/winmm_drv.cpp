@@ -310,7 +310,7 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		return MMSYSERR_NOERROR;	
 		
 	case MODM_SETVOLUME:
-		driver->volume = dwParam1;	 
+		driver->volume = (DWORD)dwParam1;	 
 		midiSynth.SetVolume(uDeviceID, sqrt(float(LOWORD(dwParam1)) / 65535.f)); //falco: for separate port A/B note velocity
 		return MMSYSERR_NOERROR;	
 

@@ -28,9 +28,7 @@
 #include <string>
 #include <math.h>
 
-using std::string;
 using std::wstring;
-
 
 extern "C"{ extern HINSTANCE hinst_vst_driver; }
 
@@ -198,7 +196,7 @@ namespace VSTMIDIDRV{
 				regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 				RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
 
-				for (size_t deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId) {
+				for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId) {
 					if (!wcscmp(regValue, caps.szPname)) return deviceId;
 
 				}
@@ -541,6 +539,28 @@ namespace VSTMIDIDRV{
 			long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
 			if (result == NO_ERROR)
 			{
+#ifdef WIN64
+				result = RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, NULL, &dwSize);
+				if (result == NO_ERROR && dwType == REG_SZ)
+				{
+					regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
+					RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
+					wresult = regValue;
+				}
+
+				if (wresult.empty()) 
+				{
+					result = RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, NULL, &dwSize);
+					if (result == NO_ERROR && dwType == REG_SZ)
+					{
+						regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
+						RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
+						wresult = regValue;
+					}
+
+				}						
+								
+#else
 				result = RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, NULL, &dwSize);
 				if (result == NO_ERROR && dwType == REG_SZ)
 				{
@@ -548,6 +568,19 @@ namespace VSTMIDIDRV{
 					RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
 					wresult = regValue;
 				}
+
+				if (wresult.empty()) 
+				{
+					result = RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, NULL, &dwSize);
+					if (result == NO_ERROR && dwType == REG_SZ)
+					{
+						regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
+						RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
+						wresult = regValue;
+					}
+
+				}
+#endif				
 			}
 
 			return wresult;
@@ -558,6 +591,7 @@ namespace VSTMIDIDRV{
 			selectedDeviceId = -1;
 			selectedChannelId = 0;
 			wstring selectedOutputDriver = GetAsioDriverName();
+			if(selectedOutputDriver.empty()) return;
 
 			size_t period = selectedOutputDriver.find(L'.');
 			wstring sdeviceId = selectedOutputDriver.substr(0, period);
@@ -621,7 +655,7 @@ namespace VSTMIDIDRV{
 				sampleRate = (int)BASS_ASIO_GetRate();
 				samplerate = sampleRate;
 
-				buflen = bufferSizeMS == 0 ? 0 : bufferSizeMS * (sampleRate / 1000.0f);
+				buflen = bufferSizeMS == 0 ? 0 : DWORD(bufferSizeMS * (sampleRate / 1000.0f));
 				channels = channelCount;
 
 				BASS_ASIO_INFO info;

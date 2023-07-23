@@ -10,6 +10,9 @@
 // © 2006, Steinberg Media Technologies, All Rights Reserved
 //-------------------------------------------------------------------------------------------------------
 
+#pragma warning(disable : 4996)
+#pragma warning(disable : 4482)
+
 #ifndef __aeffect__
 #define __aeffect__
 

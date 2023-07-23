@@ -68,7 +68,7 @@
 				AdditionalDependencies="winmm.lib Shlwapi.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
-				AdditionalLibraryDirectories="$(DXSDK_DIR)lib\x86;..\external_packages\lib"
+				AdditionalLibraryDirectories="..\external_packages\lib"
 				ModuleDefinitionFile="vstmididrv.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
@@ -128,7 +128,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="..\external_packages"
-				PreprocessorDefinitions="I_ASM;_DEBUG;_USRDLL;_CRT_SECURE_NO_WARNINGS"
+				PreprocessorDefinitions="WIN64;I_ASM;_DEBUG;_USRDLL;_CRT_SECURE_NO_WARNINGS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -151,7 +151,7 @@
 				AdditionalDependencies="dxguid.lib winmm.lib Shlwapi.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
-				AdditionalLibraryDirectories="$(DXSDK_DIR)lib\x64;..\external_packages\lib64"
+				AdditionalLibraryDirectories="..\external_packages\lib64"
 				ModuleDefinitionFile="vstmididrv.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
@@ -234,7 +234,7 @@
 				AdditionalDependencies="winmm.lib Shlwapi.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
-				AdditionalLibraryDirectories="$(DXSDK_DIR)lib\x86;..\external_packages\lib"
+				AdditionalLibraryDirectories="..\external_packages\lib"
 				ModuleDefinitionFile="vstmididrv.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
@@ -298,7 +298,7 @@
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
 				AdditionalIncludeDirectories="..\external_packages"
-				PreprocessorDefinitions="I_ASM;NDEBUG;_USRDLL;_CRT_SECURE_NO_WARNINGS"
+				PreprocessorDefinitions="WIN64;I_ASM;NDEBUG;_USRDLL;_CRT_SECURE_NO_WARNINGS"
 				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				FloatingPointModel="2"
@@ -320,7 +320,7 @@
 				AdditionalDependencies="winmm.lib Shlwapi.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
-				AdditionalLibraryDirectories="$(DXSDK_DIR)lib\x64;..\external_packages\lib64"
+				AdditionalLibraryDirectories="..\external_packages\lib64"
 				ModuleDefinitionFile="vstmididrv.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
@@ -409,6 +409,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\resource.h"
+				>
+			</File>
+			<File
 				RelativePath=".\stdafx.h"
 				>
 			</File>
@@ -426,6 +430,10 @@
 			Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav"
 			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
 			>
+			<File
+				RelativePath=".\vstmididrv.rc"
+				>
+			</File>
 		</Filter>
 	</Files>
 	<Globals>
