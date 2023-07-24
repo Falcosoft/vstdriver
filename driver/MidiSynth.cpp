@@ -783,7 +783,7 @@ namespace VSTMIDIDRV{
 		{
 			if (bassAsio)
 			{
-				//BASS_ASIO_ChannelPause(FALSE, -1);
+				BASS_ASIO_ChannelPause(FALSE, -1);
 			}
 
 			return 0;
@@ -792,10 +792,10 @@ namespace VSTMIDIDRV{
 		int Resume()
 		{
 			if (bassAsio)
-			{
+			{				
+				BASS_ASIO_ChannelReset(FALSE, -1, BASS_ASIO_RESET_PAUSE);
 				if(queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&startTimeQp));
 				else startTime = timeGetTime();
-				//BASS_ASIO_ChannelReset(FALSE, -1, BASS_ASIO_RESET_PAUSE);
 			}
 
 			return 0;
@@ -1162,6 +1162,7 @@ namespace VSTMIDIDRV{
 
 	void MidiSynth::Close(){
 		if (useAsio) {
+			bassAsioOut.Pause();
 			bassAsioOut.Close();
 		}
 		else {

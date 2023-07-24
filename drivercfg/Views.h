@@ -29,12 +29,14 @@ static bool is4chMode = false;
 static DWORD portBOffsetVal = 2;
 
 
+/*
 struct MyDLGTEMPLATE: DLGTEMPLATE
 {
 	WORD ext[3];
 	MyDLGTEMPLATE ()
 	{ memset (this, 0, sizeof(*this)); };
 };
+*/
 
 std::wstring stripExtension(const std::wstring& fileName)
 {
@@ -179,6 +181,15 @@ static CString LoadOutputDriver(CString valueName)
 	return value;
 }
 
+static void SaveDwordValue(LPCTSTR key, DWORD value)
+{	   
+	   CRegKeyEx reg;	   
+	   reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);	   
+	   reg.SetDWORDValue(key, value);
+	   reg.Close();	   
+}
+
+
 #if _MSC_VER > 1000
 #pragma once
 #endif // _MSC_VER > 1000
@@ -192,6 +203,7 @@ class CView1 : public CDialogImpl<CView1>
 	CStatic vst_vendor, vst_effect, file_info;
 	CTrackBarCtrl volume_slider;
 	TCHAR vst_path[MAX_PATH];
+	HANDLE hbrBkgnd;
 
 	VSTDriver * effect;
 public:
@@ -205,19 +217,25 @@ public:
 	   COMMAND_HANDLER(IDC_BUFFERSIZE, CBN_SELCHANGE, OnCbnSelchangeBuffersize)
 	   COMMAND_HANDLER(IDC_SAMPLEFORMAT, CBN_SELCHANGE, OnCbnSelchangeSampleformat)
 	   MESSAGE_HANDLER(WM_HSCROLL, OnHScroll)
+	   MESSAGE_HANDLER(WM_CTLCOLORSTATIC, OnCtlColorStatic)
 	   COMMAND_HANDLER(IDC_USE4CH, BN_CLICKED, OnBnClickedUse4ch)
    END_MSG_MAP()
 
-   CView1() { effect = NULL; }
+   CView1() {
+    effect = NULL; 
+    hbrBkgnd = NULL;
+   }
  
    ~CView1()
    { 
-	   free_vst(); 
-	   if (bassasio)
+     free_vst(); 
+     if (bassasio)
         {         
-		    FreeLibrary(bassasio);
+            FreeLibrary(bassasio);
             bassasio = NULL;
         }
+     
+     if (hbrBkgnd != NULL) DeleteObject(hbrBkgnd);  
    }
 
    void load_settings()
@@ -273,6 +291,24 @@ public:
 	   }
 	   
    }
+   
+   LRESULT OnCtlColorStatic(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+   {
+	   
+	   if (lParam == (LPARAM)GetDlgItem(IDC_VENDOR).m_hWnd || lParam == (LPARAM)GetDlgItem(IDC_EFFECT).m_hWnd)
+	   {
+		   HDC hdcStatic = (HDC)wParam;
+		   SetTextColor(hdcStatic, RGB(0, 0, 0));
+		   SetBkColor(hdcStatic, RGB(220, 220, 220));
+
+		   if (hbrBkgnd == NULL)
+		   {
+			   hbrBkgnd = CreateSolidBrush(RGB(220, 220, 220));
+		   }
+		   return (INT_PTR)hbrBkgnd;
+	   }
+	   return 0;
+   }
 
    LRESULT OnButtonAdd(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/ )
    {
@@ -301,79 +337,55 @@ public:
    }
    
    LRESULT OnClickedSHOWVST(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-   {
-	   long lResult;
-	   CRegKeyEx reg;
-	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
-	   reg.SetDWORDValue(L"ShowVstDialog",vst_showvst.GetCheck());
-	   reg.Close();
-	
+   {  
+	   SaveDwordValue(L"ShowVstDialog", vst_showvst.GetCheck());	
+	   
 	   return 0;
    }
 
    LRESULT OnBnClickedUse4ch(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-   {
-	   long lResult;
-	   CRegKeyEx reg;
-	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
-	   reg.SetDWORDValue(L"Use4ChannelMode",vst_4chmode.GetCheck());
-	   reg.Close();	
+   {   
+	   SaveDwordValue(L"Use4ChannelMode", vst_4chmode.GetCheck());
 	   is4chMode = vst_4chmode.GetCheck() !=  BST_UNCHECKED;
-
-       return 0;
+       
+	   return 0;
    }
 
    LRESULT OnCbnSelchangeSamplerate(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-   {
-	   long lResult;
-	   CRegKeyEx reg;
+   {	   
 	   wchar_t tmpBuff[8];
-	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
 	   vst_sample_rate.GetWindowTextW(tmpBuff, 8);
-	   reg.SetDWORDValue(L"SampleRate",wcstol(tmpBuff, NULL, 10));
-	   reg.Close();
-
+	   SaveDwordValue(L"SampleRate", wcstol(tmpBuff, NULL, 10));
+	   
 	   return 0;
    } 
    
    LRESULT OnCbnSelchangeSampleformat(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
    {
-	   long lResult;
-	   CRegKeyEx reg;
+	   DWORD value;
 	   wchar_t tmpBuff[14];
-	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
-	   vst_sample_format.GetWindowTextW(tmpBuff, 14);
-	   if(!wcscmp(tmpBuff, L"32-bit Float")) reg.SetDWORDValue(L"UseFloat", 1);
-	   else reg.SetDWORDValue(L"UseFloat", 0);	   
-	   reg.Close();
-
+	   vst_sample_format.GetWindowTextW(tmpBuff, 14);	   
+	   if(!wcscmp(tmpBuff, L"32-bit Float")) value = 1;
+	   else value  = 0;	  
+	   SaveDwordValue(L"UseFloat", value);
+	   
 	   return 0;
    } 
 
    LRESULT OnCbnSelchangeBuffersize(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-   {
-	   long lResult;
-	   CRegKeyEx reg;
+   {	  
 	   wchar_t tmpBuff[8];
-	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
 	   vst_buffer_size.GetWindowTextW(tmpBuff, 8);
-	   reg.SetDWORDValue(L"BufferSize",wcstol(tmpBuff, NULL, 10));
-	   reg.Close();
-
+	   SaveDwordValue(L"BufferSize", wcstol(tmpBuff, NULL, 10));
+	   
 	   return 0;
    } 
 
-   LRESULT CView1::OnHScroll(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled) 
+   LRESULT OnHScroll(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled) 
    {	   
 	   if ((HWND)lParam == volume_slider.m_hWnd && LOWORD(wParam) == SB_ENDSCROLL)
-	   {
-		   int vol;
-		   long lResult;
-		   CRegKeyEx reg;	       
-	       lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
-	       vol = volume_slider.GetPos();
-	       reg.SetDWORDValue(L"Gain", (DWORD)vol);
-	       reg.Close();
+	   {		          
+		   SaveDwordValue(L"Gain", (DWORD)volume_slider.GetPos());
 	   }
 	   return 0;
    }
@@ -995,16 +1007,12 @@ public:
 	}
 
 	LRESULT CView3::OnCbnSelchangeComboPortb(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
-	{
-	   long lResult;
-	   CRegKeyEx reg;
-	   wchar_t tmpBuff[8];
-	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	{	   
+	   wchar_t tmpBuff[8];	   
 	   portbOffset.GetWindowTextW(tmpBuff, 8);
 	   portBOffsetVal = wcstol(tmpBuff, NULL, 10);
-	   reg.SetDWORDValue(L"PortBOffset", portBOffsetVal);
-	   reg.Close();
-	   driverChanged = true;
+	   SaveDwordValue(L"PortBOffset", portBOffsetVal);	  
+	   driverChanged = true;	   
 	   
 	   return 0;
 	}
