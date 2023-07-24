@@ -43,8 +43,6 @@ private:
 	unsigned int midiLatency, midiLatencyMS;
 	unsigned int bufferSize, bufferSizeMS;
 	unsigned int chunkSize, chunkSizeMS;
-	bool useRingBuffer;
-	bool resetEnabled;
 	bool usingFloat;
 	bool useAsio;
 	float outputGain;
@@ -67,8 +65,7 @@ public:
 	int Init(unsigned uDeviceID);
 	void InitDialog(unsigned uDeviceID);
 	void Close();
-	int Reset(unsigned uDeviceID);
-	void RenderAvailableSpace();
+	int Reset(unsigned uDeviceID);	
 	void Render(short *bufpos, DWORD totalFrames);
 	void RenderFloat(float *bufpos, DWORD totalFrames);	
 	void PushMIDI(unsigned uDeviceID, DWORD msg);

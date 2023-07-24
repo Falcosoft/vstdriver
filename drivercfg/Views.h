@@ -187,7 +187,7 @@ class CView1 : public CDialogImpl<CView1>
 {
 	
 	CEdit vst_info;
-	CComboBox vst_buffer_size, vst_sample_rate;
+	CComboBox vst_buffer_size, vst_sample_rate, vst_sample_format;
 	CButton vst_load, vst_configure, vst_showvst, vst_4chmode;
 	CStatic vst_vendor, vst_effect, file_info;
 	CTrackBarCtrl volume_slider;
@@ -203,6 +203,7 @@ public:
 	   COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)
 	   COMMAND_HANDLER(IDC_SAMPLERATE, CBN_SELCHANGE, OnCbnSelchangeSamplerate)
 	   COMMAND_HANDLER(IDC_BUFFERSIZE, CBN_SELCHANGE, OnCbnSelchangeBuffersize)
+	   COMMAND_HANDLER(IDC_SAMPLEFORMAT, CBN_SELCHANGE, OnCbnSelchangeSampleformat)
 	   MESSAGE_HANDLER(WM_HSCROLL, OnHScroll)
 	   COMMAND_HANDLER(IDC_USE4CH, BN_CLICKED, OnBnClickedUse4ch)
    END_MSG_MAP()
@@ -243,6 +244,11 @@ public:
 			   vst_4chmode.SetCheck(reg_value);
 			   if (reg_value) is4chMode = true;
 		   }		   
+		   lResult = reg.QueryDWORDValue(L"UseFloat",reg_value);
+		   if (lResult == ERROR_SUCCESS) {			   
+			   if (reg_value) vst_sample_format.SelectString(-1, L"32-bit Float");
+			   else vst_sample_format.SelectString(-1, L"16-bit Int");
+		   }
 		   lResult = reg.QueryDWORDValue(L"SampleRate",reg_value);
 		   if (lResult == ERROR_SUCCESS) {			   
 			   vst_sample_rate.SelectString(-1, _ultow(reg_value, tmpBuff, 10));			   
@@ -258,7 +264,7 @@ public:
 		   lResult = reg.QueryDWORDValue(L"PortBOffset",reg_value);
 		   if (lResult == ERROR_SUCCESS) {
 			   portBOffsetVal = reg_value;
-		   }
+		   }		   
 
 		   reg.Close();
 		   vst_info.SetWindowText(vst_path);
@@ -325,6 +331,20 @@ public:
 	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
 	   vst_sample_rate.GetWindowTextW(tmpBuff, 8);
 	   reg.SetDWORDValue(L"SampleRate",wcstol(tmpBuff, NULL, 10));
+	   reg.Close();
+
+	   return 0;
+   } 
+   
+   LRESULT OnCbnSelchangeSampleformat(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+   {
+	   long lResult;
+	   CRegKeyEx reg;
+	   wchar_t tmpBuff[14];
+	   lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE | KEY_WOW64_32KEY);
+	   vst_sample_format.GetWindowTextW(tmpBuff, 14);
+	   if(!wcscmp(tmpBuff, L"32-bit Float")) reg.SetDWORDValue(L"UseFloat", 1);
+	   else reg.SetDWORDValue(L"UseFloat", 0);	   
 	   reg.Close();
 
 	   return 0;
@@ -529,6 +549,7 @@ public:
 
 		isASIO = IsASIO();
 
+		vst_sample_format = GetDlgItem(IDC_SAMPLEFORMAT);
 		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
         vst_buffer_size = GetDlgItem(IDC_BUFFERSIZE);
 		vst_showvst = GetDlgItem(IDC_SHOWVST);
@@ -554,6 +575,10 @@ public:
 		CString selectedOutputChannel;
 		int selectedOutputChannelInt;
 		int selectedOutputDriverInt;
+
+		vst_sample_format.AddString(L"32-bit Float");
+		vst_sample_format.AddString(L"16-bit Int");
+		vst_sample_format.SelectString(-1, L"32-bit Float");
 
 		if (isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0) 
 		{

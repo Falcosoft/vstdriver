@@ -18,6 +18,18 @@
 
 #undef GetMessage
 
+
+// Define WAVEFORMATEXTENSIBLE GUIDS if they are missing
+#if !defined( KSDATAFORMAT_SUBTYPE_PCM )
+struct __declspec(uuid("00000001-0000-0010-8000-00aa00389b71")) KSDATAFORMAT_SUBTYPE_PCM_STRUCT;
+#define KSDATAFORMAT_SUBTYPE_PCM __uuidof(KSDATAFORMAT_SUBTYPE_PCM_STRUCT) 
+#endif
+
+#if !defined( KSDATAFORMAT_SUBTYPE_IEEE_FLOAT )
+struct __declspec(uuid("00000003-0000-0010-8000-00aa00389b71")) KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT;
+#define KSDATAFORMAT_SUBTYPE_IEEE_FLOAT __uuidof(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT)  
+#endif
+
 // Define BASSASIO functions as pointers
 #define BASSASIODEF(f) (WINAPI *f)
 #define LOADBASSASIOFUNCTION(f) *((void**)&f)=GetProcAddress(bassAsio,#f)
@@ -207,6 +219,23 @@ namespace VSTMIDIDRV{
 
 	}
 
+	static DWORD GetDwordData (LPCWSTR valueName, DWORD defaultValue) 
+	{
+		HKEY hKey;
+		DWORD retResult = defaultValue;		
+
+		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+		if (result == NO_ERROR) {
+			DWORD size = 4;
+			result = RegQueryValueEx(hKey, valueName, NULL, NULL, (LPBYTE)&retResult, &size);
+			if (result == NO_ERROR) {				
+				return retResult;			 
+			}
+		}
+
+		return retResult;
+	}
+
 	static class WaveOutWin32{
 	private:
 		HWAVEOUT hWaveOut;
@@ -223,44 +252,38 @@ namespace VSTMIDIDRV{
 		volatile bool stopProcessing;
 
 	public:
-		int Init(void* buffer, unsigned int bufferSize, unsigned int chunkSize, bool useRingBuffer, unsigned int sampleRate, bool useFloat, WORD channelCount){
+		int Init(void* buffer, unsigned int bufferSize, unsigned int chunkSize, unsigned int sampleRate, bool useFloat, WORD channelCount){
 			DWORD callbackType = CALLBACK_NULL;
 			DWORD_PTR callback = NULL;
 			usingFloat = useFloat;
 			hEvent = NULL;
 			hThread = NULL;
-			if (!useRingBuffer) {
-				hEvent = CreateEvent(NULL, false, true, NULL);
-				callback = (DWORD_PTR)hEvent;
-				callbackType = CALLBACK_EVENT;
-			}
+			hEvent = CreateEvent(NULL, false, true, NULL);
+			callback = (DWORD_PTR)hEvent;
+			callbackType = CALLBACK_EVENT;
+			
 			for (int i = 0; i < 10; i++) errorShown[i] = false;
 
 			//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;
 
-			struct __declspec(uuid("00000003-0000-0010-8000-00aa00389b71")) KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT;
-#define KSDATAFORMAT_SUBTYPE_IEEE_FLOAT __uuidof(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT)
-
 			channels = channelCount;
+			
+			WAVEFORMATEXTENSIBLE wFormat;
+			memset( &wFormat, 0, sizeof(wFormat));
 
-			PCMWAVEFORMAT wFormat = { WAVE_FORMAT_PCM, channels, sampleRate, sampleRate * channels * 2, channels * 2, 16 };
-			WAVEFORMATEXTENSIBLE wFormatFloat;
-			memset( &wFormatFloat, 0, sizeof(wFormatFloat));
-
-			wFormatFloat.Format.cbSize = sizeof(wFormatFloat) - sizeof(wFormatFloat.Format);
-			wFormatFloat.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
-			wFormatFloat.Format.nChannels = channels;
-			wFormatFloat.Format.nSamplesPerSec = sampleRate;
-			wFormatFloat.Format.wBitsPerSample = 32;
-			wFormatFloat.Format.nBlockAlign = wFormatFloat.Format.nChannels * wFormatFloat.Format.wBitsPerSample / 8;
-			wFormatFloat.Format.nAvgBytesPerSec = wFormatFloat.Format.nBlockAlign * wFormatFloat.Format.nSamplesPerSec;
-			wFormatFloat.dwChannelMask = channels == 2 ? SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;
-			wFormatFloat.Samples.wValidBitsPerSample = wFormatFloat.Format.wBitsPerSample;
-			wFormatFloat.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
-
+			wFormat.Format.cbSize = sizeof(wFormat) - sizeof(wFormat.Format);
+			wFormat.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+			wFormat.Format.nChannels = channels;
+			wFormat.Format.nSamplesPerSec = sampleRate;
+			wFormat.Format.wBitsPerSample = useFloat ? 32 : 16;
+			wFormat.Format.nBlockAlign = wFormat.Format.nChannels * wFormat.Format.wBitsPerSample / 8;
+			wFormat.Format.nAvgBytesPerSec = wFormat.Format.nBlockAlign * wFormat.Format.nSamplesPerSec;
+			wFormat.dwChannelMask = channels == 2 ? SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;
+			wFormat.Samples.wValidBitsPerSample = wFormat.Format.wBitsPerSample;
+			wFormat.SubFormat = useFloat ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : KSDATAFORMAT_SUBTYPE_PCM;
 
 			// Open waveout device
-			int wResult = waveOutOpen(&hWaveOut, GetWaveOutDeviceId(), useFloat ? &wFormatFloat.Format : (LPWAVEFORMATEX)&wFormat, callback, (DWORD_PTR)&midiSynth, callbackType);
+			int wResult = waveOutOpen(&hWaveOut, GetWaveOutDeviceId(), &wFormat.Format, callback, (DWORD_PTR)&midiSynth, callbackType);
 			if (wResult != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToOpen]) {
 					MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
@@ -270,32 +293,26 @@ namespace VSTMIDIDRV{
 			}
 
 			// Prepare headers
-			chunks = useRingBuffer ? 1 : bufferSize / chunkSize;
+			chunks = bufferSize / chunkSize;
 			WaveHdr = new WAVEHDR[chunks];
 			LPSTR chunkStart = (LPSTR)buffer;
 			DWORD chunkBytes = (useFloat ? sizeof(float) * channels : sizeof(short) * channels) * chunkSize;
 			DWORD bufferBytes = (useFloat ? sizeof(float) * channels : sizeof(short) * channels) * bufferSize;
 			for (UINT i = 0; i < chunks; i++) {
-				if (useRingBuffer) {
-					WaveHdr[i].dwBufferLength = bufferBytes;
-					WaveHdr[i].lpData = chunkStart;
-					WaveHdr[i].dwFlags = WHDR_BEGINLOOP | WHDR_ENDLOOP;
-					WaveHdr[i].dwLoops = -1L;
-				}
-				else {
-					WaveHdr[i].dwBufferLength = chunkBytes;
-					WaveHdr[i].lpData = chunkStart;
-					WaveHdr[i].dwFlags = 0L;
-					WaveHdr[i].dwLoops = 0L;
-					chunkStart += chunkBytes;
-				}
+
+				WaveHdr[i].dwBufferLength = chunkBytes;
+				WaveHdr[i].lpData = chunkStart;
+				WaveHdr[i].dwFlags = 0L;
+				WaveHdr[i].dwLoops = 0L;
+				chunkStart += chunkBytes;
+
 				wResult = waveOutPrepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
 				if (wResult != MMSYSERR_NOERROR) {
 					if (!errorShown[VSTMIDIDRV::FailedToPrepare]) {
 						MessageBox(NULL, L"Failed to Prepare Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 						errorShown[VSTMIDIDRV::FailedToPrepare] = true;
 					}
-					
+
 					return 3;
 				}
 			}
@@ -455,40 +472,34 @@ namespace VSTMIDIDRV{
 		static void RenderingThread(void* pthis){
 			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 			WaveOutWin32* _this = (WaveOutWin32*)pthis;
-			if (waveOut.chunks == 1) {
-				// Rendering using single looped ring buffer
-				while (!waveOut.stopProcessing) {
-					midiSynth.RenderAvailableSpace();
-				}
-			}
-			else {
-				while (!waveOut.stopProcessing) {
-					bool allBuffersRendered = true;
-					for (UINT i = 0; i < waveOut.chunks; i++) {
-						if (waveOut.WaveHdr[i].dwFlags & WHDR_DONE) {
-							allBuffersRendered = false;
-							if (_this->usingFloat)
-								midiSynth.RenderFloat((float*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / (sizeof(float) * _this->channels));
-							else
-								midiSynth.Render((short*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / (sizeof(short) * _this->channels));
-							if (waveOutWrite(waveOut.hWaveOut, &waveOut.WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
-								if (!_this->errorShown[VSTMIDIDRV::FailedToWrite]) {
-									MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
-									_this->errorShown[VSTMIDIDRV::FailedToWrite] = true;
-								}
-								
+
+			while (!waveOut.stopProcessing) {
+				bool allBuffersRendered = true;
+				for (UINT i = 0; i < waveOut.chunks; i++) {
+					if (waveOut.WaveHdr[i].dwFlags & WHDR_DONE) {
+						allBuffersRendered = false;
+						if (_this->usingFloat)
+							midiSynth.RenderFloat((float*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / (sizeof(float) * _this->channels));
+						else
+							midiSynth.Render((short*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / (sizeof(short) * _this->channels));
+						if (waveOutWrite(waveOut.hWaveOut, &waveOut.WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+							if (!_this->errorShown[VSTMIDIDRV::FailedToWrite]) {
+								MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+								_this->errorShown[VSTMIDIDRV::FailedToWrite] = true;
 							}
+
 						}
 					}
-					if (allBuffersRendered) {
-						// Ensure the playback position is monitored frequently enough in order not to miss a wraparound
-						waveOut.GetPos(_this->channels);
-						WaitForSingleObject(waveOut.hEvent, INFINITE);
-					}
 				}
-			}
+				if (allBuffersRendered) {
+					// Ensure the playback position is monitored frequently enough in order not to miss a wraparound
+					waveOut.GetPos(_this->channels);
+					WaitForSingleObject(waveOut.hEvent, INFINITE);
+				}
+			}			
 		}
 	}waveOut;
+
 
 	static class BassAsioOut
 	{
@@ -650,13 +661,7 @@ namespace VSTMIDIDRV{
 		DWORD GetPortBOffset()
 		{
 			DWORD portbOffset = 2;
-			HKEY hKey;
-
-			long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
-			if (result == NO_ERROR) {
-				DWORD size = 4;
-				RegQueryValueEx(hKey, L"PortBOffset", NULL, NULL, (LPBYTE)&portbOffset, &size);
-			}
+			portbOffset = GetDwordData(L"PortBOffset", portbOffset);			
 			return portbOffset;
 		}
 
@@ -835,31 +840,7 @@ namespace VSTMIDIDRV{
 	MidiSynth &MidiSynth::getInstance(){
 		static MidiSynth *instance = new MidiSynth;
 		return *instance;
-	}
-
-	// Renders all the available space in the single looped ring buffer
-	void MidiSynth::RenderAvailableSpace(){
-		if (!useAsio) {
-			DWORD playPos = (DWORD)(waveOut.GetPos(channels) % bufferSize);
-			DWORD framesToRender;
-
-			if (playPos < framesRendered) {
-				// Buffer wrap, render 'till the end of the buffer
-				framesToRender = bufferSize - framesRendered;
-			}
-			else {
-				framesToRender = playPos - framesRendered;
-				if (framesToRender < chunkSize) {
-					Sleep(1 + (chunkSize - framesToRender) * 1000 / sampleRate);
-					return;
-				}
-			}
-			if (usingFloat)
-				midiSynth.RenderFloat(bufferf + channels * framesRendered, framesToRender);
-			else
-				midiSynth.Render(buffer + channels * framesRendered, framesToRender);
-		}
-	}
+	}	
 
 
 	// Renders totalFrames frames starting from bufpos
@@ -957,96 +938,39 @@ namespace VSTMIDIDRV{
 	}	
 
 	DWORD GetSampleRate(){
-		DWORD sampleRate = 48000;
-		HKEY hKey;
-
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
-		if (result == NO_ERROR) {
-			DWORD size = 4;
-			RegQueryValueEx(hKey, L"SampleRate", NULL, NULL, (LPBYTE)&sampleRate, &size);
-		}
+		DWORD sampleRate = 48000;		
+		sampleRate = GetDwordData(L"SampleRate", sampleRate);		
 		return sampleRate;
 	}
 
 	DWORD GetBufferSize(){
-		DWORD bufferSize = 80;
-		HKEY hKey;
-
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
-		if (result == NO_ERROR) {
-			DWORD size = 4;
-			RegQueryValueEx(hKey, L"BufferSize", NULL, NULL, (LPBYTE)&bufferSize, &size);
-		}
+		DWORD bufferSize = 80;	    
+		bufferSize = GetDwordData(L"BufferSize", bufferSize);		
 		return bufferSize;
 	}
 
 	int GetGain(){
-		int gain = 1;
-		HKEY hKey;
-
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
-		if (result == NO_ERROR) {
-			DWORD size = 4;
-			RegQueryValueEx(hKey, L"Gain", NULL, NULL, (LPBYTE)&gain, &size);
-		}
+		int gain = 0;		
+		gain = GetDwordData(L"Gain", gain);
 		return gain;
 	}
 
-	WORD GetChannelCount(){
-		WORD channels = 2;
-		DWORD enabled = 0;
-		HKEY hKey;
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
-		if (result == NO_ERROR) {
-			DWORD size = 4;
-			RegQueryValueEx(hKey, L"Use4ChannelMode", NULL, NULL, (LPBYTE)&enabled, &size);
-		}
-		channels = enabled ? 4 : 2;
-		return channels;
-	}
-
-	void MidiSynth::LoadSettings(){
-		channels = GetChannelCount();
-		outputGain = pow(10.0f, GetGain() * 0.05f);
-		sampleRate = GetSampleRate();
-		bufferSizeMS = GetBufferSize();
-		bufferSize = MillisToFrames(bufferSizeMS);
-		chunkSizeMS = bufferSizeMS / 4;
-		chunkSize = MillisToFrames(chunkSizeMS);
-		midiLatencyMS = 0;
-		midiLatency = MillisToFrames(midiLatencyMS);
-		useRingBuffer = false;
-		if (!useRingBuffer && chunkSize) {
-			// Number of chunks should be ceil(bufferSize / chunkSize)
-			DWORD chunks = (bufferSize + chunkSize - 1) / chunkSize;
-			// Refine bufferSize as chunkSize * number of chunks, no less then the specified value
-			bufferSize = chunks * chunkSize;
-		}
-	}
-
-	bool IsXPOrNewer(){
-		OSVERSIONINFOEX osvi;
-		BOOL bOsVersionInfoEx;
-		ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
-		osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-		bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-		if (bOsVersionInfoEx == FALSE) return FALSE;
-		if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && ((osvi.dwMajorVersion > 5) || (osvi.dwMajorVersion == 5 && osvi.dwMinorVersion >= 1)))
-			return true;
-		return false;
+	WORD GetChannelCount(){		
+		BOOL enabled = FALSE;		
+		enabled = GetDwordData(L"Use4ChannelMode", enabled);		
+		return enabled ? 4 : 2;
 	}
 
 	bool IsShowVSTDialog(){
-		HKEY hKey;
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
-		if (result == NO_ERROR) {
-			DWORD showVstDialog;
-			DWORD size = 4;
-			result = RegQueryValueEx(hKey, L"ShowVstDialog", NULL, NULL, (LPBYTE)&showVstDialog, &size);
-			if (result == NO_ERROR && showVstDialog) return true;
-			return false;
-		}
-		return false;
+		BOOL showVstDialog = FALSE;
+		showVstDialog = GetDwordData(L"ShowVstDialog",showVstDialog);
+		return showVstDialog != FALSE;		
+	}
+
+	bool GetUsingFloat(){
+		BOOL usingFloat = TRUE;
+		usingFloat = GetDwordData(L"UseFloat", usingFloat);		
+		return usingFloat != FALSE;
 	}
 
 	bool UseAsio(){
@@ -1074,7 +998,42 @@ namespace VSTMIDIDRV{
 
 		return false;
 	}
+	
 
+	void MidiSynth::LoadSettings(){
+		channels = GetChannelCount();
+		outputGain = pow(10.0f, GetGain() * 0.05f);
+		sampleRate = GetSampleRate();		
+		bufferSizeMS = GetBufferSize();
+		bufferSize = MillisToFrames(bufferSizeMS);
+		chunkSizeMS = bufferSizeMS / 4;
+		chunkSize = MillisToFrames(chunkSizeMS);
+		midiLatencyMS = 0;
+		midiLatency = MillisToFrames(midiLatencyMS);
+		
+		usingFloat = GetUsingFloat();
+		useAsio = UseAsio();		
+
+		if (chunkSize) {
+			// Number of chunks should be ceil(bufferSize / chunkSize)
+			DWORD chunks = (bufferSize + chunkSize - 1) / chunkSize;
+			// Refine bufferSize as chunkSize * number of chunks, no less then the specified value
+			bufferSize = chunks * chunkSize;
+		}
+	}
+
+	bool IsXPOrNewer(){
+		OSVERSIONINFOEX osvi;
+		BOOL bOsVersionInfoEx;
+		ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+		osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+		bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
+		if (bOsVersionInfoEx == FALSE) return FALSE;
+		if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && ((osvi.dwMajorVersion > 5) || (osvi.dwMajorVersion == 5 && osvi.dwMinorVersion >= 1)))
+			return true;
+		return false;
+	}
+	
 	void MidiSynth::InitDialog(unsigned uDeviceID){
 
 		if(IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID);
@@ -1082,11 +1041,15 @@ namespace VSTMIDIDRV{
 
 	int MidiSynth::Init(unsigned uDeviceID){
 		LoadSettings();
-		midiVol[0] = 1.0f;
-		midiVol[1] = 1.0f;		
+		
+		if (sampleRate == 0) sampleRate = 48000;
+		if (!useAsio && !bufferSize) {
+			bufferSize = MillisToFrames(80);
+			chunkSize =  bufferSize / 4;
+		}
 
-		usingFloat = IsXPOrNewer();
-		useAsio = UseAsio();
+		midiVol[0] = 1.0f;
+		midiVol[1] = 1.0f;
 
 		// Init synth
 		if (synthMutex.Init()) {
@@ -1120,7 +1083,7 @@ namespace VSTMIDIDRV{
 			else
 				buffer = new short[channels * bufferSize]; // each frame consists of two samples for both the Left and Right channels
 
-			wResult = waveOut.Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, useRingBuffer, sampleRate, usingFloat, channels);
+			wResult = waveOut.Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, sampleRate, usingFloat, channels);
 		}
 
 		if (wResult) return wResult;

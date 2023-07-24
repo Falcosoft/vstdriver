@@ -647,12 +647,12 @@ void VSTDriver::RenderFloat(float * samples, int len, float volume, WORD channel
 
 void VSTDriver::Render(short * samples, int len, float volume, WORD channels)
 {
-	float * float_out = (float *) _alloca( 512 * uNumOutputs * sizeof(*float_out) );
+	float * float_out = (float *) _alloca( 512 * uNumOutputs * channels / 2 * sizeof(*float_out) );
 	while ( len > 0 )
 	{
 		int len_todo = len > 512 ? 512 : len;
 		RenderFloat( float_out, len_todo, volume, channels );
-		for ( unsigned int i = 0; i < len_todo * uNumOutputs; i++ )
+		for ( unsigned int i = 0; i < len_todo * uNumOutputs * channels / 2; i++ )
 		{
 			int sample = (int)( float_out[i] * 32768.f );
 			if ( ( sample + 0x8000 ) & 0xFFFF0000 ) sample = 0x7FFF ^ (sample >> 31);

@@ -29,11 +29,13 @@
 #define IDC_STSR                        1023
 #define IDC_STBS                        1024
 #define IDC_FILEVERSION                 1025
+#define IDC_SAMPLEFORMAT                1026
 #define IDC_VOLUME                      1027
 #define IDC_ASIOCTRLP                   1028
 #define IDC_COMBO_PORTB                 1029
 #define IDC_STATIC_PORTB                1030
 #define IDC_ALWAYSONTOP                 1031
+#define IDC_STSF                        1032
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
@@ -43,7 +45,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        131
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1032
+#define _APS_NEXT_CONTROL_VALUE         1033
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif
