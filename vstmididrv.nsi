@@ -200,8 +200,14 @@ REGDONE:
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe"'
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Uninstall.lnk" "$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe" 0
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
+  ${EndIf}  
+  ${If} ${IsWinNT4}
+	MessageBox MB_YESNO|MB_ICONQUESTION "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver.$\nYou need to reboot in order for control panel to show the driver!$\nIs it OK to reboot?" IDNO +2
+	Reboot
+  ${Else}
+	MessageBox MB_OK "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver."
   ${EndIf}
-  MessageBox MB_OK "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver."
+  
 
 SectionEnd
 ;--------------------------------

@@ -199,7 +199,7 @@ namespace VSTMIDIDRV{
 		WAVEOUTCAPSW caps;
 		wchar_t* regValue;
 
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
 		if (result == NO_ERROR) {
 
 			result = RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, NULL, &dwSize);
@@ -224,7 +224,7 @@ namespace VSTMIDIDRV{
 		HKEY hKey;
 		DWORD retResult = defaultValue;		
 
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
 		if (result == NO_ERROR) {
 			DWORD size = 4;
 			result = RegQueryValueEx(hKey, valueName, NULL, NULL, (LPBYTE)&retResult, &size);
@@ -234,6 +234,18 @@ namespace VSTMIDIDRV{
 		}
 
 		return retResult;
+	}
+
+	static bool IsWinNT4() {
+		OSVERSIONINFOEX osvi;
+		BOOL bOsVersionInfoEx;
+		ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+		osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+		bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
+		if (bOsVersionInfoEx == FALSE) return FALSE;
+		if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion == 4)
+			return true;
+		return false;
 	}
 
 	static class WaveOutWin32{
@@ -266,24 +278,42 @@ namespace VSTMIDIDRV{
 
 			//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;
 
-			channels = channelCount;
 			
-			WAVEFORMATEXTENSIBLE wFormat;
-			memset( &wFormat, 0, sizeof(wFormat));
 
-			wFormat.Format.cbSize = sizeof(wFormat) - sizeof(wFormat.Format);
-			wFormat.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
-			wFormat.Format.nChannels = channels;
-			wFormat.Format.nSamplesPerSec = sampleRate;
-			wFormat.Format.wBitsPerSample = useFloat ? 32 : 16;
-			wFormat.Format.nBlockAlign = wFormat.Format.nChannels * wFormat.Format.wBitsPerSample / 8;
-			wFormat.Format.nAvgBytesPerSec = wFormat.Format.nBlockAlign * wFormat.Format.nSamplesPerSec;
-			wFormat.dwChannelMask = channels == 2 ? SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;
-			wFormat.Samples.wValidBitsPerSample = wFormat.Format.wBitsPerSample;
-			wFormat.SubFormat = useFloat ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : KSDATAFORMAT_SUBTYPE_PCM;
+			PCMWAVEFORMAT wFormatLegacy;			
+			WAVEFORMATEXTENSIBLE wFormat;
+			memset(&wFormat, 0, sizeof(wFormat));
+
+			bool isWinNT4 = IsWinNT4();
+
+			if(isWinNT4) 
+			{
+				channels = 2;				
+				usingFloat = false;
+				wFormatLegacy.wf.wFormatTag = WAVE_FORMAT_PCM;
+				wFormatLegacy.wf.nChannels = channels;
+				wFormatLegacy.wf.nSamplesPerSec = sampleRate;
+				wFormatLegacy.wBitsPerSample = 16;
+				wFormatLegacy.wf.nBlockAlign = wFormatLegacy.wf.nChannels * wFormatLegacy.wBitsPerSample / 8;
+				wFormatLegacy.wf.nAvgBytesPerSec = wFormatLegacy.wf.nBlockAlign * wFormatLegacy.wf.nSamplesPerSec;				
+			}
+			else
+			{
+				channels = channelCount;
+				wFormat.Format.cbSize = sizeof(wFormat) - sizeof(wFormat.Format);
+				wFormat.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+				wFormat.Format.nChannels = channels;
+				wFormat.Format.nSamplesPerSec = sampleRate;
+				wFormat.Format.wBitsPerSample = usingFloat ? 32 : 16;
+				wFormat.Format.nBlockAlign = wFormat.Format.nChannels * wFormat.Format.wBitsPerSample / 8;
+				wFormat.Format.nAvgBytesPerSec = wFormat.Format.nBlockAlign * wFormat.Format.nSamplesPerSec;
+				wFormat.dwChannelMask = channels == 2 ? SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;
+				wFormat.Samples.wValidBitsPerSample = wFormat.Format.wBitsPerSample;
+				wFormat.SubFormat = usingFloat ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : KSDATAFORMAT_SUBTYPE_PCM;
+			}
 
 			// Open waveout device
-			int wResult = waveOutOpen(&hWaveOut, GetWaveOutDeviceId(), &wFormat.Format, callback, (DWORD_PTR)&midiSynth, callbackType);
+			int wResult = waveOutOpen(&hWaveOut, GetWaveOutDeviceId(), isWinNT4 ? (LPWAVEFORMATEX)&wFormatLegacy : &wFormat.Format, callback, (DWORD_PTR)&midiSynth, callbackType);
 			if (wResult != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToOpen]) {
 					MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
@@ -296,8 +326,8 @@ namespace VSTMIDIDRV{
 			chunks = bufferSize / chunkSize;
 			WaveHdr = new WAVEHDR[chunks];
 			LPSTR chunkStart = (LPSTR)buffer;
-			DWORD chunkBytes = (useFloat ? sizeof(float) * channels : sizeof(short) * channels) * chunkSize;
-			DWORD bufferBytes = (useFloat ? sizeof(float) * channels : sizeof(short) * channels) * bufferSize;
+			DWORD chunkBytes = (usingFloat ? sizeof(float) * channels : sizeof(short) * channels) * chunkSize;
+			DWORD bufferBytes = (usingFloat ? sizeof(float) * channels : sizeof(short) * channels) * bufferSize;
 			for (UINT i = 0; i < chunks; i++) {
 
 				WaveHdr[i].dwBufferLength = chunkBytes;
@@ -526,7 +556,10 @@ namespace VSTMIDIDRV{
 		void InitializePaths()
 		{
 			GetModuleFileName(hinst_vst_driver, installPath, MAX_PATH);
-			PathRemoveFileSpec(installPath);
+			//PathRemoveFileSpec(installPath);
+			wchar_t *chrP = wcsrchr(installPath, '\\'); //removes SHLWAPI dependency for WIN NT4
+			if(chrP) chrP[0] = 0;
+			
 			lstrcat(installPath, _T("\\vstmididrv\\"));
 
 			lstrcpy(bassAsioPath, installPath);
@@ -592,7 +625,7 @@ namespace VSTMIDIDRV{
 			wchar_t* regValue;
 			wstring wresult;
 
-			long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+			long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
 			if (result == NO_ERROR)
 			{
 #ifdef WIN64
@@ -644,7 +677,7 @@ namespace VSTMIDIDRV{
 		
 		void GetSelectedAsioDriver(int& selectedDeviceId, int& selectedChannelId)
 		{
-			selectedDeviceId = -1;
+			selectedDeviceId = 0;
 			selectedChannelId = 0;
 			wstring selectedOutputDriver = GetAsioDriverName();
 			if(selectedOutputDriver.empty()) return;
@@ -980,7 +1013,7 @@ namespace VSTMIDIDRV{
 		DWORD dwSize = 0;
 		wchar_t* regValue;
 
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ | KEY_WOW64_32KEY, &hKey);
+		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
 		if (result == NO_ERROR) {
 
 			result = RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, NULL, &dwSize);
@@ -1020,19 +1053,7 @@ namespace VSTMIDIDRV{
 			// Refine bufferSize as chunkSize * number of chunks, no less then the specified value
 			bufferSize = chunks * chunkSize;
 		}
-	}
-
-	bool IsXPOrNewer(){
-		OSVERSIONINFOEX osvi;
-		BOOL bOsVersionInfoEx;
-		ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
-		osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-		bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-		if (bOsVersionInfoEx == FALSE) return FALSE;
-		if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && ((osvi.dwMajorVersion > 5) || (osvi.dwMajorVersion == 5 && osvi.dwMinorVersion >= 1)))
-			return true;
-		return false;
-	}
+	}	
 	
 	void MidiSynth::InitDialog(unsigned uDeviceID){
 

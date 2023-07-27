@@ -103,7 +103,7 @@ void VSTDriver::load_settings(TCHAR * szPath) {
 	long lResult;
 	DWORD dwType=REG_SZ;
 	DWORD dwSize=0;
-	if ( szPath || RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"),0,KEY_READ|KEY_WOW64_32KEY,&hKey) == ERROR_SUCCESS ) {
+	if ( szPath || RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"),0,KEY_READ,&hKey) == ERROR_SUCCESS ) {
 		if ( !szPath ) lResult = RegQueryValueEx(hKey, _T("plugin"), NULL, &dwType, NULL, &dwSize);
 		if ( szPath || ( lResult == ERROR_SUCCESS && dwType == REG_SZ ) ) {
 			if ( szPath ) dwSize = (DWORD)(_tcslen( szPath ) * sizeof(TCHAR));

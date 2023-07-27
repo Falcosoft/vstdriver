@@ -50,7 +50,7 @@ namespace Error {
 		InvalidCommandLineArguments = 1,
 		MalformedChecksum = 2,
 		ChecksumMismatch = 3,
-		Comctl32LoadFailed = 4,
+		//Comctl32LoadFailed = 4,
 		ComInitializationFailed = 5,
 	};
 };
@@ -641,8 +641,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	{
 		INITCOMMONCONTROLSEX icc;
 		icc.dwSize = sizeof(icc);
-		icc.dwICC = ICC_WIN95_CLASSES | ICC_COOL_CLASSES | ICC_STANDARD_CLASSES;
-		if (!InitCommonControlsEx(&icc)) return Error::Comctl32LoadFailed;
+		icc.dwICC = ICC_WIN95_CLASSES;
+		if (!InitCommonControlsEx(&icc)) InitCommonControls();
+		//InitCommonControlsEx can fail on Win 2000/XP without service packs. It's rude to exit in case of failing since this is not essentiall at all.
 	}
 
 	if (FAILED(CoInitialize(NULL))) return Error::ComInitializationFailed;

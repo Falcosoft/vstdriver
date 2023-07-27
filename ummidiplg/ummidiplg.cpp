@@ -19,6 +19,7 @@
  *  You should have received a copy of the GNU Lesser General Public License
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#pragma warning(disable : 4996)
 
 // Require Windows 2K API
 #define _WIN32_WINNT 0x0500
@@ -72,6 +73,20 @@ enum ProcessReturnCode
   ProcessReturnCode_ERR_REGISTERING_DEVICE = 6,
   ProcessReturnCode_ERR_REMOVING_DEVICE = 7
   };
+
+
+static bool IsWinNT4() // NT4 cannot register Device and DriverClass
+{
+	OSVERSIONINFOEX osvi;
+	BOOL bOsVersionInfoEx;
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
+	if (bOsVersionInfoEx == FALSE) return FALSE;
+	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion == 4)
+		return true;
+	return false;
+}
 
 
 /*****************************************************************************/
@@ -170,7 +185,7 @@ if (RegOpenKeyEx(HKEY_LOCAL_MACHINE,
                  _T("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Drivers32"), 0L,
                  KEY_ALL_ACCESS | KEY_WOW64_32KEY, &hReg))
     return false;
-LSTATUS res = RegSetValueEx(hReg, driverEntryName.c_str(), NULL, REG_SZ,
+LONG res = RegSetValueEx(hReg, driverEntryName.c_str(), NULL, REG_SZ,
                             (const BYTE *)driverName.c_str(),
                             bytesize(driverName));
 RegCloseKey(hReg);
@@ -670,13 +685,16 @@ if (res == regdrvFailed)
   pushstring(_T("Error: driver could not be registered!"));
   return;
   }
-ProcessReturnCode returnCode = registerDeviceAndDriverClass(vars[0], vars[4], vars[1], vars[2], vars[3],
-                                                            wow64Process, legacyMidiEntryIx);
-if (returnCode != ProcessReturnCode_OK)
-  {
-  pushstring(_T("Error: driver could not be registered!"));
-  return;
-  }
+
+if(!IsWinNT4()) {
+	ProcessReturnCode returnCode = registerDeviceAndDriverClass(vars[0], vars[4], vars[1], vars[2], vars[3],
+		wow64Process, legacyMidiEntryIx);
+	if (returnCode != ProcessReturnCode_OK)
+	{
+		pushstring(_T("Error: driver could not be registered!"));
+		return;
+	}
+}
 
 rets.insert(rets.begin(), _T("OK"));
 pushRets(rets);
@@ -733,12 +751,14 @@ if (!unregisterDriver(vars[0], wow64Process))
   return;
   }
 
-ProcessReturnCode returnCode = removeDevice(vars[2], vars[1], wow64Process);
-if (returnCode != ProcessReturnCode_OK)
-  {
-  pushstring(_T("Error: driver could not be unregistered!"));
-  return;
-  }
+if(!IsWinNT4()) {
+	ProcessReturnCode returnCode = removeDevice(vars[2], vars[1], wow64Process);
+	if (returnCode != ProcessReturnCode_OK)
+	{
+		pushstring(_T("Error: driver could not be unregistered!"));
+		return;
+	}
+}
 
 pushstring(_T("OK"));
 }
