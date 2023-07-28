@@ -31,6 +31,8 @@
 #include <string>
 #include <vector>
 
+bool IsWinNT4();
+
 class VSTDriver {
 private:
 	TCHAR      * szPluginPath;

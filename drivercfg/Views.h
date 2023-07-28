@@ -24,7 +24,8 @@ extern "C" HINSTANCE hinst_vst_driver = NULL;
 
 static HINSTANCE bassasio = NULL;       // bassasio handle  
 
-static BOOL isASIO = false;
+static BOOL isASIO = FALSE;
+static bool usingASIO = false;  
 static bool is4chMode = false;
 static bool isWinNT4 =  false;
 static DWORD portBOffsetVal = 2;
@@ -83,19 +84,6 @@ static BOOL IsASIO()
 	}	
 
 	return FALSE;	
-}
-
-static bool IsWinNT4() 
-{
-	OSVERSIONINFOEX osvi;
-	BOOL bOsVersionInfoEx;
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
-	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-	if (bOsVersionInfoEx == FALSE) return FALSE;
-	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion == 4)
-		return true;
-	return false;
 }
 
 static void settings_load(VSTDriver * effect)
@@ -244,6 +232,7 @@ public:
 	
 	isWinNT4 = IsWinNT4();
 	isASIO = IsASIO();
+	usingASIO = isASIO && LoadOutputDriver(L"Driver Mode").CompareNoCase(L"Bass ASIO") == 0;
    }
  
    ~CView1()
@@ -279,14 +268,14 @@ public:
 		   }
 		   lResult = reg.QueryDWORDValue(L"Use4ChannelMode",reg_value);
 		   if (lResult == ERROR_SUCCESS) {
-			   if (!isWinNT4 || isASIO) {
+			   if (!isWinNT4 || usingASIO) {
 				vst_4chmode.SetCheck(reg_value);
 				if (reg_value) is4chMode = true;
 			   }
 		   }		   
 		   lResult = reg.QueryDWORDValue(L"UseFloat",reg_value);
 		   if (lResult == ERROR_SUCCESS) {			   
-			   if ((!isWinNT4 || isASIO) && reg_value) vst_sample_format.SelectString(-1, L"32-bit Float");
+			   if ((!isWinNT4 || usingASIO) && reg_value) vst_sample_format.SelectString(-1, L"32-bit Float");
 			   else vst_sample_format.SelectString(-1, L"16-bit Int");
 		   }
 		   lResult = reg.QueryDWORDValue(L"SampleRate",reg_value);
@@ -503,13 +492,12 @@ public:
         return Result;
     }
 
-    void ResetBufferSizes() 
+    void ResetDriverSettings() 
 	{			
 		vst_buffer_size.ResetContent();
 		vst_sample_rate.ResetContent();
-
-		CString selectedDriverMode = LoadOutputDriver(L"Driver Mode");
-		if (isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0) 
+		
+		if (usingASIO) 
 		{
 			vst_buffer_size.AddString(L"Default");
 			vst_buffer_size.AddString(L"2");
@@ -519,7 +507,10 @@ public:
 			vst_buffer_size.AddString(L"20");
 			vst_buffer_size.AddString(L"30");
 			vst_buffer_size.AddString(L"40");			
-			vst_buffer_size.SelectString(-1, L"Default");			
+			vst_buffer_size.SelectString(-1, L"Default");
+
+			vst_sample_format.EnableWindow(TRUE);
+			vst_4chmode.EnableWindow(TRUE);
 
 #ifdef WIN64
 			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
@@ -571,7 +562,15 @@ public:
 			vst_sample_rate.AddString(L"49716");
 			vst_sample_rate.AddString(L"96000");
 			vst_sample_rate.AddString(L"192000");
-			vst_sample_rate.SelectString(-1, L"48000");			
+			vst_sample_rate.SelectString(-1, L"48000");	
+
+			if(isWinNT4) {
+				vst_4chmode.SetCheck(0);
+				vst_sample_format.SelectString(-1, L"16-bit Int");
+				vst_sample_format.EnableWindow(FALSE);
+				vst_4chmode.EnableWindow(FALSE);
+
+			}
 		}
 
 	}
@@ -579,8 +578,8 @@ public:
 	LRESULT OnInitDialogView1(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
 		wchar_t fileversionBuff[32] = { 0 };
-		effect = NULL;		
-
+		effect = NULL;
+		
 		vst_sample_format = GetDlgItem(IDC_SAMPLEFORMAT);
 		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
         vst_buffer_size = GetDlgItem(IDC_BUFFERSIZE);
@@ -602,15 +601,15 @@ public:
 		vst_sample_rate.ResetContent();
 		vst_buffer_size.ResetContent();
 		
-		CString selectedDriverMode = LoadOutputDriver(L"Driver Mode");
 		CString selectedOutputDriver;
 		CString selectedOutputChannel;
 		int selectedOutputChannelInt;
 		int selectedOutputDriverInt;
 
 		vst_sample_format.AddString(L"16-bit Int");
-		if (!isWinNT4 || isASIO) {
-			vst_sample_format.AddString(L"32-bit Float");
+		vst_sample_format.AddString(L"32-bit Float");
+
+		if (!isWinNT4 || usingASIO) {			
 			vst_sample_format.SelectString(-1, L"32-bit Float");
 		}
 		else {
@@ -619,7 +618,7 @@ public:
 			vst_4chmode.EnableWindow(FALSE);
 		}	
 		
-		if (isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0) 
+		if (usingASIO) 
 		{
 			vst_buffer_size.AddString(L"Default");
 			vst_buffer_size.AddString(L"2");
@@ -684,7 +683,7 @@ public:
 		
 		load_settings();
 
-		if (isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0) 
+		if (usingASIO) 
 		{
 			wchar_t tmpBuff[64];
 			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, selectedOutputChannelInt + portBOffsetVal, selectedOutputChannelInt + portBOffsetVal + 1); 
@@ -879,9 +878,9 @@ public:
 			
 		if (isASIO)	driverMode.AddString(L"Bass ASIO");
 	
-		CString selectedDriverMode = LoadOutputDriver(L"Driver Mode");
+		CString selectedDriverMode;
 	
-		if (isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0) {
+		if (usingASIO) {
 			selectedDriverMode = L"Bass ASIO";
 			driverMode.SelectString(0, L"Bass ASIO");
 			LoadAsioDrivers();
@@ -947,13 +946,15 @@ public:
 
                 if (newDriverMode.CompareNoCase(L"Bass ASIO") == 0)
                 {
-                    LoadAsioDrivers();
+                    usingASIO = true;
+					LoadAsioDrivers();
 					asio_openctlp.ShowWindow(SW_SHOW);
 					if(is4chMode) ShowPortBControls(true);
                 }
                 else
                 {
-                    LoadWaveOutDrivers();
+                    usingASIO = false;
+					LoadWaveOutDrivers();
 					asio_openctlp.ShowWindow(SW_HIDE);
 					ShowPortBControls(false);
                 }

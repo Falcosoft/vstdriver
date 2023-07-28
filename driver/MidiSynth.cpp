@@ -236,18 +236,6 @@ namespace VSTMIDIDRV{
 		return retResult;
 	}
 
-	static bool IsWinNT4() {
-		OSVERSIONINFOEX osvi;
-		BOOL bOsVersionInfoEx;
-		ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
-		osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-		bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-		if (bOsVersionInfoEx == FALSE) return FALSE;
-		if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion == 4)
-			return true;
-		return false;
-	}
-
 	static class WaveOutWin32{
 	private:
 		HWAVEOUT hWaveOut;
@@ -276,9 +264,7 @@ namespace VSTMIDIDRV{
 			
 			for (int i = 0; i < 10; i++) errorShown[i] = false;
 
-			//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;
-
-			
+			//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;			
 
 			PCMWAVEFORMAT wFormatLegacy;			
 			WAVEFORMATEXTENSIBLE wFormat;

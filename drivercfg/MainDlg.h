@@ -135,15 +135,14 @@ public:
 		BOOL dummy;
 		if(m_ctrlTab.GetCurSel() == 0 && m_view3.GetDriverChanged())
 		{
-			m_view1.ResetBufferSizes();
+			m_view1.ResetDriverSettings();
 			m_view1.OnCbnSelchangeBuffersize(0, 0, 0, dummy);
 			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);
 			m_view3.SetDriverChanged(false);
 		}
 		else if (m_ctrlTab.GetCurSel() == 1)
-		{
-			CString selectedDriverMode = LoadOutputDriver(L"Driver Mode");
-		  	m_view3.ShowPortBControls(isASIO && selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0 && is4chMode);	
+		{			
+		  	m_view3.ShowPortBControls(usingASIO && is4chMode);	
 		}
 		
         bHandled = false;
