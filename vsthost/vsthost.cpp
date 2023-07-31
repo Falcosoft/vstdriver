@@ -378,7 +378,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				if (!sameThread[portNum])
 				{					
 					SetWindowPos(checkBoxWnd[portNum], NULL, 5, eRect->bottom - eRect->top + 3, 110, 17, SWP_NOZORDER);
-					SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+					if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
+						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 				}			
 			}
 			dialogMutex.Leave();
