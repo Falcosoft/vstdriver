@@ -59,8 +59,9 @@ namespace Error {
 bool need_idle = false;
 bool idle_started = false;
 
-HWND editorHandle[2] = { 0, 0 };
+static HWND editorHandle[2] = { 0, 0 };
 
+static DWORD MainThreadId;
 static char* dll_dir = NULL;
 
 static HANDLE null_file = NULL;
@@ -277,23 +278,38 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 
 	AEffect* effect;
+	static VstInt16 extraHeight[2] = {0, 0};
+	static bool sameThread[2] = {true, true};
+	static HWND checkBoxWnd[2] = { NULL, NULL };
+	static HFONT hFont[2] = { NULL, NULL };	
+
+	int portNum = 0;
+
 	switch (msg)
 	{
 	case WM_INITDIALOG:
 		{	
 			effect = (AEffect*)lParam;
-			editorHandle[*(int*)effect->user] = hwnd;
-
-			SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
-
-			wchar_t wText[18] = L"VST Editor port ";
-			wchar_t intCnst[] = { 'A' + *(int*)effect->user };
-			wcsncat(wText, intCnst, 1);
-
-			SetWindowText(hwnd, wText);
-
+			
 			if (effect)
 			{
+				portNum = *(int*)effect->user;
+				editorHandle[portNum] = hwnd;
+
+				SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
+
+				wchar_t wText[18] = L"VST Editor port ";
+				wchar_t intCnst[] = { 'A' + portNum };
+				wcsncat(wText, intCnst, 1);
+
+				SetWindowText(hwnd, wText);
+
+				if (GetCurrentThreadId() != MainThreadId)
+				{
+					extraHeight[portNum] = 22;
+					sameThread[portNum] = false;
+				}
+
 				dialogMutex.Enter();
 
 				SetTimer(hwnd, 1, 20, 0);
@@ -303,7 +319,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				if (eRect)
 				{
 					int width = eRect->right - eRect->left;
-					int height = eRect->bottom - eRect->top;
+					int height = eRect->bottom - eRect->top + extraHeight[portNum];
 					if (width < 50)
 						width = 50;
 					if (height < 50)
@@ -312,8 +328,22 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					SetRect(&wRect, 0, 0, width, height);
 					AdjustWindowRectEx(&wRect, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
 					width = wRect.right - wRect.left;
-					height = wRect.bottom - wRect.top;
+					height = wRect.bottom - wRect.top;                    
 					SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
+					
+					if (!sameThread[portNum])
+					{
+						LOGFONT lf;					
+						
+						checkBoxWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Always on Top",  WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 5, eRect->bottom - eRect->top + 3, 110, 17, hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+						SendMessage(checkBoxWnd[portNum], BM_SETCHECK, BST_CHECKED, 0);
+						
+						GetObject (GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf); 
+						hFont[portNum] = CreateFontIndirect(&lf);
+						SendMessage(checkBoxWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
+
+						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+					}						
 				}
 
 				dialogMutex.Leave();
@@ -323,15 +353,17 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_SIZE: //Fixes SC-VA display bug after parts section opened/closed
 		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+		portNum = *(int*)effect->user;
+		
 		if (effect && wParam == SIZE_RESTORED)
-		{
+		{	
 			dialogMutex.Enter();
 			ERect* eRect = 0;
 			effect->dispatcher(effect, effEditGetRect, 0, 0, &eRect, 0);
 			if (eRect)
 			{
 				int width = eRect->right - eRect->left;
-				int height = eRect->bottom - eRect->top;
+				int height = eRect->bottom - eRect->top + extraHeight[portNum];
 				if (width < 50)
 					width = 50;
 				if (height < 50)
@@ -342,6 +374,12 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				width = wRect.right - wRect.left;
 				height = wRect.bottom - wRect.top;
 				SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
+				
+				if (!sameThread[portNum])
+				{					
+					SetWindowPos(checkBoxWnd[portNum], NULL, 5, eRect->bottom - eRect->top + 3, 110, 17, SWP_NOZORDER);
+					SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+				}			
 			}
 			dialogMutex.Leave();
 		}
@@ -351,18 +389,34 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		if (effect)
 			effect->dispatcher(effect, effEditIdle, 0, 0, 0, 0);
 		break;
-	case WM_CLOSE:
-		{
-			effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
-			KillTimer(hwnd, 1);
-			if (effect)
-			{
-				effect->dispatcher(effect, effEditClose, 0, 0, 0, 0);
-				editorHandle[*(int*)effect->user] = 0;
-			}
-
-			EndDialog(hwnd, IDOK);
+	case WM_COMMAND: 		
+		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+		portNum = *(int*)effect->user;
+		
+		if(HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)checkBoxWnd[portNum])
+		{            
+		 	if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
+				SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+			else
+				SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+			
+			return 0;
 		}
+		break;
+	case WM_CLOSE:		
+		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+		portNum = *(int*)effect->user;
+
+		KillTimer(hwnd, 1);
+		if (effect)
+		{
+			effect->dispatcher(effect, effEditClose, 0, 0, 0, 0);
+			editorHandle[portNum] = 0;
+		}
+
+		if (hFont[portNum]) DeleteObject(hFont[portNum]);
+		EndDialog(hwnd, IDOK);
+		
 		break;
 	}
 
@@ -613,7 +667,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 #endif
 
 	unsigned code = Response::NoError;
-
+	
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
 	AEffect* pEffect[2] = { 0, 0 };
@@ -629,6 +683,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	std::vector<uint8_t> chunk;
 	std::vector<float> sample_buffer;
 	unsigned int samples_buffered = 0;
+
+	MainThreadId = GetCurrentThreadId();
 
 	null_file = CreateFile(_T("NUL"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
@@ -802,7 +858,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			break;
 
 		case Command::DisplayEditorModal: // Display Editor Modal
-			{
+			{				
 				if (pEffect[0]->flags & effFlagsHasEditor)
 				{
 					MyDLGTEMPLATE t;
@@ -822,7 +878,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				port_num = get_code();
 
 				if (pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor)
-				{			
+				{		
 					_beginthread(EditorThread, 16384, pEffect[port_num]);
 					//Sleep(100);
 				}
