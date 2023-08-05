@@ -265,6 +265,50 @@ void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
 	}
 }
 
+
+static BOOL settings_save(AEffect* pEffect)
+{	
+	BOOL result = false; 
+	long lResult;
+	DWORD dwType = REG_SZ;
+	HKEY hKey;
+	wchar_t vst_path[MAX_PATH] = {0};
+	ULONG size;		
+	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey); 
+	if (lResult == ERROR_SUCCESS)
+	{
+		lResult = RegQueryValueEx(hKey, L"plugin", NULL, &dwType, NULL, &size);
+		if (lResult == ERROR_SUCCESS && dwType == REG_SZ)
+		{			
+			RegQueryValueEx(hKey, L"plugin", NULL, &dwType, (LPBYTE)vst_path, &size);
+			wchar_t *chrP = wcsrchr(vst_path, '.'); // removes extension
+			if(chrP) chrP[0] = 0;
+			lstrcat(vst_path, L".set");
+
+			HANDLE fileHandle = CreateFile(vst_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+						
+			if (fileHandle != INVALID_HANDLE_VALUE)
+			{
+				std::vector<uint8_t> chunk;
+				if (pEffect) getChunk(pEffect, chunk);;
+#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+				
+				if (chunk.size()) result = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);   
+#else
+				
+				if (chunk.size()) result = WriteFile(fileHandle, chunk.data(), chunk.size(), &size, NULL);
+#endif
+				
+				CloseHandle(fileHandle);
+			}
+			
+		}		
+		RegCloseKey(hKey);
+	}
+
+	return result;
+}
+
 struct MyDLGTEMPLATE : DLGTEMPLATE
 {
 	WORD ext[3];
@@ -281,6 +325,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	static VstInt16 extraHeight[2] = {0, 0};
 	static bool sameThread[2] = {true, true};
 	static HWND checkBoxWnd[2] = { NULL, NULL };
+	static HWND buttonWnd[2] = { NULL, NULL };
 	static HFONT hFont[2] = { NULL, NULL };	
 
 	int portNum = 0;
@@ -306,7 +351,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				if (GetCurrentThreadId() != MainThreadId)
 				{
-					extraHeight[portNum] = 22;
+					extraHeight[portNum] = 24;
 					sameThread[portNum] = false;
 				}
 
@@ -320,8 +365,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{
 					int width = eRect->right - eRect->left;
 					int height = eRect->bottom - eRect->top + extraHeight[portNum];
-					if (width < 50)
-						width = 50;
+					if (width < 200)
+						width = 200;
 					if (height < 50)
 						height = 50;
 					RECT wRect;
@@ -335,12 +380,15 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					{
 						LOGFONT lf;					
 						
-						checkBoxWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Always on Top",  WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 5, eRect->bottom - eRect->top + 3, 110, 17, hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+						checkBoxWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Always on Top",  WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 5, eRect->bottom - eRect->top + 3, 100, 20, hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 						SendMessage(checkBoxWnd[portNum], BM_SETCHECK, BST_CHECKED, 0);
+						
+						buttonWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Save Settings",  WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - 90, eRect->bottom - eRect->top + 2, 80, 20, hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 						
 						GetObject (GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf); 
 						hFont[portNum] = CreateFontIndirect(&lf);
 						SendMessage(checkBoxWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
+						SendMessage(buttonWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
 
 						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 					}						
@@ -364,8 +412,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			{
 				int width = eRect->right - eRect->left;
 				int height = eRect->bottom - eRect->top + extraHeight[portNum];
-				if (width < 50)
-					width = 50;
+				if (width < 200)
+					width = 200;
 				if (height < 50)
 					height = 50;
 				RECT wRect;
@@ -377,9 +425,11 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				
 				if (!sameThread[portNum])
 				{					
-					SetWindowPos(checkBoxWnd[portNum], NULL, 5, eRect->bottom - eRect->top + 3, 110, 17, SWP_NOZORDER);
+					SetWindowPos(checkBoxWnd[portNum], NULL, 5, eRect->bottom - eRect->top + 3, 100, 20, SWP_NOZORDER);
 					if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
 						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+					
+					SetWindowPos(buttonWnd[portNum], NULL, width - 90, eRect->bottom - eRect->top + 2, 80, 20, SWP_NOZORDER);
 				}			
 			}
 			dialogMutex.Leave();
@@ -400,6 +450,13 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 			else
 				SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+			
+			return 0;
+		}
+		else if(HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)buttonWnd[portNum])
+		{            
+		 	if(!settings_save(effect)) MessageBox(hwnd, L"Cannot write plugin settings! Most likely you do not have write permission.", L"VST Midi Driver", MB_OK | MB_ICONERROR);
+			else MessageBox(hwnd, L"Plugin settings successfully saved!", L"VST Midi Driver", MB_OK | MB_ICONINFORMATION);	
 			
 			return 0;
 		}
@@ -866,8 +923,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					t.style = WS_POPUPWINDOW | WS_DLGFRAME | DS_MODALFRAME | DS_CENTER;
 					t.dwExtendedStyle = WS_EX_TOPMOST;
 					DialogBoxIndirectParam(0, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)(pEffect[0]));
-					getChunk(pEffect[0], chunk);
-					setChunk(pEffect[1], chunk);
+					//getChunk(pEffect[0], chunk);
+					//setChunk(pEffect[1], chunk);
 				}
 
 				put_code(Response::NoError);

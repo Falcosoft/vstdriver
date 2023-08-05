@@ -200,19 +200,26 @@ namespace VSTMIDIDRV{
 		wchar_t* regValue;
 
 		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
-		if (result == NO_ERROR) {
+		if (result == NO_ERROR) 
+		{
 
 			result = RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, NULL, &dwSize);
-			if (result == NO_ERROR && dwType == REG_SZ) {
-
+			if (result == NO_ERROR && dwType == REG_SZ)
+			{
 				regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 				RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
 
 				for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId) {
-					if (!wcscmp(regValue, caps.szPname)) return deviceId;
+					if (!wcscmp(regValue, caps.szPname))
+					{
+						RegCloseKey(hKey);
+						return deviceId;
+					}
 
 				}
 			}
+			
+			RegCloseKey(hKey);
 		}
 
 		return WAVE_MAPPER;
@@ -225,12 +232,17 @@ namespace VSTMIDIDRV{
 		DWORD retResult = defaultValue;		
 
 		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
-		if (result == NO_ERROR) {
+		if (result == NO_ERROR)
+		{
 			DWORD size = 4;
 			result = RegQueryValueEx(hKey, valueName, NULL, NULL, (LPBYTE)&retResult, &size);
-			if (result == NO_ERROR) {				
+			if (result == NO_ERROR)
+			{				
+				RegCloseKey(hKey);
 				return retResult;			 
 			}
+
+			RegCloseKey(hKey);
 		}
 
 		return retResult;
@@ -553,7 +565,7 @@ namespace VSTMIDIDRV{
 
 		}
 
-		bool LoadBass()
+		bool LoadBassAsio()
 		{
 			// Load Bass Asio
 			bassAsio = LoadLibrary(bassAsioPath);
@@ -656,6 +668,8 @@ namespace VSTMIDIDRV{
 
 				}
 #endif				
+			
+				RegCloseKey(hKey);
 			}
 
 			return wresult;
@@ -700,7 +714,7 @@ namespace VSTMIDIDRV{
 				InitializePaths();
 			}
 
-			if (!LoadBass())
+			if (!LoadBassAsio())
 			{
 				return -1;
 			}
@@ -1000,7 +1014,8 @@ namespace VSTMIDIDRV{
 		wchar_t* regValue;
 
 		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
-		if (result == NO_ERROR) {
+		if (result == NO_ERROR) 
+		{
 
 			result = RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, NULL, &dwSize);
 			if (result == NO_ERROR && dwType == REG_SZ) {
@@ -1010,9 +1025,12 @@ namespace VSTMIDIDRV{
 				if (!wcscmp(regValue, L"Bass ASIO"))
 				{
 					free(regValue);
+					RegCloseKey(hKey);
 					return true;
 				}
 			}
+
+			RegCloseKey(hKey);
 		}
 
 		return false;

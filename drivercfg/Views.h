@@ -90,11 +90,11 @@ static void settings_load(VSTDriver * effect)
 {
 	ifstream file;
 	long lResult;
-	TCHAR vst_path[256] = {0};
+	TCHAR vst_path[MAX_PATH] = {0};
 	ULONG size;
 	CRegKeyEx reg;
 	wstring fname;
-	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ);
+	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WRITE);
 	if (lResult == ERROR_SUCCESS){
 		lResult = reg.QueryStringValue(L"plugin",NULL,&size);
 		if (lResult == ERROR_SUCCESS) {
@@ -132,11 +132,11 @@ static void settings_save(VSTDriver * effect)
 {
 	ofstream file;
 	long lResult;
-	TCHAR vst_path[256] = {0};
+	TCHAR vst_path[MAX_PATH] = {0};
 	ULONG size;
 	CRegKeyEx reg;
 	wstring fname;
-	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ); // falco fix: otherwise reg.QueryStringValue gets back an ACCESS_DENIED(5) error.
+	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WRITE); // falco fix: otherwise reg.QueryStringValue gets back an ACCESS_DENIED(5) error.
 	if (lResult == ERROR_SUCCESS){
 		lResult = reg.QueryStringValue(L"plugin",NULL,&size);
 		if (lResult == ERROR_SUCCESS) {
