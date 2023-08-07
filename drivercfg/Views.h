@@ -1,9 +1,6 @@
 #if !defined(AFX_VIEWS_H__20020629_8D64_963C_A351_0080AD509054__INCLUDED_)
 #define AFX_VIEWS_H__20020629_8D64_963C_A351_0080AD509054__INCLUDED_
 
-#include <iostream>
-#include <fstream> 
-#include "utf8conv.h"
 #include "../external_packages/mmddk.h"
 #include "../driver/VSTDriver.h"
 
@@ -14,7 +11,6 @@
 #include "../external_packages/bassasio.h"
 
 using namespace std;
-using namespace utf8util;
 
 typedef AEffect* (*PluginEntryProc) (audioMasterCallback audioMaster);
 static INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -39,19 +35,6 @@ struct MyDLGTEMPLATE: DLGTEMPLATE
 	{ memset (this, 0, sizeof(*this)); };
 };
 */
-
-std::wstring stripExtension(const std::wstring& fileName)
-{
-	const size_t length = fileName.length();
-	for (int i=0; i!=length; ++i)
-	{
-		if (fileName[i]=='.') 
-		{
-			return fileName.substr(0,i);
-		}
-	}
-	return fileName;
-}
 
 static BOOL IsASIO() 
 {		
@@ -86,79 +69,89 @@ static BOOL IsASIO()
 	return FALSE;	
 }
 
-static void settings_load(VSTDriver * effect)
+static BOOL settings_load(VSTDriver * effect)
 {
-	ifstream file;
+	BOOL retResult = FALSE;
 	long lResult;
 	TCHAR vst_path[MAX_PATH] = {0};
 	ULONG size;
 	CRegKeyEx reg;
-	wstring fname;
+	
 	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WRITE);
 	if (lResult == ERROR_SUCCESS){
 		lResult = reg.QueryStringValue(L"plugin",NULL,&size);
 		if (lResult == ERROR_SUCCESS) {
 			reg.QueryStringValue(L"plugin",vst_path,&size);
-			wstring ext = vst_path;
-			fname = stripExtension(ext);
-			fname += L".set";
-            file.open(fname.c_str(),ifstream::binary);
-			if (file.good())
+			wchar_t *chrP = wcsrchr(vst_path, '.'); // removes extension
+			if(chrP) chrP[0] = 0;
+			lstrcat(vst_path, L".set");
+            HANDLE fileHandle = CreateFile(vst_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);	
+			if (fileHandle != INVALID_HANDLE_VALUE)
 			{
-				file.seekg(0,ifstream::end);
-				size_t chunk_size = file.tellg();
-				file.seekg(0);
-				vector<uint8_t> chunk;
-				chunk.resize( chunk_size );
+				size_t chunk_size = GetFileSize(fileHandle, NULL);
+				if (chunk_size != INVALID_FILE_SIZE)
+				{
+					vector<uint8_t> chunk;
+					chunk.resize( chunk_size );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-				if (chunk_size) {
-					file.read( (char*) &chunk.front(), chunk_size );
-					if (effect) effect->setChunk( &chunk.front(), (unsigned int)chunk_size );
-				}
+					if (chunk_size) {
+						retResult = ReadFile(fileHandle, (char*) &chunk.front(), (DWORD)chunk_size, &size, NULL);
+						if (effect) effect->setChunk( &chunk.front(), (unsigned int)chunk_size);
+					}
 #else
-				if (chunk_size) {
-					file.read( (char*) chunk.data(), chunk_size );
-					if (effect) effect->setChunk( chunk.data(), (unsigned int)chunk_size );
-				}
+					if (chunk_size) {
+						retResult = ReadFile(fileHandle, (char*) chunk.data(), (DWORD)chunk_size, &size, NULL);					
+						if (effect) effect->setChunk( chunk.data(), (unsigned int)chunk_size );
+					}
+				
 #endif
+				}				
+				CloseHandle(fileHandle);
 			}
-			file.close();
+			
 		}
 		reg.Close();
 	}
+
+	return retResult;
 }
 
-static void settings_save(VSTDriver * effect)
+static BOOL settings_save(VSTDriver * effect)
 {
-	ofstream file;
+	BOOL retResult = FALSE;
 	long lResult;
 	TCHAR vst_path[MAX_PATH] = {0};
 	ULONG size;
 	CRegKeyEx reg;
-	wstring fname;
+	
 	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WRITE); // falco fix: otherwise reg.QueryStringValue gets back an ACCESS_DENIED(5) error.
 	if (lResult == ERROR_SUCCESS){
 		lResult = reg.QueryStringValue(L"plugin",NULL,&size);
 		if (lResult == ERROR_SUCCESS) {
 			reg.QueryStringValue(L"plugin",vst_path,&size);
-			wstring ext = vst_path;
-			fname = stripExtension(ext);
-			fname += L".set";
-			file.open(fname.c_str(),ofstream::binary);
-			if (file.good())
+			wchar_t *chrP = wcsrchr(vst_path, '.'); // removes extension
+			if(chrP) chrP[0] = 0;
+			lstrcat(vst_path, L".set");
+			HANDLE fileHandle = CreateFile(vst_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);			
+			if (fileHandle != INVALID_HANDLE_VALUE)
 			{
 				vector<uint8_t> chunk;
 				if (effect) effect->getChunk( chunk );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-				if (chunk.size()) file.write( ( const char * ) &chunk.front(), chunk.size() );
+				
+				if (chunk.size()) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL); 
 #else
-				if (chunk.size()) file.write( ( const char * ) chunk.data(), chunk.size() );
+				if (chunk.size()) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
+
 #endif
+				CloseHandle(fileHandle);
 			}
-			file.close();
+			
 		}
 		reg.Close();
 	}
+
+	return retResult;
 }
 
 static CString LoadOutputDriver(CString valueName)
@@ -415,7 +408,7 @@ public:
 
    void free_vst()
    {
-	   settings_save( effect );
+	   if(!settings_save(effect)) MessageBox(L"Cannot save plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);;
 	   delete effect;
 	   effect = NULL;
    }
@@ -429,22 +422,20 @@ public:
 		   delete effect;
 		   effect = NULL;
 		   if (szPluginPath && *szPluginPath)
-			   MessageBox(L"This is NOT a VSTi synth!");
+			   MessageBox(L"This is NOT a VSTi synth!", L"VST MIDI Driver");
 		   vst_effect.SetWindowText(L"No VSTi loaded");
 		   vst_vendor.SetWindowText(L"No VSTi loaded");		   
 		   vst_info.SetWindowText(L"No VSTi loaded");
 		   return FALSE;
 	   }
 
-	   string conv;
-	   effect->getEffectName(conv);
-	   wstring effect_str = utf16_from_ansi(conv);
-	   vst_effect.SetWindowText(effect_str.c_str());
-	   effect->getVendorString(conv);
-	   wstring vendor_str = utf16_from_ansi(conv);
-	   vst_vendor.SetWindowText(vendor_str.c_str());	  
+	   string vstStr;
+	   effect->getEffectName(vstStr);	   
+	   SetWindowTextA(vst_effect.m_hWnd, vstStr.c_str());
+	   effect->getVendorString(vstStr);	  
+	   SetWindowTextA(vst_vendor.m_hWnd, vstStr.c_str());  
 
-	   settings_load( effect );
+	   if (!settings_load(effect)) MessageBox(L"Cannot load plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
 
 	   return TRUE;
    }
@@ -1090,11 +1081,11 @@ public:
 		lRet = subkey.SetStringValue(L"szPname", device_name);
 		if (lRet == ERROR_SUCCESS)
 		{
-			MessageBox(L"MIDI synth set!", L"Notice.", MB_ICONINFORMATION);
+			MessageBox(L"MIDI synth set!", L"VST MIDI Driver", MB_ICONINFORMATION);
 		}
 		else
 		{
-			MessageBox(L"Can't set MIDI registry key", L"Damn!", MB_ICONSTOP);
+			MessageBox(L"Can't set MIDI registry key!", L"VST MIDI Driver", MB_ICONSTOP);
 		}
 		subkey.Close();
 		reg.Close();

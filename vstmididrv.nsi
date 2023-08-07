@@ -13,6 +13,7 @@ VIAddVersionKey "FileVersion" "${expv_1}.${expv_2}.${expv_3}.${expv_4}"
 VIAddVersionKey "ProductVersion" "${expv_1}.${expv_2}"
 VIAddVersionKey "FileDescription" "${PRODUCT_NAME}"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
+VIAddVersionKey "LegalCopyright" "kode54, Arakula, DB50XG, Falcosoft"
 
 ;Directory of User-Mode MIDI Registration PlugIn
 !ifdef NSIS_UNICODE
@@ -78,6 +79,11 @@ Function un.LockedListShow
 FunctionEnd
 ;--------------------------------
 Function .onInit
+
+ ${IfNot} ${IsNT}
+  MessageBox MB_OK|MB_ICONSTOP "This driver cannot be installed on Windows 9x systems."   
+  Abort 
+ ${EndIf}
 
 !ifdef INNER
   WriteUninstaller "$%TEMP%\vstmididrvuninstall.exe"

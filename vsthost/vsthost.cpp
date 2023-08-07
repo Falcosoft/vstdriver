@@ -60,6 +60,7 @@ bool need_idle = false;
 bool idle_started = false;
 
 static HWND editorHandle[2] = { 0, 0 };
+static HANDLE threadHandle[2] = { NULL, NULL };
 
 static DWORD MainThreadId;
 static char* dll_dir = NULL;
@@ -67,7 +68,6 @@ static char* dll_dir = NULL;
 static HANDLE null_file = NULL;
 static HANDLE pipe_in = NULL;
 static HANDLE pipe_out = NULL;
-
 
 #ifdef LOG
 void Log(LPCTSTR szFormat, ...)
@@ -268,7 +268,7 @@ void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
 
 static BOOL settings_save(AEffect* pEffect)
 {	
-	BOOL result = false; 
+	BOOL retResult = FALSE; 
 	long lResult;
 	DWORD dwType = REG_SZ;
 	HKEY hKey;
@@ -293,10 +293,10 @@ static BOOL settings_save(AEffect* pEffect)
 				if (pEffect) getChunk(pEffect, chunk);;
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 				
-				if (chunk.size()) result = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);   
+				if (chunk.size()) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);   
 #else
 				
-				if (chunk.size()) result = WriteFile(fileHandle, chunk.data(), chunk.size(), &size, NULL);
+				if (chunk.size()) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
 #endif
 				
 				CloseHandle(fileHandle);
@@ -306,7 +306,7 @@ static BOOL settings_save(AEffect* pEffect)
 		RegCloseKey(hKey);
 	}
 
-	return result;
+	return retResult;
 }
 
 struct MyDLGTEMPLATE : DLGTEMPLATE
@@ -327,6 +327,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	static HWND checkBoxWnd[2] = { NULL, NULL };
 	static HWND buttonWnd[2] = { NULL, NULL };
 	static HFONT hFont[2] = { NULL, NULL };	
+	static float dpiMul;
 
 	int portNum = 0;
 
@@ -338,6 +339,17 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			
 			if (effect)
 			{
+				/*
+				falco:
+				DPI adjustment for NT4/W2K/XP that do not use DPI virtualization but can use large font (125% - 120 DPI) and actually all other DPI settings.
+				96 DPI is 100%. There is no separate DPI for X/Y on NT4/W2K/XP. 
+				Since we have no DPI Aware manifest on Vista+ DPI virtualization is used. 
+				It's better than setting DPI awareness to true since allmost all VST 2.0 Editors know nothing about DPI scaling. So we let modern Windows handle this.  
+				*/
+				HDC screen = GetDC(0);
+				dpiMul = (float)(GetDeviceCaps(screen, LOGPIXELSY)) / 96.0f; 
+				ReleaseDC(0, screen);
+				
 				portNum = *(int*)effect->user;
 				editorHandle[portNum] = hwnd;
 
@@ -351,7 +363,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				if (GetCurrentThreadId() != MainThreadId)
 				{
-					extraHeight[portNum] = 24;
+					extraHeight[portNum] = (int)(24 * dpiMul);
 					sameThread[portNum] = false;
 				}
 
@@ -365,10 +377,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{
 					int width = eRect->right - eRect->left;
 					int height = eRect->bottom - eRect->top + extraHeight[portNum];
-					if (width < 200)
-						width = 200;
-					if (height < 50)
-						height = 50;
+					if (width < (int)(200 * dpiMul))
+						width = (int)(200 * dpiMul);
+					if (height < (int)(50 * dpiMul))
+						height = (int)(50 * dpiMul);
 					RECT wRect;
 					SetRect(&wRect, 0, 0, width, height);
 					AdjustWindowRectEx(&wRect, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
@@ -380,10 +392,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					{
 						LOGFONT lf;					
 						
-						checkBoxWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Always on Top",  WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 5, eRect->bottom - eRect->top + 3, 100, 20, hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+						checkBoxWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Always on Top",  WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 						SendMessage(checkBoxWnd[portNum], BM_SETCHECK, BST_CHECKED, 0);
 						
-						buttonWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Save Settings",  WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - 90, eRect->bottom - eRect->top + 2, 80, 20, hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+						buttonWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Save Settings",  WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul) , hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 						
 						GetObject (GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf); 
 						hFont[portNum] = CreateFontIndirect(&lf);
@@ -412,10 +424,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			{
 				int width = eRect->right - eRect->left;
 				int height = eRect->bottom - eRect->top + extraHeight[portNum];
-				if (width < 200)
-					width = 200;
-				if (height < 50)
-					height = 50;
+				if (width < (int)(200 * dpiMul))
+					width = (int)(200 * dpiMul);
+				if (height < (int)(50 * dpiMul))
+					height = (int)(50 * dpiMul);
 				RECT wRect;
 				SetRect(&wRect, 0, 0, width, height);
 				AdjustWindowRectEx(&wRect, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
@@ -425,11 +437,11 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				
 				if (!sameThread[portNum])
 				{					
-					SetWindowPos(checkBoxWnd[portNum], NULL, 5, eRect->bottom - eRect->top + 3, 100, 20, SWP_NOZORDER);
+					SetWindowPos(checkBoxWnd[portNum], NULL, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
 					if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
 						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 					
-					SetWindowPos(buttonWnd[portNum], NULL, width - 90, eRect->bottom - eRect->top + 2, 80, 20, SWP_NOZORDER);
+					SetWindowPos(buttonWnd[portNum], NULL, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
 				}			
 			}
 			dialogMutex.Leave();
@@ -455,8 +467,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 		else if(HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)buttonWnd[portNum])
 		{            
-		 	if(!settings_save(effect)) MessageBox(hwnd, L"Cannot write plugin settings! Most likely you do not have write permission.", L"VST Midi Driver", MB_OK | MB_ICONERROR);
-			else MessageBox(hwnd, L"Plugin settings successfully saved!", L"VST Midi Driver", MB_OK | MB_ICONINFORMATION);	
+		 	if(!settings_save(effect)) MessageBox(hwnd, L"Cannot write plugin settings! Most likely you do not have write permission.", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
+			else MessageBox(hwnd, L"Plugin settings have been saved successfully!", L"VST MIDI Driver", MB_OK | MB_ICONINFORMATION);	
 			
 			return 0;
 		}
@@ -473,8 +485,11 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 
 		if (hFont[portNum]) DeleteObject(hFont[portNum]);
-		EndDialog(hwnd, IDOK);
-		
+		EndDialog(hwnd, IDOK);	
+				
+		break;
+	case WM_DESTROY:
+		PostQuitMessage(0);
 		break;
 	}
 
@@ -698,8 +713,7 @@ static void EditorThread(void* threadparam)
 	MyDLGTEMPLATE vstiEditor;
 	AEffect* pEffect = (AEffect*)threadparam;
 	vstiEditor.style = WS_POPUPWINDOW | WS_DLGFRAME | WS_MINIMIZEBOX | WS_SYSMENU | WS_CAPTION | DS_MODALFRAME | DS_CENTER;
-	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
-	_endthread();
+	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);	
 }
 
 int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
@@ -711,7 +725,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 	wchar_t* end_char = 0;
 	unsigned in_sum = wcstoul(argv[2], &end_char, 16);
-	if (end_char == argv[2] || *end_char) return Error::MalformedChecksum;;
+	if (end_char == argv[2] || *end_char) return Error::MalformedChecksum;
 
 	unsigned test_sum = 0;
 	end_char = argv[1];
@@ -937,7 +951,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 				if (pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor)
 				{		
-					_beginthread(EditorThread, 16384, pEffect[port_num]);
+					threadHandle[port_num] = (HANDLE)_beginthread(EditorThread, 16384, pEffect[port_num]);
 					//Sleep(100);
 				}
 
@@ -964,6 +978,12 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			{
 				port_num = get_code();
 				if (editorHandle[port_num] != 0) SendMessage(editorHandle[port_num], WM_CLOSE, 0, 0);
+				if (threadHandle[port_num] != NULL)
+				{
+					WaitForSingleObject(threadHandle[port_num], 2000);
+					threadHandle[port_num] = NULL;
+				}
+				
 
 				if (pEffect[port_num])
 				{
@@ -1422,7 +1442,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 exit:
 	if (editorHandle[0] != 0) SendMessage(editorHandle[0], WM_CLOSE, 0, 0);
 	if (editorHandle[1] != 0) SendMessage(editorHandle[1], WM_CLOSE, 0, 0);
-
+	
 	if (pEffect[1])
 	{
 		if (blState.size()) pEffect[1]->dispatcher(pEffect[1], effStopProcess, 0, 0, 0, 0);

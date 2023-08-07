@@ -76,6 +76,7 @@ BEGIN
             VALUE "OriginalFilename", "vstmididrv.dll"
             VALUE "ProductName", "VST MIDI System Synth (Falcomod)"
             VALUE "ProductVersion", stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR)
+            VALUE "LegalCopyright", "kode54, Arakula, DB50XG, Falcosoft"
         END
     END
     BLOCK "VarFileInfo"
