@@ -1006,6 +1006,12 @@ namespace VSTMIDIDRV{
 		return usingFloat != FALSE;
 	}
 
+	DWORD GetHighDpiMode() {
+		DWORD highDpiMode = 0;
+		highDpiMode = GetDwordData(L"HighDpiMode", highDpiMode);
+		return highDpiMode;
+	}
+
 	bool UseAsio(){
 
 		HKEY hKey;
@@ -1120,6 +1126,7 @@ namespace VSTMIDIDRV{
 			return 1;
 		}
 
+		vstDriver->setHighDpiMode(GetHighDpiMode());
 		InitDialog(uDeviceID);
 
 		framesRendered = 0;

@@ -46,6 +46,7 @@ namespace Command {
 		RenderAudioSamples = 9,
 		DisplayEditorModalThreaded = 10,
 		RenderAudioSamples4channel = 11,
+		SetHighDpiMode = 12,
 	};
 };
 
@@ -548,6 +549,20 @@ bool VSTDriver::hasEditor()
 	}
 	code = process_read_code();
 	return code != 0;
+}
+
+void VSTDriver:: setHighDpiMode(unsigned int modeNum) 
+{
+	if (modeNum) 
+	{
+		process_write_code(Command::SetHighDpiMode);
+		process_write_code(modeNum);
+
+		uint32_t code = process_read_code();
+		if (code != NoError) {
+			process_terminate();
+		}
+	}
 }
 
 void VSTDriver::displayEditorModal(unsigned int uDeviceID)

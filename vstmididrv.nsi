@@ -1,6 +1,7 @@
 !include "x64.nsh"
 !include MUI2.nsh
 !include WinVer.nsh
+ManifestDPIAware true
 ; The name of the installer
 Name "VST MIDI System Synth (Falcomod)"
 

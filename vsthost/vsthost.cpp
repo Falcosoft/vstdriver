@@ -8,6 +8,10 @@
 // #define LOG
 // #define MINIDUMP
 
+#define USER32DEF(f) (WINAPI *f)
+#define LOADUSER32FUNCTION(f) *((void**)&f)=GetProcAddress(user32,#f)
+
+
 enum
 {
 	BUFFER_SIZE = 4096
@@ -27,6 +31,7 @@ namespace Command {
 		RenderAudioSamples = 9,
 		DisplayEditorModalThreaded = 10,
 		RenderAudioSamples4channel = 11,
+		SetHighDpiMode = 12,
 	};
 };
 
@@ -58,6 +63,10 @@ namespace Error {
 
 bool need_idle = false;
 bool idle_started = false;
+
+static HINSTANCE user32 = NULL;
+static HANDLE USER32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
+static HANDLE highDpiMode = NULL;
 
 static HWND editorHandle[2] = { 0, 0 };
 static HANDLE threadHandle[2] = { NULL, NULL };
@@ -342,7 +351,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				/*
 				falco:
 				DPI adjustment for NT4/W2K/XP that do not use DPI virtualization but can use large font (125% - 120 DPI) and actually all other DPI settings.
-				96 DPI is 100%. There is no separate DPI for X/Y on NT4/W2K/XP. 
+				96 DPI is 100%. There is no separate DPI for X/Y on Windows. 
 				Since we have no DPI Aware manifest on Vista+ DPI virtualization is used. 
 				It's better than setting DPI awareness to true since allmost all VST 2.0 Editors know nothing about DPI scaling. So we let modern Windows handle this.  
 				*/
@@ -390,8 +399,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					
 					if (!sameThread[portNum])
 					{
-						LOGFONT lf;					
-						
+						LOGFONT lf;				
+											
 						checkBoxWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Always on Top",  WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 						SendMessage(checkBoxWnd[portNum], BM_SETCHECK, BST_CHECKED, 0);
 						
@@ -489,7 +498,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				
 		break;
 	case WM_DESTROY:
-		PostQuitMessage(0);
+		if(!sameThread[portNum]) PostQuitMessage(0);
 		break;
 	}
 
@@ -713,6 +722,9 @@ static void EditorThread(void* threadparam)
 	MyDLGTEMPLATE vstiEditor;
 	AEffect* pEffect = (AEffect*)threadparam;
 	vstiEditor.style = WS_POPUPWINDOW | WS_DLGFRAME | WS_MINIMIZEBOX | WS_SYSMENU | WS_CAPTION | DS_MODALFRAME | DS_CENTER;
+
+	if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
+
 	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);	
 }
 
@@ -758,6 +770,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 	MainThreadId = GetCurrentThreadId();
 
+	user32 = GetModuleHandle(L"user32.dll");
+	if (user32)	LOADUSER32FUNCTION(SetThreadDpiAwarenessContext);
+
 	null_file = CreateFile(_T("NUL"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
 	pipe_in = GetStdHandle(STD_INPUT_HANDLE);
@@ -771,7 +786,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		icc.dwSize = sizeof(icc);
 		icc.dwICC = ICC_WIN95_CLASSES;
 		if (!InitCommonControlsEx(&icc)) InitCommonControls();
-		//InitCommonControlsEx can fail on Win 2000/XP without service packs. It's rude to exit in case of failing since this is not essentiall at all.
+		//InitCommonControlsEx can fail on Win 2000/XP depending on service packs. It's rude to exit in case of failing since this is not essentiall at all.
 	}
 
 	if (FAILED(CoInitialize(NULL))) return Error::ComInitializationFailed;
@@ -936,6 +951,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					MyDLGTEMPLATE t;
 					t.style = WS_POPUPWINDOW | WS_DLGFRAME | DS_MODALFRAME | DS_CENTER;
 					t.dwExtendedStyle = WS_EX_TOPMOST;
+					
+					if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
+
 					DialogBoxIndirectParam(0, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)(pEffect[0]));
 					//getChunk(pEffect[0], chunk);
 					//setChunk(pEffect[1], chunk);
@@ -971,6 +989,14 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				sample_rate = get_code();
 
 				put_code(Response::NoError);
+			}
+			break;
+
+		case Command::SetHighDpiMode: // Set DPI awareness mode for plugin's editor
+			{			
+			highDpiMode = (HANDLE)(int)get_code();
+
+			put_code(Response::NoError);
 			}
 			break;
 

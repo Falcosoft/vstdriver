@@ -202,6 +202,7 @@ class CView1 : public CDialogImpl<CView1>
 	CTrackBarCtrl volume_slider;
 	TCHAR vst_path[MAX_PATH];
 	HANDLE hbrBkgnd;
+	DWORD highDpiMode;
 
 	VSTDriver * effect;
 public:
@@ -222,6 +223,7 @@ public:
    CView1() {
     effect = NULL; 
     hbrBkgnd = NULL;
+	highDpiMode = 0;
 	
 	isWinNT4 = IsWinNT4();
 	isASIO = IsASIO();
@@ -230,7 +232,7 @@ public:
  
    ~CView1()
    { 
-     free_vst(); 
+     if(effect) free_vst(); 
      if (bassasio)
         {         
             FreeLibrary(bassasio);
@@ -286,6 +288,10 @@ public:
 		   lResult = reg.QueryDWORDValue(L"PortBOffset",reg_value);
 		   if (lResult == ERROR_SUCCESS) {
 			   portBOffsetVal = reg_value;
+		   }
+   		   lResult = reg.QueryDWORDValue(L"HighDpiMode", reg_value);
+		   if (lResult == ERROR_SUCCESS) {
+			   highDpiMode = reg_value;
 		   }		   
 
 		   reg.Close();
@@ -400,6 +406,7 @@ public:
 	   {
 		   HWND m_hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
 		   ::EnableWindow(m_hWnd, FALSE);
+   		   effect->setHighDpiMode(highDpiMode);
 		   effect->displayEditorModal();
 		   ::EnableWindow(m_hWnd, TRUE);
 	   }
@@ -408,9 +415,14 @@ public:
 
    void free_vst()
    {
-	   if(!settings_save(effect)) MessageBox(L"Cannot save plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);;
-	   delete effect;
-	   effect = NULL;
+	   if(effect)
+	   {
+		 if(!settings_save(effect)) MessageBox(L"Cannot save plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
+		 if(!highDpiMode)SaveDwordValue(L"HighDpiMode",(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
+
+		 delete effect;
+		 effect = NULL;
+	   }
    }
 
    BOOL load_vst(TCHAR * szPluginPath)

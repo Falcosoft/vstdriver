@@ -31,6 +31,8 @@
 #include "../external_packages/aeffect.h"
 #include "../external_packages/aeffectx.h"
 
+/* Added manifest as resource instead since DPI awareness/requestedExecutionLevel cannot be set as pragma comment
+
 #if defined _M_IX86
   #pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='x86' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #elif defined _M_IA64
@@ -40,6 +42,7 @@
 #else
   #pragma comment(linker, "/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #endif
+*/
 
 typedef AEffect * (*main_func)(audioMasterCallback audioMaster);
 
