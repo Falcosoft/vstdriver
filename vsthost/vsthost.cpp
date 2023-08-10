@@ -476,7 +476,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 		else if(HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)buttonWnd[portNum])
 		{            
-		 	if(!settings_save(effect)) MessageBox(hwnd, L"Cannot write plugin settings! Most likely you do not have write permission.", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
+		 	if(!settings_save(effect)) MessageBox(hwnd, L"Cannot save plugin settings!\r\nIt seems you do not have permission to write plugin's folder.", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
 			else MessageBox(hwnd, L"Plugin settings have been saved successfully!", L"VST MIDI Driver", MB_OK | MB_ICONINFORMATION);	
 			
 			return 0;
