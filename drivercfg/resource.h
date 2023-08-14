@@ -36,6 +36,7 @@
 #define IDC_STATIC_PORTB                1030
 #define IDC_ALWAYSONTOP                 1031
 #define IDC_STSF                        1032
+#define IDC_GROUPBOX2                   1033
 #define IDC_STATIC                      -1
 
 // Next default values for new objects

@@ -13,7 +13,7 @@
 #pragma once
 
 
-/*BOOL IsWin8OrNewer()
+BOOL IsWin8OrNewer()
 {
 	OSVERSIONINFOEX osvi;
 	BOOL bOsVersionInfoEx;
@@ -26,7 +26,7 @@
 		(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion > 1)))
 		return TRUE;
 	return FALSE;
-}*/
+}
 
 //Setting Midi mapper value this simple way does not work on Win XP either but on XP you can do it properly with built-in control panel anyway...
 BOOL IsWinVistaOrWin7()  
@@ -42,6 +42,35 @@ BOOL IsWinVistaOrWin7()
 		(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 1)))
 		return TRUE;
 	return FALSE;
+}
+
+BOOL IsCoolSoftMidiMapperInstalled() 
+{
+	CRegKeyEx reg;
+	CString value;
+	BOOL retValue = FALSE;
+
+	long result = reg.Open(HKEY_LOCAL_MACHINE, L"Software\\CoolSoft MIDIMapper", KEY_READ | KEY_WOW64_64KEY);
+	if (result != NO_ERROR)
+	{
+		return retValue;
+	}
+
+	ULONG size;
+
+	result = reg.QueryStringValue(L"path", NULL, &size);
+	if (result == NO_ERROR && size > 0)
+	{
+		reg.QueryStringValue(L"path", value.GetBuffer(size), &size);
+		value.ReleaseBuffer();
+		DWORD dwAttrib = GetFileAttributes(value.GetString());
+		retValue = (dwAttrib != INVALID_FILE_ATTRIBUTES && (dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+	}
+
+	reg.Close();
+
+	return retValue;
+
 }
 
 class CMainDlg : public CDialogImpl<CMainDlg>, public CUpdateUI<CMainDlg>,
@@ -101,7 +130,11 @@ public:
 		m_ctrlTab.SubclassWindow(GetDlgItem(IDC_TAB));
 		m_view1.Create(m_hWnd);
 		
-		if (IsWinVistaOrWin7()) m_view2.Create(m_hWnd);
+		if (IsWinVistaOrWin7() || (IsWin8OrNewer() && IsCoolSoftMidiMapperInstalled()))
+		{
+			m_view2.Create(m_hWnd);
+		}
+
 		
 		m_view3.Create(m_hWnd);
 		TCITEM tci = { 0 };
@@ -110,11 +143,13 @@ public:
 		m_ctrlTab.InsertItem(0, &tci, m_view1);
 		tci.pszText = _T("OutPut devices");
 		m_ctrlTab.InsertItem(1, &tci, m_view3);
-		if (IsWinVistaOrWin7())
+		if (IsWinVistaOrWin7() || (IsWin8OrNewer() && IsCoolSoftMidiMapperInstalled()))
 		{
 			tci.pszText = _T("Windows MIDI");
 			m_ctrlTab.InsertItem(2, &tci, m_view2);
+			if (!IsWinVistaOrWin7()) m_view2.SetGroupBoxCaption(L"Default MIDI Synth (through Coolsoft MIDI Mapper)");
 		}
+
 		
 		m_ctrlTab.SetCurSel(0);
 

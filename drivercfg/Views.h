@@ -1051,6 +1051,7 @@ class CView2 : public CDialogImpl<CView2>
 {
 	CComboBox synthlist;
 	CButton apply;
+	CStatic groupBox;
 
 	typedef DWORD(STDAPICALLTYPE * pmodMessage)(UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
 
@@ -1061,10 +1062,16 @@ public:
 		COMMAND_ID_HANDLER(IDC_SNAPPLY, OnButtonApply)
 	END_MSG_MAP()
 
+	void SetGroupBoxCaption(wchar_t* caption) 
+	{
+		groupBox.SetWindowTextW(caption);
+	}
+
 	LRESULT OnInitDialogView2(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
 		synthlist = GetDlgItem(IDC_SYNTHLIST);
 		apply = GetDlgItem(IDC_SNAPPLY);
+		groupBox = GetDlgItem(IDC_GROUPBOX2);
 		load_midisynths_mapper();
 		return TRUE;
 	}
@@ -1087,7 +1094,7 @@ public:
 		int n = synthlist.GetLBTextLen(selection);
 		synthlist.GetLBText(selection, device_name.GetBuffer(n));
 		device_name.ReleaseBuffer(n);
-		lRet = reg.Create(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE | KEY_WOW64_32KEY);
+		lRet = reg.Create(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
 		lRet = reg.DeleteSubKey(L"MIDIMap");
 		lRet = subkey.Create(reg, L"MIDIMap", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
 		lRet = subkey.SetStringValue(L"szPname", device_name);
@@ -1109,7 +1116,7 @@ public:
 		CRegKeyEx reg;
 		CString device_name;
 		ULONG size = 128;
-		lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia\\MIDIMap", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_READ | KEY_WOW64_32KEY);
+		lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia\\MIDIMap", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_READ);
 		reg.QueryStringValue(L"szPname", device_name.GetBuffer(size), &size);
 		reg.Close();
 		device_name.ReleaseBuffer(size);
@@ -1120,7 +1127,7 @@ public:
 			MMRESULT Error = midiOutGetDevCaps(i, &Caps, sizeof(Caps));
 			if (Error != MMSYSERR_NOERROR)
 				continue;
-			synthlist.AddString(Caps.szPname);
+			if(wcscmp(Caps.szPname,L"CoolSoft MIDIMapper"))	synthlist.AddString(Caps.szPname);
 		}
 		int index = 0;
 		index = synthlist.FindStringExact(-1, device_name);
