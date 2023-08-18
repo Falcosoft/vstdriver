@@ -32,6 +32,8 @@ namespace Command {
 		DisplayEditorModalThreaded = 10,
 		RenderAudioSamples4channel = 11,
 		SetHighDpiMode = 12,
+		SetSinglePort32ChMode = 13
+		
 	};
 };
 
@@ -70,6 +72,8 @@ static HANDLE highDpiMode = NULL;
 
 static HWND editorHandle[2] = { 0, 0 };
 static HANDLE threadHandle[2] = { NULL, NULL };
+
+static bool isSinglePort32Ch = false;
 
 static DWORD MainThreadId;
 static char* dll_dir = NULL;
@@ -717,7 +721,7 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 
 #pragma comment(lib, "Winmm")
 
-static void EditorThread(void* threadparam)
+static unsigned __stdcall EditorThread(void* threadparam)
 {
 	MyDLGTEMPLATE vstiEditor;
 	AEffect* pEffect = (AEffect*)threadparam;
@@ -725,7 +729,10 @@ static void EditorThread(void* threadparam)
 
 	if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
 
-	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);	
+	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
+	
+	_endthreadex(0);
+    return 0;
 }
 
 int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
@@ -965,11 +972,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		case Command::DisplayEditorModalThreaded: // Display Editor Modal in separate thread
 			{
-				port_num = get_code();
+				port_num = get_code();								
 
-				if (pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor)
+				if (pEffect[port_num]->flags & VstAEffectFlags::effFlagsHasEditor)
 				{		
-					threadHandle[port_num] = (HANDLE)_beginthread(EditorThread, 16384, pEffect[port_num]);
+					threadHandle[port_num] = (HANDLE)_beginthreadex(NULL, 16384, &EditorThread, pEffect[port_num], 0, NULL);
 					//Sleep(100);
 				}
 
@@ -994,45 +1001,108 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		case Command::SetHighDpiMode: // Set DPI awareness mode for plugin's editor
 			{			
-			highDpiMode = (HANDLE)(int)get_code();
-
-			put_code(Response::NoError);
+				highDpiMode = (HANDLE)(int)get_code();
+				put_code(Response::NoError);
 			}
 			break;
+
+		case Command::SetSinglePort32ChMode: 
+			{	
+				isSinglePort32Ch = true;
+				put_code(Response::NoError);
+			}
+			break;			
 
 		case Command::Reset: // Reset
 			{
 				port_num = get_code();
-				if (editorHandle[port_num] != 0) SendMessage(editorHandle[port_num], WM_CLOSE, 0, 0);
-				if (threadHandle[port_num] != NULL)
+
+				if (isSinglePort32Ch)
 				{
-					WaitForSingleObject(threadHandle[port_num], 2000);
-					threadHandle[port_num] = NULL;
-				}
-				
+					if (editorHandle[0] != 0) SendMessage(editorHandle[0], WM_CLOSE, 0, 0);
+					if (editorHandle[1] != 0) SendMessage(editorHandle[1], WM_CLOSE, 0, 0);
 
-				if (pEffect[port_num])
+					if (threadHandle[0] != NULL || threadHandle[1] != NULL)
+					{
+						WaitForMultipleObjects(2, &threadHandle[0], TRUE, 2000);
+						CloseHandle(threadHandle[0]);
+						CloseHandle(threadHandle[1]);
+						threadHandle[0] = NULL;
+						threadHandle[1] = NULL;
+					}
+
+					if (pEffect[0])
+					{
+						if (blState.size()) pEffect[0]->dispatcher(pEffect[0], effStopProcess, 0, 0, 0, 0);
+						pEffect[0]->dispatcher(pEffect[0], effClose, 0, 0, 0, 0);
+						pEffect[0] = NULL;
+					}
+					if (pEffect[1])
+					{
+						if (blState.size()) pEffect[1]->dispatcher(pEffect[1], effStopProcess, 0, 0, 0, 0);
+						pEffect[1]->dispatcher(pEffect[1], effClose, 0, 0, 0, 0);
+						pEffect[1] = NULL;
+					}
+
+					blState.resize(0);
+
+					freeChain();
+
+					pEffect[0] = pMain(&audioMaster);
+					if (!pEffect[0])
+					{
+						code = Response::CannotReset;
+						goto exit;
+					}
+					pEffect[0]->user = &effectData[0];
+					pEffect[0]->dispatcher(pEffect[0], effOpen, 0, 0, 0, 0);
+					setChunk(pEffect[0], chunk);
+
+					pEffect[1] = pMain(&audioMaster);
+					if (!pEffect[1])
+					{
+						code = Response::CannotReset;
+						goto exit;
+					}
+					pEffect[1]->user = &effectData[1];
+					pEffect[1]->dispatcher(pEffect[1], effOpen, 0, 0, 0, 0);
+					setChunk(pEffect[1], chunk);
+
+				}
+				else
 				{
-					if (blState.size()) pEffect[port_num]->dispatcher(pEffect[port_num], effStopProcess, 0, 0, 0, 0);
-					pEffect[port_num]->dispatcher(pEffect[port_num], effClose, 0, 0, 0, 0);
-					pEffect[port_num] = NULL;
+					if (editorHandle[port_num] != 0) SendMessage(editorHandle[port_num], WM_CLOSE, 0, 0);
+					if (threadHandle[port_num] != NULL)
+					{
+						WaitForSingleObject(threadHandle[port_num], 2000);
+						CloseHandle(threadHandle[port_num]);
+						threadHandle[port_num] = NULL;
+					}
+
+
+					if (pEffect[port_num])
+					{
+						if (blState.size()) pEffect[port_num]->dispatcher(pEffect[port_num], effStopProcess, 0, 0, 0, 0);
+						pEffect[port_num]->dispatcher(pEffect[port_num], effClose, 0, 0, 0, 0);
+						pEffect[port_num] = NULL;
+					}
+					//if ( blState.size() ) pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effStopProcess, 0, 0, 0, 0 );
+					//pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effClose, 0, 0, 0, 0 );
+
+					blState.resize(0);
+
+					freeChain();
+
+					pEffect[port_num] = pMain(&audioMaster);
+					if (!pEffect[port_num])
+					{
+						code = Response::CannotReset;
+						goto exit;
+					}
+					pEffect[port_num]->user = &effectData[port_num];
+					pEffect[port_num]->dispatcher(pEffect[port_num], effOpen, 0, 0, 0, 0);
+					setChunk(pEffect[port_num], chunk);
 				}
-				//if ( blState.size() ) pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effStopProcess, 0, 0, 0, 0 );
-				//pEffect[ 0 ]->dispatcher( pEffect[ 0 ], effClose, 0, 0, 0, 0 );
-
-				blState.resize(0);
-
-				freeChain();
-
-				pEffect[port_num] = pMain(&audioMaster);
-				if (!pEffect[port_num])
-				{
-					code = Response::CannotReset;
-					goto exit;
-				}
-				pEffect[port_num]->user = &effectData[port_num];
-				pEffect[port_num]->dispatcher(pEffect[port_num], effOpen, 0, 0, 0, 0);
-				setChunk(pEffect[port_num], chunk);
 
 				put_code(Response::NoError);
 			}

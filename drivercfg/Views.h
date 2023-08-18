@@ -203,6 +203,7 @@ class CView1 : public CDialogImpl<CView1>
 	TCHAR vst_path[MAX_PATH];
 	HANDLE hbrBkgnd;
 	DWORD highDpiMode;
+	DWORD EnableSinglePort32ChMode;
 
 	VSTDriver * effect;
 public:
@@ -224,6 +225,7 @@ public:
     effect = NULL; 
     hbrBkgnd = NULL;
 	highDpiMode = 0;
+	EnableSinglePort32ChMode = (DWORD)-1;
 	
 	isWinNT4 = IsWinNT4();
 	isASIO = IsASIO();
@@ -292,6 +294,10 @@ public:
    		   lResult = reg.QueryDWORDValue(L"HighDpiMode", reg_value);
 		   if (lResult == ERROR_SUCCESS) {
 			   highDpiMode = reg_value;
+		   }
+		   lResult = reg.QueryDWORDValue(L"EnableSinglePort32ChMode", reg_value);
+		   if (lResult == ERROR_SUCCESS) {
+			   EnableSinglePort32ChMode = reg_value;
 		   }		   
 
 		   reg.Close();
@@ -419,7 +425,8 @@ public:
 	   {
 		 if(!settings_save(effect)) MessageBox(L"Cannot save plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
 		 if(!highDpiMode)SaveDwordValue(L"HighDpiMode",(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
-
+         if(EnableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(L"EnableSinglePort32ChMode", 1);
+		 
 		 delete effect;
 		 effect = NULL;
 	   }

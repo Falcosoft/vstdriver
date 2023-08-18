@@ -53,7 +53,7 @@ namespace VSTMIDIDRV{
 	private:
 		static const unsigned int maxPos = 1024;
 		unsigned int startpos;
-		unsigned int endpos;
+		unsigned int endpos;		
 		struct message
 		{
 			void * sysex;
@@ -70,12 +70,11 @@ namespace VSTMIDIDRV{
 
 		void Reset(){
 			startpos = 0;
-			endpos = 0;
+			endpos = 0;			
 		}
 
-		DWORD PutMessage(DWORD port, DWORD msg, DWORD timestamp){
+		DWORD PutMessage(DWORD port, DWORD msg, DWORD timestamp) {		
 			unsigned int newEndpos = endpos;
-
 			newEndpos++;
 			if (newEndpos == maxPos) // check for buffer rolloff
 				newEndpos = 0;
@@ -89,8 +88,7 @@ namespace VSTMIDIDRV{
 			return 0;
 		}
 
-		DWORD PutSysex(DWORD port, unsigned char * sysex, DWORD sysex_len, DWORD timestamp)
-		{
+		DWORD PutSysex(DWORD port, unsigned char * sysex, DWORD sysex_len, DWORD timestamp)	{			
 			unsigned int newEndpos = endpos;
 			void * sysexCopy;
 
@@ -353,6 +351,7 @@ namespace VSTMIDIDRV{
 			SetEvent(hEvent);
 			if (hThread != NULL) {
 				WaitForSingleObject(hThread, 2000);
+				CloseHandle(hThread);
 				hThread = NULL;
 			}
 			int wResult = waveOutReset(hWaveOut);
@@ -408,7 +407,7 @@ namespace VSTMIDIDRV{
 					return 4;
 				}
 			}
-			hThread = (HANDLE)_beginthread(RenderingThread, 16384, this);
+			hThread = (HANDLE)_beginthreadex(NULL, 16384, &RenderingThread, this, 0, NULL);
 			return 0;
 		}
 
@@ -497,11 +496,13 @@ namespace VSTMIDIDRV{
 			return playPositionSnapshot;
 		}
 
-		static void RenderingThread(void* pthis){
+		static unsigned __stdcall RenderingThread(void* pthis)
+		{
 			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 			WaveOutWin32* _this = (WaveOutWin32*)pthis;
 
-			while (!waveOut.stopProcessing) {
+			while (!waveOut.stopProcessing)
+			{
 				bool allBuffersRendered = true;
 				for (UINT i = 0; i < waveOut.chunks; i++) {
 					if (waveOut.WaveHdr[i].dwFlags & WHDR_DONE) {
@@ -524,8 +525,11 @@ namespace VSTMIDIDRV{
 					waveOut.GetPos(_this->channels);
 					WaitForSingleObject(waveOut.hEvent, INFINITE);
 				}
-			}			
+			}
+			_endthreadex(0);
+			return 0;
 		}
+
 	}waveOut;
 
 
@@ -1012,6 +1016,12 @@ namespace VSTMIDIDRV{
 		return highDpiMode;
 	}
 
+	bool GetEnableSinglePort32ChMode() {
+		BOOL EnableSinglePort32ChMode = TRUE;
+		EnableSinglePort32ChMode = GetDwordData(L"EnableSinglePort32ChMode", EnableSinglePort32ChMode);
+		return EnableSinglePort32ChMode != FALSE;
+	}
+
 	bool UseAsio(){
 
 		HKEY hKey;
@@ -1055,7 +1065,8 @@ namespace VSTMIDIDRV{
 		midiLatency = MillisToFrames(midiLatencyMS);
 		
 		usingFloat = GetUsingFloat();
-		useAsio = UseAsio();		
+		useAsio = UseAsio();
+		enableSinglePort32ChMode = GetEnableSinglePort32ChMode();
 
 		if (chunkSize) {
 			// Number of chunks should be ceil(bufferSize / chunkSize)
@@ -1081,6 +1092,10 @@ namespace VSTMIDIDRV{
 
 		midiVol[0] = 1.0f;
 		midiVol[1] = 1.0f;
+		statusBuff[0] = 0;
+		statusBuff[1] = 0;
+		isSinglePort32Ch = false;
+		virtualPortNum = 0;
 
 		// Init synth
 		if (synthMutex.Init()) {
@@ -1155,6 +1170,9 @@ namespace VSTMIDIDRV{
 		synthMutex.Enter();
 		vstDriver->ResetDriver(uDeviceID);
 		midiStream.Reset();
+		statusBuff[uDeviceID] = 0;
+		isSinglePort32Ch = false;
+		virtualPortNum = 0;
 		synthMutex.Leave();
 
 		wResult = useAsio ? bassAsioOut.Resume() : waveOut.Resume();
@@ -1163,15 +1181,47 @@ namespace VSTMIDIDRV{
 
 	void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg){
 		
+		synthMutex.Enter();	
+
+		//// support for F5 xx port select message (FSMP can send this message)
+		if((unsigned char)(msg) == 0xF5 && enableSinglePort32ChMode) {
+			if (!isSinglePort32Ch) {
+
+				vstDriver->setSinglePort32ChMode();				
+				InitDialog((unsigned int)!uDeviceID); 
+				isSinglePort32Ch = true;
+			}
+			//F5 xx command uses 1 as first port, but we use 0 and we have only A/B ports. This way 1 -> 0, 2 -> 1, 3 -> 0, 4 -> 1 and so on. 
+			virtualPortNum = !(((unsigned char*)&msg)[1] & 1);
+			
+			synthMutex.Leave();
+			return;
+		}
+		if (isSinglePort32Ch) uDeviceID = virtualPortNum;
+		////
+		
+		////falco: running status support
+		if ((unsigned char)msg >= 0x80 && (unsigned char)msg <= 0xEF) {
+			statusBuff[uDeviceID] = (unsigned char)msg; //store status in case of normal Channel/Voice messages.
+		}
+		else if((unsigned char)msg < 0x80) {
+			msg = (msg << 8) | statusBuff[uDeviceID]; //expand messages without status to full messages.								
+		}
+		else if((unsigned char)msg > 0xF0 && (unsigned char)msg < 0xF7) {
+			statusBuff[uDeviceID] = 0;  //clear running status in case of System Common messages				
+		}		
+		if ((unsigned char)msg == 0) return; //no status always means malformed Midi message 
+		////	
+		
+		////falco: midiOutSetVolume support
 		if (midiVol[uDeviceID] != 1.0f) {
 			if ((msg & 0xF0) == 0x90 ) {				
-				unsigned char velocity = ((unsigned char*)(&msg))[2]; 
+				unsigned char velocity = ((unsigned char*)&msg)[2]; 
 				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : max(int(velocity * midiVol[uDeviceID]), 1);		  
-				((unsigned char*)(&msg))[2] = velocity;				
+				((unsigned char*)&msg)[2] = velocity;				
 			}
 		}
-
-		synthMutex.Enter();		
+		////			
 
 		if (useAsio) midiStream.PutMessage(uDeviceID, msg, min(bassAsioOut.GetPos() + midiLatency, bufferSize - 1));
 		else midiStream.PutMessage(uDeviceID, msg, (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize));
@@ -1180,8 +1230,28 @@ namespace VSTMIDIDRV{
 	}
 
 	void MidiSynth::PlaySysex(unsigned uDeviceID, unsigned char *bufpos, DWORD len){
+				
 		synthMutex.Enter();
 
+		//// support for F5 xx port select message (FSMP can send this message)
+		if (bufpos[0] == 0xF5 && len > 1 && enableSinglePort32ChMode) {
+			if (!isSinglePort32Ch) {
+                
+				vstDriver->setSinglePort32ChMode();
+				InitDialog((unsigned int)!uDeviceID);
+				isSinglePort32Ch = true;
+			}
+			//F5 xx command uses 1 as first port, but we use 0 and we have only A/B ports. This way 1 -> 0, 2 -> 1, 3 -> 0, 4 -> 1 and so on.
+			virtualPortNum = !(bufpos[1] & 1);
+			
+			synthMutex.Leave();
+			return;
+		}		
+		if (isSinglePort32Ch) uDeviceID = virtualPortNum;
+		////
+
+		statusBuff[uDeviceID] = 0; //clear running status also in case of SysEx messages
+		
 		if (useAsio) midiStream.PutSysex(uDeviceID, bufpos, len, min(bassAsioOut.GetPos() + midiLatency, bufferSize - 1));
 		else midiStream.PutSysex(uDeviceID, bufpos, len, (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize));
 

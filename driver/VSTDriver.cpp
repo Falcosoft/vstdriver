@@ -47,6 +47,7 @@ namespace Command {
 		DisplayEditorModalThreaded = 10,
 		RenderAudioSamples4channel = 11,
 		SetHighDpiMode = 12,
+		SetSinglePort32ChMode = 13
 	};
 };
 
@@ -563,6 +564,17 @@ void VSTDriver:: setHighDpiMode(unsigned int modeNum)
 			process_terminate();
 		}
 	}
+}
+
+void VSTDriver:: setSinglePort32ChMode() 
+{	
+	process_write_code(Command::SetSinglePort32ChMode);	
+
+	uint32_t code = process_read_code();
+	if (code != NoError) {
+		process_terminate();
+	}
+	
 }
 
 void VSTDriver::displayEditorModal(unsigned int uDeviceID)

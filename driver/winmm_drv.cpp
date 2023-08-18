@@ -65,15 +65,11 @@ STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwP
 	case DRV_OPEN:
 		int driverNum;
 		if (driverCount == MAX_DRIVERS) {
-			return 0;
+			return DRV_CANCEL;
 		} else {
 			for (driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
-				if (!drivers[driverNum].open) {
-					break;
-				}
-				if (driverNum == MAX_DRIVERS) {
-					return 0;
-				}
+				if (driverNum == MAX_DRIVERS) return DRV_CANCEL;				
+				if (!drivers[driverNum].open) break;				
 			}
 		}
 		drivers[driverNum].open = true;
@@ -201,13 +197,10 @@ LONG OpenDriver(Driver *driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWO
 	} else {
 		int i;
 		for (i = 0; i < MAX_CLIENTS; i++) {
-			if (!driver->clients[i].allocated) {
-				break;
-			}
+			if (i == MAX_CLIENTS) return MMSYSERR_ALLOCATED;			
+			if (!driver->clients[i].allocated) break;			
 		}
-		if (i == MAX_CLIENTS) {
-			return MMSYSERR_ALLOCATED;
-		}
+
 		clientNum = i;
 	}
 	MIDIOPENDESC *desc = (MIDIOPENDESC *)dwParam1;

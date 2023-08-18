@@ -47,6 +47,12 @@ private:
 	bool useAsio;
 	float outputGain;
 	float midiVol[2];
+	
+	unsigned char statusBuff[2]; //running status buffer
+	bool isSinglePort32Ch;
+	bool enableSinglePort32ChMode;
+	unsigned int virtualPortNum;
+	
 	WORD channels;	
 
 	short *buffer;
