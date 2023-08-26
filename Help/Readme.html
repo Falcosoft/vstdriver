@@ -1,0 +1,250 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+  <link rel="icon" href="http://falcosoft.hu/favicon.ico" type="image/x-icon">
+  <link rel="shortcut icon" href="http://falcosoft.hu/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="Readme.css">
+  <title>VST MIDI Driver (Falcomod) Readme</title>
+</head>
+
+<body>
+  <div id="mainframe">
+    <div class=Section1>
+      <h2>VST MIDI Driver (Falcomod) </h2>
+      <p>is a Windows user-mode software MIDI synthesizer driver which is capable of using any 32 or 64 bit VST2 Instruments.</p>
+      <p>This fork of the driver supports Windows NT4 SP6/2000/XP/Vista/7/8/10/11 (both WaveOut and ASIO output).</p>
+      <p>&nbsp;</p>
+      <p>The source code can be downloaded from Github:
+        <br>
+        <a href="https://github.com/Falcosoft/vstdriver" target="_blank">https://github.com/Falcosoft/vstdriver</a>
+        <br>
+        <br> The change log and new releases can also be found on GitHub:
+        <br>
+        <a href="https://github.com/Falcosoft/vstdriver/releases" target="_blank">https://github.com/Falcosoft/vstdriver/releases</a>
+        <br>
+      </p>
+      <p>&nbsp;</p>
+      <p>If you would like to support the development of VST MIDI Driver (Falcomod) you can donate through PayPal.</p>
+      <form action="https://www.paypal.com/cgi-bin/webscr" method="get" target="_blank">
+        <p>
+          <input type="hidden" name="cmd" value="_s-xclick">
+          <input type="hidden" name="hosted_button_id" value="SY5KG9XCVDVW6">
+          <input type="image" src="https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif" name="submit" alt="PayPal - The safer, easier way to pay online!">
+        </p>
+      </form>
+      <p>&nbsp;</p>
+      <p>
+        <strong>New features and fixes of this fork:</strong>
+      </p>
+      <ul>
+        <li>1. Fully configurable sample rate and sample format as well as buffer size. </li>
+        <li>2. Output gain adjustment.</li>
+        <li>3. 4-channel audio mode so you can output different ports to different speakers (surround sound MIDI). </li>
+        <li>4. VSTi editor dialog can be shown and used when a port is activated. </li>
+        <li>5. Default waveout output mode has no dependency on Bass library so it can be used with Midi clients that use Bass.</li>
+        <li>6. ASIO output mode with fully configurable ASIO channel selection (4-channel audio mode is also supported).</li>
+        <li>7. Automatic 32-channel/dual port mode when used together with Falcosoft Soundfont Midi Player (FSMP).</li>
+        <li>8. Improved high DPI compatibility.</li>
+        <li>9. Supports running status. </li>
+        <li>10. Supports midiOutSetVolume (MIDICAPS_VOLUME).
+          <br>
+        </li>
+        <li>11. GUI for setting default MIDI Out device is re-enabled on Win 8+ if Coolsoft MIDI Mapper is installed. </li>
+        <li>12. Fixed MIDI precision/timing related issues of both previous forks. </li>
+        <li>13. Fixed VSTi plugin's loading/saving related problems of Arakula's fork. </li>
+        <li>14. Fixed high latency problem (500 ms) of Arakula's fork.</li>
+        <li>15. Fixed ASIO related instabilities of DB50XG's fork. </li>
+        <li>16. Fixed dual port related problems of DB50XG's fork.
+          <strong>
+            <br>
+          </strong>
+        </li>
+      </ul>
+
+      <p>
+        <br>
+        <strong>Some guidelines for the new features and options :</strong>
+      </p>
+      <ol>
+        <li>
+          <p>
+            <strong>Sample rate</strong>: The best option is if you select the sample rate to be the same as the audio card's sample
+            rate selected on Windows -&gt; Speaker Properties -&gt; Advanced tab. This way no resampling is necessary by
+            Windows. The only problem is that some plugins are sample rate dependent or work best with a particular sample
+            rate. E.g. S-YXG50 works best only with 44100/48000 Hz. On other frequencies it produces bad output (most noticeable
+            at 32000 and 192000 Hz , but 96000 Hz is alo problematic). Munt VSTi has the most proper timing on 32000 Hz.
+            OPL3 plugins has the best emulation accuracy at 49716 Hz. Of course in these cases the emulation accuracy is
+            more important than some resampling. Generally 48000 Hz is the most compatible one.</p>
+        </li>
+        <li>
+          <p>
+            <strong>Buffer size</strong>: Lower size means lower latency but the sound output is more fragile (intermittent pauses
+            because of high CPU consumption etc.). So it is always a compromise. For a general Midi usage scenario (where
+            real-time jamming is not the most important) I recommend values in the 80-160 ms range for waveOut mode. Too
+            high latency can result in disturbing delay between visual effects (such as virtual piano, Midi channel volume
+            displays etc.) and audible audio.
+            <br> For ASIO output mode (so real-time jamming) the recommended way is to set as low value as possible in the 10-40ms
+            range or leave it at Default and set the buffer size at the ASIO control panel of the ASIO driver.</p>
+        </li>
+        <li>
+          <p>
+            <strong>Sample format</strong>: The default is 32-bit float but 16-bit int can also be selected. On older Windows versions
+            16-bit int can be more compatible but even on modern Windows versions (Vista+) 16-bit int option can be somewhat
+            still relevant. It's because in case of 32-bit float output modern Windows versions apply a limiter/compressor
+            automatically which on the one hand prevents clipping but on the other hand can result in wavy volume response
+            and makes it harder to calibrate proper synth output level.</p>
+        </li>
+        <li>
+          <p>
+            <strong>Output Gain:</strong> This increases/decreases the output level after the plugin has already rendered the sound
+            so it cannot prevent clipping in the synth's digital domain. For plugins that include volume/gain slider on the
+            VST editor interface (such as S-YXG50) it may be more useful to use the editor's volume/gain control in real-time.
+            But e.g. in case of SC-VA where the sound output level is rather low even at maximum this feature can be useful.
+            <br> It can be also useful for editorless plugins.</p>
+        </li>
+        <li>
+          <p>
+            <strong>Show VST dialog when port is activated</strong>: If it is selected then the VST editor is shown when a port is
+            opened by a MIDI client. In case of more complex plugins it can be hard to tune settings on the configuration
+            dialog without hearing the results. If the VST editor is shown then you can fine tune and save the settings while
+            the plugin is producing audio.
+            <br> Be aware that it is possible that you cannot save plugin settings from the editor at runtime while you can from
+            the configuration dialog.
+            <br> It's because the configuration dialog runs with elevated administrator rights while the driver does not. So
+            make sure to give write permission for normal 'Users' to the plugin's folder (this usually has to be done for
+            plugins located in Program Files (x86) or Program Files).</p>
+        </li>
+        <li>
+          <p>
+            <strong>4 channel mode: </strong>If this option is selected then you can enjoy surround Midi sound. In WaveOut mode Port
+            A is assigned to Front speakers and Port B is assigned to Rear speakers. In ASIO mode the speaker assignment
+            is somewhat more versatile since you can select any ASIO channel pairs (left/right) to port A and you can set
+            the offset from port A for the channel pair of port B.
+            <br> You can use FSMP or Midi Trail to play back 32-channel Midi files where Midi channels 1-16 can be played on
+            port A and Midi channels 17-32 on port B.
+            <br> Besides 32-channel Midi playback you can also use 4 channel audio option also for gaming. E.g. if you assign
+            DosBox Midi to port B then game music would sound from rear speakers while normal game audio/digital effects
+            from front speakers. </p>
+        </li>
+        <li>
+          <p>
+            <strong>Always on Top</strong>: By default both the configuration dialog and VST editors open in topmost state to prevent
+            z-order problems at startup (e.g. the editors may open up behind the MIDI client that opened the port). But in some cases some VST editor
+            related dialogs and ASIO control panels may open up   behind the dialog that is in  topmost state. In these cases disabling topmost status
+            can be helpful. So if always on top  is disturbing for some reason then you can switch it off for both the configuration dialog and VST editor
+            dialogs.<br> 
+            <br>
+          </p>
+        </li>
+      </ol>
+      <p>
+        <strong>
+          Storage of settings: </strong>
+      </p>
+      <p>The driver settings are stored in the registry at HKEY_CURRENT_USER\Software\VSTi Driver. The plugin settings are stored
+        in the plugin's folder with the same name as the plugin dll but with the extension of.set.</p>
+      <p> Some rare to be changed driver settings have no options available on the GUI but can be changed directly from the registry
+        if necessary:</p>
+      <p>1.
+        <strong>EnableSinglePort32ChMode</strong>. Enabled by default so has a value of 1. When the driver used together with FSMP
+        it can accept the special 0xF5 xx MIDI port select messages sent by FSMP to select ports automatically. This way
+        the driver can open port B automatically (or vice versa port A when port B is selected as output port) when a 32-channel
+        MIDI file is detected by FSMP. You can disable this function if you set the value to 0. </p>
+      <p>2.
+        <strong>HighDpiMode</strong>. This option sets the High DPI mode of the VST editor dialog together with the embedded GUI
+        of the plugin.
+        <br> Since VST2 editors mostly do not handle high DPI at all the default is not DPI aware + GDI scaling in Win10 1809+.
+        The default DPI mode is rather compatible but DPI mode can be changed the following way: </p>
+      <p>HighDpiMode: -5 (0xFFFFFFFB) = Windows enhanced GDI scaling (Win10 1809+). This is the default.
+        <br> HighDpiMode: -1 (0xFFFFFFFF) = Windows normal scaling. This is the most compatible one but results in blurry texts.
+        This is the default before Win10 1809 (Vista/7/8/10).
+        <br> HighDpiMode: -2 (0xFFFFFFFE) = Plugin scaling. This is the less compatible option. Since VST2 editors cannot do
+        scaling in 90% of cases this option most likely results in tiny editors.
+        <br> Enhanced GDI scaling optimizations are mostly visible on fonts/texts and common controls (they are sharper). Unfortunately
+        bitmaps cannot be scaled without blur.</p>
+      <p>&nbsp;</p>
+      <p>
+        <strong>Brief history of the driver:</strong>
+      </p>
+      <p>The original driver was written by Mudlord and Kode54. Unfortunately development has stopped at about 2017.
+        <br> According to Kode54 even the source code had been lost.
+        <br> When Windows 10 version 2004 had been released the driver stopped working in the sense that it could not survive
+        reboots.</p>
+      <p>Later it seems the source code had been found and a new fork from Arakula fixed the reboot related problems on Windows
+        10.
+        <br> Another fork from DB50XG was also born.
+        <br> Unfortunately both forks have been abandoned since then and both forks were left in a problematic state with major
+        bugs.</p>
+      <p>Arakula's fork had 2 major problems:
+        <br> It could not save/load plugin settings (actually this problem was inherited from the original driver).
+        <br> It had huge 500 ms latency thanks to some Bass related misconfiguration and a path related bug that prevented basswasapi.dll
+        to be found.
+        <br>
+        <br> DB50XG's version cured the save/load related problem but it had non-working Bass/BassWASAPI code paths so only ASIO
+        output worked.
+        <br> And even the ASIO output mode had serious stability problems (quitting from the Midi client in 99% of cases resulted
+        in a hung ghost process).
+        <br> This fork also had broken dual port functionality (only port A worked).</p>
+      <p>And both forks inherited the problem of integrated Bass libraries. Kode54 had decided to replace pure WinMM Waveout
+        to Bass/Basswasapi right before the abandonment. Since VST Midi driver is an in-process driver it could not use its
+        own Bass libraries if the Midi client already used some other versions of Bass libraries.
+        <br> More info:
+        <a href="https://www.vogons.org/viewtopic.php?p=596545#p596545" target="_blank">Re: Yamaha S-YXG50 Portable VSTi (a software MIDI synth)</a>
+        <br>
+        <br> This was also true the other way around: If a Midi client used VST Midi driver then it could not use its own Bass
+        libraries afterward since the libraries were already loaded to the client's address space through VST Midi driver.
+        <br> More Info:
+        <a href="https://www.vogons.org/viewtopic.php?p=1066041#p1066041" target="_blank">Re: Falcosoft Soundfont Midi Player + Munt VSTi + BassMidi VSTi</a>
+      </p>
+      <p>Both situations could cause subtle and hard to debug problems.</p>
+      <p>The change to Bass libraries also resulted in inferior MIDI timing/precision. The ASIO output mode of DB50XG's fork
+        had the same problem.
+        <br> Both versions dropped timestamps so Midi precision depended on Bass update period (5-10ms at best case) or ASIO
+        buffer size (above about 20ms buffer size the result was horrible).
+        <br>
+      </p>
+      <p>On Vogons there was (actually still is) a thread about the driver where many would have liked to see a version that
+        fixed the main bugs.
+        <br> That was the point where the story of this fork began:
+        <br>
+        <a href="https://www.vogons.org/viewtopic.php?p=1173844#p1173844" target="_blank">https://www.vogons.org/viewtopic.php?p=1173844#p1173844</a>
+      </p>
+      <p>&nbsp;</p>
+      <p>
+        <strong>VST MIDI Driver (Falcomod) in action:</strong>
+        <br>
+      <div style="position: relative; left: 0; top: 0; width: 480px; height: 360px;">
+          <a href="https://youtu.be/edHM21rWXRg" target="_blank">
+            <img src="https://i.ytimg.com/vi/edHM21rWXRg/hqdefault.jpg" width="480" height="360" alt="FSMP + VST Midi driver - 32 channel KONAMI Midi files">
+            <img src="play.png" style="position: absolute; top: 144px; left: 204px; border:0px;" alt="FSMP + VST Midi driver - 32 channel KONAMI Midi files">
+          </a>
+      </div>
+      </p>      
+
+      <p>&nbsp;</p>
+      <p>Have fun.</p>
+      <p>Zolt&aacute;n Bacsk&oacute; (Falco)</p>
+      <p><br>
+        <a href="https://falcosoft.hu" target="_blank">https://falcosoft.hu/</a>
+      </p>
+      <p>zbacsko@falcosoft.hu</p>
+      <p>&nbsp;</p>
+      <table width="100%" border="0">
+        <tr>
+          <td width="50%">
+            <strong> </strong>
+          </td>
+          <td width="50%" align="right">
+            <strong>
+              <a href="#top">Jump to Top</a>
+            </strong>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</body>
+
+</html>

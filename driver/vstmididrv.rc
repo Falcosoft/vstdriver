@@ -73,7 +73,7 @@ BEGIN
             VALUE "FileVersion", stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR) "." stringify(VERSION_PATCH) "." stringify(VERSION_BUILD)
             VALUE "OriginalFilename", "vstmididrv.dll"
             VALUE "ProductName", "VST MIDI System Synth (Falcomod)"
-            VALUE "ProductVersion", stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR)
+            VALUE "ProductVersion", stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR) "." stringify(VERSION_PATCH)
             VALUE "LegalCopyright", "kode54, Arakula, DB50XG, Falcosoft"
         END
     END

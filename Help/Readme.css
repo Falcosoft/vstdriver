@@ -1,0 +1,25 @@
+ body {
+      background-color: #222222;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    p {
+      margin: 10px;
+    }
+
+    li {
+      line-height: 150%;
+    }
+
+    #mainframe {
+      background-color: #BBBBBB;
+      background-image: url('background.jpg');
+      position: relative;
+      max-width: 1152px;
+      padding: 12px;
+      padding-top: 8px;
+      border: none;
+      margin: auto;
+    }

@@ -3,15 +3,15 @@
 !include WinVer.nsh
 ManifestDPIAware true
 ; The name of the installer
-Name "VST MIDI System Synth (Falcomod)"
-
 !getdllversion "output\vstmididrvcfg.exe" expv_
+Name "VST MIDI System Synth (Falcomod) ${expv_1}.${expv_2}.${expv_3}"
+
 !define PRODUCT_NAME "VST MIDI System Synth (Falcomod)"
 
 VIProductVersion "${expv_1}.${expv_2}.${expv_3}.${expv_4}"
 VIFileVersion "${expv_1}.${expv_2}.${expv_3}.${expv_4}"
 VIAddVersionKey "FileVersion" "${expv_1}.${expv_2}.${expv_3}.${expv_4}"
-VIAddVersionKey "ProductVersion" "${expv_1}.${expv_2}"
+VIAddVersionKey "ProductVersion" "${expv_1}.${expv_2}.${expv_3}"
 VIAddVersionKey "FileDescription" "${PRODUCT_NAME}"
 VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
 VIAddVersionKey "LegalCopyright" "kode54, Arakula, DB50XG, Falcosoft"
@@ -41,7 +41,7 @@ VIAddVersionKey "LegalCopyright" "kode54, Arakula, DB50XG, Falcosoft"
   OutFile "vstmididrv.exe"
 
   ; Request application privileges for Windows Vista
-  RequestExecutionLevel admin
+  RequestExecutionLevel admin 
   SetCompressor /solid lzma 
 !endif
 
@@ -81,6 +81,7 @@ FunctionEnd
 ;--------------------------------
 Function .onInit
 
+ SetShellVarContext All
  ${IfNot} ${IsNT}
   MessageBox MB_OK|MB_ICONSTOP "This driver cannot be installed on Windows 9x systems."   
   Abort 
@@ -120,11 +121,13 @@ Section "Needed (required)"
     ;===========================================================================
     SetOutPath "$WINDIR\SysWow64"
     File output\vstmididrv.dll 
-    SetOutPath "$WINDIR\SysWow64\vstmididrv"
+    SetOutPath "$WINDIR\SysWow64\vstmididrv\Help"
+    File /a /r "Help\*" 
+    SetOutPath "$WINDIR\SysWow64\vstmididrv"   
     File output\bassasio.dll   
     File output\vstmididrvcfg.exe
     File output\vsthost32.exe
-    File output\64\vsthost64.exe
+    File output\64\vsthost64.exe   
 !ifndef INNER
     File $%TEMP%\vstmididrvuninstall.exe
 !endif
@@ -163,10 +166,12 @@ Section "Needed (required)"
     ;===========================================================================
     SetOutPath "$WINDIR\System32"
     File output\vstmididrv.dll 
-    SetOutPath "$WINDIR\System32\vstmididrv" 
+    SetOutPath "$WINDIR\System32\vstmididrv\Help"
+    File /a /r "Help\*" 
+    SetOutPath "$WINDIR\System32\vstmididrv"   
     File output\bassasio.dll   
     File output\vstmididrvcfg.exe
-    File output\vsthost32.exe
+    File output\vsthost32.exe    
 !ifndef INNER
     File $%TEMP%\vstmididrvuninstall.exe
 !endif
@@ -196,7 +201,9 @@ REGDONE:
   ${If} ${RunningX64}
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe"'
     WriteRegStr HKLM "Software\VST MIDI Driver" "path" "$WINDIR\SysWow64\vstmididrv"
-    SetOutPath "$WINDIR\SysWow64\vstmididrv" 
+    SetOutPath "$WINDIR\SysWow64\vstmididrv\Help" 
+    CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\ReadMe.lnk" "$WINDIR\SysWow64\vstmididrv\Help\Readme.html" "" "$WINDIR\SysWow64\vstmididrv\Help\Readme.html" 0
+    SetOutPath "$WINDIR\SysWow64\vstmididrv"
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Uninstall.lnk" "$WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe" "" "$WINDIR\SysWow64\vstmididrvuninstall.exe" 0
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe" 0
     SetOutPath "$WINDIR\System32\vstmididrv" 
@@ -205,6 +212,9 @@ REGDONE:
   ${Else}
     WriteRegStr HKLM "Software\VST MIDI Driver" "path" "$WINDIR\System32\vstmididrv"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe"'
+    SetOutPath "$WINDIR\System32\vstmididrv\Help"
+    CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\ReadMe.lnk" "$WINDIR\System32\vstmididrv\Help\Readme.html" "" "$WINDIR\System32\vstmididrv\Help\Readme.html" 0
+    SetOutPath "$WINDIR\System32\vstmididrv"
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Uninstall.lnk" "$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe" 0
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
   ${EndIf}  
@@ -224,6 +234,7 @@ SectionEnd
 !ifdef INNER
 Section "Uninstall"
 
+  SetShellVarContext All
   ummidiplg::CleanupRegistry "vstmididrv.dll" "VST MIDI Driver" "ROOT\vstmididrv"
   pop $0
   ${If} $0 != "OK"
@@ -264,11 +275,13 @@ Section "Uninstall"
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vsthost32.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vsthost64.exe
+     RMDir /r /REBOOTOK $WINDIR\SysWow64\vstmididrv     
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv.dll 
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\bassasio.dll  
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstmididrvcfg.exe   
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vsthost32.exe
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vsthost64.exe
+     RMDir /r /REBOOTOK $WINDIR\SysNative\vstmididrv 
    ${Endif}
  ${Else}
    ${If} ${AtLeastWinVista}
@@ -281,6 +294,7 @@ Section "Uninstall"
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vsthost32.exe
+     RMDir /r /REBOOTOK $WINDIR\System32\vstmididrv
    ${Endif}
  ${EndIf}
  IfRebootFlag 0 noreboot
