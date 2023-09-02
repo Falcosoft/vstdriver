@@ -454,7 +454,7 @@ public:
 	   effect->getVendorString(vstStr);	  
 	   SetWindowTextA(vst_vendor.m_hWnd, vstStr.c_str());  
 
-	   if (!settings_load(effect)) MessageBox(L"Cannot load plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
+	   settings_load(effect);
 
 	   return TRUE;
    }

@@ -83,7 +83,7 @@ Function .onInit
 
  SetShellVarContext All
  ${IfNot} ${IsNT}
-  MessageBox MB_OK|MB_ICONSTOP "This driver cannot be installed on Windows 9x systems."   
+  MessageBox MB_OK|MB_ICONSTOP "This driver cannot be installed on Windows 9x systems." /SD IDOK  
   Abort 
  ${EndIf}
 
@@ -97,7 +97,7 @@ ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MID
   MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
   "The MIDI driver is already installed. $\n$\nClick `OK` to remove the \
   previous version or `Cancel` to cancel this upgrade." \
-  IDOK uninst
+  /SD IDOK IDOK uninst
   Abort
 ;Run the uninstaller
 uninst:
@@ -105,7 +105,7 @@ uninst:
   Exec $R0
   Abort
 done:
-   MessageBox MB_YESNO "This will install the VST MIDI System Synth. Continue?" IDYES NoAbort
+   MessageBox MB_YESNO "This will install the VST MIDI System Synth. Continue?" /SD IDYES IDYES NoAbort
      Abort ; causes installer to quit.
    NoAbort:
  FunctionEnd
@@ -146,7 +146,7 @@ Section "Needed (required)"
     ${If} $2 != "OK"
       DetailPrint $2
       SetErrors
-      MessageBox MB_OK "Something went wrong with the registry setup. Installation will continue, but it might not work. $2"
+      MessageBox MB_OK "Something went wrong with the registry setup. Installation will continue, but it might not work. $2" /SD IDOK
     ${Else}
       SetRegView 64
       WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
@@ -183,7 +183,7 @@ Section "Needed (required)"
     ${If} $2 != "OK"
       DetailPrint $2
       SetErrors
-      MessageBox MB_OK "Something went wrong with the registry setup. Installation will continue, but it might not work. $2"
+      MessageBox MB_OK "Something went wrong with the registry setup. Installation will continue, but it might not work. $2" /SD IDOK
     ${Else}
       WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
         "MIDI" "midi$1"
@@ -219,10 +219,10 @@ REGDONE:
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
   ${EndIf}  
   ${If} ${IsWinNT4}
-	MessageBox MB_YESNO|MB_ICONQUESTION "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver.$\nYou need to reboot in order for control panel to show the driver!$\nIs it OK to reboot?" IDNO +2
+	MessageBox MB_YESNO|MB_ICONQUESTION "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver.$\nYou need to reboot in order for control panel to show the driver!$\nIs it OK to reboot?" /SD IDNO IDNO +2
 	Reboot
   ${Else}
-	MessageBox MB_OK "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver."
+	MessageBox MB_OK "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver." /SD IDOK
   ${EndIf}
   
 
@@ -268,7 +268,7 @@ Section "Uninstall"
      Delete /REBOOTOK "$WINDIR\SysNative\vstmididrv.dll"
      RMDir /r /REBOOTOK "$WINDIR\SysNative\vstmididrv"
    ${Else}
-;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
+;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers." /SD IDOK
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv.dll  
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bassasio.dll  
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe
@@ -288,7 +288,7 @@ Section "Uninstall"
      Delete /REBOOTOK "$WINDIR\System32\vstmididrv.dll"
      RMDir /r /REBOOTOK "$WINDIR\System32\vstmididrv"
    ${Else}
-;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers."
+;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers." /SD IDOK
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv.dll 
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bassasio.dll    
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
@@ -298,7 +298,7 @@ Section "Uninstall"
    ${Endif}
  ${EndIf}
  IfRebootFlag 0 noreboot
-   MessageBox MB_YESNO "A reboot is required to finish the deinstallation. Do you wish to reboot now?" IDNO noreboot
+   MessageBox MB_YESNO "A reboot is required to finish the deinstallation. Do you wish to reboot now?" /SD IDNO IDNO noreboot
      Reboot
  noreboot:
  
