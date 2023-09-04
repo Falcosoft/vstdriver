@@ -236,7 +236,7 @@ void getChunk(AEffect* pEffect, std::vector<uint8_t>& out)
 		append_be(out, size);
 		size_t chunk_size = out.size();
 		out.resize(chunk_size + size);
-		memcpy(&out[chunk_size], chunk, size);
+		if(size) memcpy(&out[chunk_size], chunk, size);
 	}
 }
 
@@ -306,10 +306,10 @@ static BOOL settings_save(AEffect* pEffect)
 				if (pEffect) getChunk(pEffect, chunk);;
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 				
-				if (chunk.size()) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);   
+				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);   
 #else
 				
-				if (chunk.size()) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
+				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
 #endif
 				
 				CloseHandle(fileHandle);
@@ -767,7 +767,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 	std::vector<uint8_t> blState;
 
-	uint32_t max_num_outputs = 2;
+	uint32_t num_outputs_per_port = 2;
 	uint32_t sample_rate = 48000;
 	uint32_t port_num = 0;
 
@@ -860,9 +860,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	}
 
 	pEffect[1]->user = &effectData[1];
-	pEffect[1]->dispatcher(pEffect[1], effOpen, 0, 0, 0, 0);
-
-	max_num_outputs = min(pEffect[0]->numOutputs, 2);
+	pEffect[1]->dispatcher(pEffect[1], effOpen, 0, 0, 0, 0);	
 
 	{
 		char name_string[256] = { 0 };
@@ -889,7 +887,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		put_code(product_string_length);
 		put_code(vendor_version);
 		put_code(unique_id);
-		put_code(max_num_outputs);
+		put_code(num_outputs_per_port);
 		if (name_string_length) put_bytes(name_string, name_string_length);
 		if (vendor_string_length) put_bytes(vendor_string, vendor_string_length);
 		if (product_string_length) put_bytes(product_string, product_string_length);
@@ -1019,8 +1017,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 				if (isSinglePort32Ch)
 				{
-					if (editorHandle[0] != 0) SendMessage(editorHandle[0], WM_CLOSE, 0, 0);
-					if (editorHandle[1] != 0) SendMessage(editorHandle[1], WM_CLOSE, 0, 0);
+					if (editorHandle[0] != 0) SendMessageTimeout(editorHandle[0], WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, NULL);
+					if (editorHandle[1] != 0) SendMessageTimeout(editorHandle[1], WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, NULL);
 
 					if (threadHandle[0] != NULL || threadHandle[1] != NULL)
 					{
@@ -1071,7 +1069,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				}
 				else
 				{
-					if (editorHandle[port_num] != 0) SendMessage(editorHandle[port_num], WM_CLOSE, 0, 0);
+					if (editorHandle[port_num] != 0) SendMessageTimeout(editorHandle[port_num], WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, NULL);
 					if (threadHandle[port_num] != NULL)
 					{
 						WaitForSingleObject(threadHandle[port_num], 2000);
@@ -1185,7 +1183,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					memset(float_null, 0, sizeof(float) * BUFFER_SIZE);
 
-					sample_buffer.resize((4096 + BUFFER_SIZE) * max_num_outputs);
+					sample_buffer.resize((4096 + BUFFER_SIZE) * num_outputs_per_port);
 				}
 
 				if (need_idle)
@@ -1200,7 +1198,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 						while (idle_run)
 						{
 							unsigned count_to_do = min(idle_run, BUFFER_SIZE);
-							unsigned num_outputs = pEffect[0]->numOutputs;
+							unsigned num_outputs = min(pEffect[0]->numOutputs, 2);
 
 							pEffect[0]->processReplacing(pEffect[0], float_list_in, float_list_out, count_to_do);
 							pEffect[1]->processReplacing(pEffect[1], float_list_in, float_list_out + num_outputs, count_to_do);
@@ -1218,7 +1216,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 				if (evChain)
 				{
-					unsigned event_count[3] = { 0 };
+					unsigned event_count[2] = { 0 };
 					myVstEvent* ev = evChain;
 					while (ev)
 					{
@@ -1287,18 +1285,18 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				while (count)
 				{
 					unsigned count_to_do = min(count, BUFFER_SIZE);
-					unsigned num_outputs = pEffect[0]->numOutputs;
+					unsigned num_outputs = min(pEffect[0]->numOutputs, 2);
 
 					pEffect[0]->processReplacing(pEffect[0], float_list_in, float_list_out, count_to_do);
 					pEffect[1]->processReplacing(pEffect[1], float_list_in, float_list_out + num_outputs, count_to_do);
 
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-					float* out = &sample_buffer.front() + samples_buffered * max_num_outputs;
+					float* out = &sample_buffer.front() + samples_buffered * num_outputs_per_port;
 #else
-					float* out = sample_buffer.data() + samples_buffered * max_num_outputs;
+					float* out = sample_buffer.data() + samples_buffered * num_outputs_per_port;
 #endif
 
-					if (max_num_outputs == 2)
+					if (num_outputs == 2)
 					{
 						for (unsigned i = 0; i < count_to_do; ++i)
 						{
@@ -1315,14 +1313,15 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 						{
 							float sample = (float_out[i] + float_out[i + BUFFER_SIZE * num_outputs]);
 							out[0] = sample;
-							out++;
+							out[1] = sample;
+							out += 2;
 						}
 					}
 
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-					put_bytes(&sample_buffer.front(), count_to_do * sizeof(float) * max_num_outputs);
+					put_bytes(&sample_buffer.front(), count_to_do * sizeof(float) * num_outputs_per_port);
 #else
-					put_bytes(sample_buffer.data(), count_to_do * sizeof(float) * max_num_outputs);
+					put_bytes(sample_buffer.data(), count_to_do * sizeof(float) * num_outputs_per_port);
 #endif
 
 					count -= count_to_do;
@@ -1369,7 +1368,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					memset(float_null, 0, sizeof(float) * BUFFER_SIZE);
 
-					sample_buffer.resize((4096 + BUFFER_SIZE) * max_num_outputs * 2);
+					sample_buffer.resize((4096 + BUFFER_SIZE) * num_outputs_per_port * 2);
 				}
 
 				if (need_idle)
@@ -1384,7 +1383,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 						while (idle_run)
 						{
 							unsigned count_to_do = min(idle_run, BUFFER_SIZE);
-							unsigned num_outputs = pEffect[0]->numOutputs;
+							unsigned num_outputs = min(pEffect[0]->numOutputs, 2);
 
 							pEffect[0]->processReplacing(pEffect[0], float_list_in, float_list_out, count_to_do);
 							pEffect[1]->processReplacing(pEffect[1], float_list_in, float_list_out + num_outputs, count_to_do);
@@ -1402,7 +1401,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 				if (evChain)
 				{
-					unsigned event_count[3] = { 0 };
+					unsigned event_count[2] = { 0 };
 					myVstEvent* ev = evChain;
 					while (ev)
 					{
@@ -1471,18 +1470,18 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				while (count)
 				{
 					unsigned count_to_do = min(count, BUFFER_SIZE);
-					unsigned num_outputs = pEffect[0]->numOutputs;
+					unsigned num_outputs = min(pEffect[0]->numOutputs, 2);
 
 					pEffect[0]->processReplacing(pEffect[0], float_list_in, float_list_out, count_to_do);
 					pEffect[1]->processReplacing(pEffect[1], float_list_in, float_list_out + num_outputs, count_to_do);
 
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-					float* out = &sample_buffer.front() + samples_buffered * max_num_outputs;
+					float* out = &sample_buffer.front() + samples_buffered * num_outputs_per_port;
 #else
-					float* out = sample_buffer.data() + samples_buffered * max_num_outputs;
+					float* out = sample_buffer.data() + samples_buffered * num_outputs_per_port;
 #endif
 
-					if (max_num_outputs == 2)
+					if (num_outputs == 2)
 					{
 						for (unsigned i = 0; i < count_to_do; ++i)
 						{
@@ -1503,16 +1502,22 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					{
 						for (unsigned i = 0; i < count_to_do; ++i)
 						{
-							float sample = (float_out[i] + float_out[i + BUFFER_SIZE * num_outputs]);
-							out[0] = sample;
-							out++;
+							float sample = float_out[i];
+							out[0] = sample;							
+							out[1] = sample;
+
+							sample = float_out[i + BUFFER_SIZE * num_outputs];
+							out[2] = sample;							
+							out[3] = sample;
+
+							out += 4;
 						}
 					}
 
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-					put_bytes(&sample_buffer.front(), count_to_do * sizeof(float) * max_num_outputs * 2);
+					put_bytes(&sample_buffer.front(), count_to_do * sizeof(float) * num_outputs_per_port * 2);
 #else
-					put_bytes(sample_buffer.data(), count_to_do * sizeof(float) * max_num_outputs * 2);
+					put_bytes(sample_buffer.data(), count_to_do * sizeof(float) * num_outputs_per_port * 2);
 #endif
 
 					count -= count_to_do;
@@ -1536,8 +1541,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	}
 
 exit:
-	if (editorHandle[0] != 0) SendMessage(editorHandle[0], WM_CLOSE, 0, 0);
-	if (editorHandle[1] != 0) SendMessage(editorHandle[1], WM_CLOSE, 0, 0);
+	if (editorHandle[0] != 0) SendMessageTimeout(editorHandle[0], WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, NULL);
+	if (editorHandle[1] != 0) SendMessageTimeout(editorHandle[1], WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, NULL);
 	
 	if (pEffect[1])
 	{

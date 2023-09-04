@@ -139,9 +139,9 @@ static BOOL settings_save(VSTDriver * effect)
 				if (effect) effect->getChunk( chunk );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 				
-				if (chunk.size()) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL); 
+				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL); 
 #else
-				if (chunk.size()) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
+				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
 
 #endif
 				CloseHandle(fileHandle);
@@ -412,9 +412,13 @@ public:
 	   {
 		   HWND m_hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
 		   ::EnableWindow(m_hWnd, FALSE);
-   		   effect->setHighDpiMode(highDpiMode);
+   		   effect->setHighDpiMode(highDpiMode);		   
 		   effect->displayEditorModal();
 		   ::EnableWindow(m_hWnd, TRUE);
+		   
+		   effect->ProcessMIDIMessage(0, 0x90); //force some plugins to enable save/load functions.
+		   float sample[2];
+		   effect->RenderFloat(&sample[0], 1);
 	   }
 	   return 0;
    }
@@ -452,9 +456,13 @@ public:
 	   effect->getEffectName(vstStr);	   
 	   SetWindowTextA(vst_effect.m_hWnd, vstStr.c_str());
 	   effect->getVendorString(vstStr);	  
-	   SetWindowTextA(vst_vendor.m_hWnd, vstStr.c_str());  
-
-	   settings_load(effect);
+	   SetWindowTextA(vst_vendor.m_hWnd, vstStr.c_str());
+	   
+	   effect->ProcessMIDIMessage(0, 0x90); //force some plugins to enable save/load functions.
+	   float sample[2];
+	   effect->RenderFloat(&sample[0], 1);
+	   
+	   settings_load(effect);	   
 
 	   return TRUE;
    }
