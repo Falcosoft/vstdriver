@@ -412,7 +412,12 @@ public:
 	   {
 		   HWND m_hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
 		   ::EnableWindow(m_hWnd, FALSE);
-   		   effect->setHighDpiMode(highDpiMode);		   
+   		   effect->setHighDpiMode(highDpiMode);
+		   
+		   wchar_t tmpBuff[8];
+	       vst_sample_rate.GetWindowTextW(tmpBuff, 8);	      
+		   effect->setSampleRate(_wtoi(tmpBuff));
+		   
 		   effect->displayEditorModal();
 		   ::EnableWindow(m_hWnd, TRUE);
 		   

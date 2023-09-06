@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include <process.h>
+#include "../version.h"
 
 // #define LOG_EXCHANGE
 // #define LOG
@@ -14,7 +15,7 @@
 
 enum
 {
-	BUFFER_SIZE = 4096
+	BUFFER_SIZE = 4800  //matches better for typical 48/96/192 kHz
 };
 
 namespace Command {
@@ -75,12 +76,20 @@ static HANDLE threadHandle[2] = { NULL, NULL };
 
 static bool isSinglePort32Ch = false;
 
+static uint32_t num_outputs_per_port = 2;
+static uint32_t sample_rate = 48000;
+static uint32_t port_num = 0;
+
+static uint32_t sample_pos = 0;
+
 static DWORD MainThreadId;
 static char* dll_dir = NULL;
 
 static HANDLE null_file = NULL;
 static HANDLE pipe_in = NULL;
 static HANDLE pipe_out = NULL;
+
+static 	VstTimeInfo	vstTimeInfo = {0};
 
 #ifdef LOG
 void Log(LPCTSTR szFormat, ...)
@@ -341,6 +350,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	static HWND buttonWnd[2] = { NULL, NULL };
 	static HFONT hFont[2] = { NULL, NULL };	
 	static float dpiMul;
+	static int timerPeriodMS = 30; 
 
 	int portNum = 0;
 
@@ -382,7 +392,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				dialogMutex.Enter();
 
-				SetTimer(hwnd, 1, 20, 0);
+				SetTimer(hwnd, 1, timerPeriodMS, 0);
 				effect->dispatcher(effect, effEditOpen, 0, 0, hwnd, 0);
 				ERect* eRect = 0;
 				effect->dispatcher(effect, effEditGetRect, 0, 0, &eRect, 0);
@@ -416,7 +426,13 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 						SendMessage(buttonWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
 
 						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-					}						
+					}
+					else
+					{
+						effect->dispatcher(effect, effSetSampleRate, 0, 0, 0, float(sample_rate));
+						effect->dispatcher(effect, effSetBlockSize, 0, (int)(sample_rate * timerPeriodMS * 0.001), 0, 0);
+						sample_pos = 0;
+					}
 				}
 
 				dialogMutex.Leave();
@@ -463,7 +479,28 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_TIMER:
 		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 		if (effect)
+		{
+			portNum = *(int*)effect->user;
+			if (sameThread[portNum])
+			{				
+				int sampleFrames = (int)(sample_rate * timerPeriodMS * 0.001);
+				float** samples = (float**)malloc(sizeof(float**) * effect->numOutputs);				
+				for (int channel = 0; channel < effect->numOutputs; channel++) {
+					samples[channel] = (float*)malloc(sizeof(float*) * sampleFrames);					
+				}				
+				
+				effect->processReplacing(effect, samples, samples, sampleFrames); //ADLPlug's editor is frozen without this.
+				sample_pos += sampleFrames;
+
+				for (int channel = 0; channel < effect->numOutputs; channel++) {
+					free(samples[channel]);					
+				}
+
+				free(samples);				
+			}
+			
 			effect->dispatcher(effect, effEditIdle, 0, 0, 0, 0);
+		}
 		break;
 	case WM_COMMAND: 		
 		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
@@ -522,24 +559,56 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 	switch (opcode)
 	{
 	case audioMasterVersion:
-		return 2400;
+		return 2400;		
 
 	case audioMasterCurrentId:
 		if (data) return data->effect_number;
 		break;
+	
+	case audioMasterGetTime: //Some VST requires this. E.g. Genny throws AV without this.  
+		vstTimeInfo.flags = kVstTransportPlaying | kVstNanosValid | kVstTempoValid | kVstTimeSigValid;
+		vstTimeInfo.samplePos = sample_pos;
+		vstTimeInfo.sampleRate = sample_rate;
+		vstTimeInfo.timeSigNumerator = 4;
+		vstTimeInfo.timeSigDenominator = 4;
+		vstTimeInfo.tempo = 120;
+		vstTimeInfo.nanoSeconds = (double)timeGetTime() * 1000000.0L;
+
+		return (VstIntPtr)&vstTimeInfo;		
+
+	case audioMasterGetSampleRate:
+		return sample_rate;		
+
+	case audioMasterGetBlockSize:
+		return BUFFER_SIZE;	
+	
+	case audioMasterCanDo:					
+		if (_stricmp((char*)ptr, "supplyidle") == 0
+			|| _stricmp((char*)ptr, "sendvstevents") == 0		
+			|| _stricmp((char*)ptr, "sendvstmidievent") == 0	
+			|| _stricmp((char*)ptr, "sendvsttimeinfo") == 0	
+			|| _stricmp((char*)ptr, "startstopprocess") == 0)	
+		{
+			return 1;
+		}
+		else
+		{
+			return -1;
+		}
+		break;
 
 	case audioMasterGetVendorString:
-		strncpy((char*)ptr, "NoWork, Inc.", 64);
+		strcpy((char*)ptr, "VST MIDI Driver"); //full 64 char freezes some plugins. E.g. Kondor. 
 		//strncpy((char *)ptr, "YAMAHA", 64);
 		break;
 
 	case audioMasterGetProductString:
-		strncpy((char*)ptr, "VSTi Host Bridge", 64);
+		strcpy((char*)ptr, "VST Host Bridge"); //full 64 char freezes some plugins. E.g. Kondor. 
 		//strncpy((char *)ptr, "SOL/SQ01", 64);
 		break;
 
 	case audioMasterGetVendorVersion:
-		return 1000;
+		return VERSION_MAJOR * 1000 + VERSION_MINOR * 100 + VERSION_PATCH * 10 + VERSION_BUILD;
 
 	case audioMasterGetLanguage:
 		return kVstLangEnglish;
@@ -766,10 +835,6 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	audioMasterData effectData[2] = { { 0 }, { 1 } };
 
 	std::vector<uint8_t> blState;
-
-	uint32_t num_outputs_per_port = 2;
-	uint32_t sample_rate = 48000;
-	uint32_t port_num = 0;
 
 	std::vector<uint8_t> chunk;
 	std::vector<float> sample_buffer;
@@ -1279,6 +1344,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				}
 
 				uint32_t count = get_code();
+				sample_pos += count;
 
 				put_code(Response::NoError);
 
@@ -1464,6 +1530,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				}
 
 				uint32_t count = get_code();
+				sample_pos += count;
 
 				put_code(Response::NoError);
 

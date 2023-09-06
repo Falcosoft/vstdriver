@@ -98,6 +98,7 @@ public:
 	void displayEditorModal(unsigned int uDeviceID = 255);
 	void setHighDpiMode(unsigned int modeNum = 0);
 	void setSinglePort32ChMode();
+	void setSampleRate(unsigned int sampleRate);
 };
 
 #endif

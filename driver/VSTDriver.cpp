@@ -552,7 +552,7 @@ bool VSTDriver::hasEditor()
 	return code != 0;
 }
 
-void VSTDriver:: setHighDpiMode(unsigned int modeNum) 
+void VSTDriver::setHighDpiMode(unsigned int modeNum) 
 {
 	if (modeNum) 
 	{
@@ -566,7 +566,7 @@ void VSTDriver:: setHighDpiMode(unsigned int modeNum)
 	}
 }
 
-void VSTDriver:: setSinglePort32ChMode() 
+void VSTDriver::setSinglePort32ChMode() 
 {	
 	process_write_code(Command::SetSinglePort32ChMode);	
 
@@ -575,6 +575,18 @@ void VSTDriver:: setSinglePort32ChMode()
 		process_terminate();
 	}
 	
+}
+
+void VSTDriver::setSampleRate(unsigned int sampleRate)
+{
+	process_write_code( Command::SetSampleRate );
+	process_write_code( sizeof(uint32_t ) );
+	process_write_code( sampleRate );
+
+	uint32_t code = process_read_code();
+	if (code != NoError ) {
+		process_terminate();		
+	}
 }
 
 void VSTDriver::displayEditorModal(unsigned int uDeviceID)
