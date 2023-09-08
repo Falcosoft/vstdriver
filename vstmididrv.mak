@@ -66,12 +66,12 @@ $(TARGET): vstmididrv.mak \
         Release\ummidiplg.dll \
         ReleaseUnicode\ummidiplg.dll \
         output\vstmididrv.dll \
-        output\vsthost32.exe \
+        output\vstbridgeapp32.exe \
         output\vstmididrvcfg.exe \
         output\bassasio.dll \
         output\64\vstmididrv.dll \
         output\64\bassasio.dll \
-        output\64\vsthost64.exe \
+        output\64\vstbridgeapp64.exe \
         output\64\vstmididrvcfg.exe 
         $(MKNSIS) vstmididrv.nsi
 

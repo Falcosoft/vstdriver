@@ -126,8 +126,8 @@ Section "Needed (required)"
     SetOutPath "$WINDIR\SysWow64\vstmididrv"   
     File output\bassasio.dll   
     File output\vstmididrvcfg.exe
-    File output\vsthost32.exe
-    File output\64\vsthost64.exe   
+    File output\vstbridgeapp32.exe
+    File output\64\vstbridgeapp64.exe   
 !ifndef INNER
     File $%TEMP%\vstmididrvuninstall.exe
 !endif
@@ -136,8 +136,8 @@ Section "Needed (required)"
     SetOutPath "$WINDIR\SysNative\vstmididrv" 
     File output\64\bassasio.dll   
     File output\64\vstmididrvcfg.exe
-    File output\vsthost32.exe
-    File output\64\vsthost64.exe
+    File output\vstbridgeapp32.exe
+    File output\64\vstbridgeapp64.exe
     
     ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "falcosoft" "ROOT\vstmididrv"
     pop $2
@@ -171,7 +171,7 @@ Section "Needed (required)"
     SetOutPath "$WINDIR\System32\vstmididrv"   
     File output\bassasio.dll   
     File output\vstmididrvcfg.exe
-    File output\vsthost32.exe    
+    File output\vstbridgeapp32.exe    
 !ifndef INNER
     File $%TEMP%\vstmididrvuninstall.exe
 !endif
@@ -273,14 +273,14 @@ Section "Uninstall"
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bassasio.dll  
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vsthost32.exe
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vsthost64.exe
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstbridgeapp32.exe
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstbridgeapp64.exe
      RMDir /r /REBOOTOK $WINDIR\SysWow64\vstmididrv     
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv.dll 
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\bassasio.dll  
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstmididrvcfg.exe   
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vsthost32.exe
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vsthost64.exe
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstbridgeapp32.exe
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstbridgeapp64.exe
      RMDir /r /REBOOTOK $WINDIR\SysNative\vstmididrv 
    ${Endif}
  ${Else}
@@ -293,7 +293,7 @@ Section "Uninstall"
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bassasio.dll    
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvcfg.exe
-     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vsthost32.exe
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstbridgeapp32.exe
      RMDir /r /REBOOTOK $WINDIR\System32\vstmididrv
    ${Endif}
  ${EndIf}

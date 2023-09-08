@@ -237,7 +237,7 @@ std::wstring VSTDriver::GetVsthostPath()
     if (idx != std::wstring::npos)
       sSubdir.resize(idx);
     sSubdir += L'\\';
-    std::wstring sFile((uPluginPlatform == 64) ? L"vsthost64.exe" : L"vsthost32.exe");
+    std::wstring sFile((uPluginPlatform == 64) ? L"vstbridgeapp64.exe" : L"vstbridgeapp32.exe");
 
     std::wstring sHostPath = sDir + sFile;
     if (::GetFileAttributesW(sHostPath.c_str()) == INVALID_FILE_ATTRIBUTES)
