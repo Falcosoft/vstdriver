@@ -331,6 +331,77 @@ static BOOL settings_save(AEffect* pEffect)
 	return retResult;
 }
 
+static void getEditorPosition (int port, int &x, int &y)
+{
+	HKEY hKey;
+	
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
+	if (result == NO_ERROR)
+	{
+		DWORD size = 4;
+		if (!port)
+		{
+			RegQueryValueEx(hKey, L"PortAWinPosX", NULL, NULL, (LPBYTE)&x, &size);
+			RegQueryValueEx(hKey, L"PortAWinPosY", NULL, NULL, (LPBYTE)&y, &size);
+		}
+		else
+		{
+			RegQueryValueEx(hKey, L"PortBWinPosX", NULL, NULL, (LPBYTE)&x, &size);
+			RegQueryValueEx(hKey, L"PortBWinPosY", NULL, NULL, (LPBYTE)&y, &size);
+
+		}		 
+		
+		RegCloseKey(hKey);
+		
+		// Deal with changed multimonitor setup to prevent dialogs positioned outside of currently available desktop.
+		int xWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN); // 0 result means error. This can happen on NT4
+		int yWidth = GetSystemMetrics(SM_CYVIRTUALSCREEN); // 0 result means error. This can happen on NT4
+		if (xWidth && xWidth) 
+		{
+			if (xWidth - 24 < x || yWidth - 24 < y) 
+			{
+				x = 0;
+				y = 0;
+			}
+
+			return;
+		}
+		
+		xWidth = GetSystemMetrics(SM_CXSCREEN); //for systems that support only primary monitor.
+		yWidth = GetSystemMetrics(SM_CYSCREEN);
+		if (xWidth - 24 < x || yWidth - 24 < y)
+		{
+			x = 0;
+			y = 0;
+		}		
+	}	
+}
+
+
+static void setEditorPosition (int port, int x, int y)
+{
+	HKEY hKey;
+	
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WRITE, &hKey);
+	if (result == NO_ERROR)
+	{
+		DWORD size = 4;
+		if (!port)
+		{
+			RegSetValueEx(hKey, L"PortAWinPosX", NULL, REG_DWORD, (LPBYTE)&x, size);
+			RegSetValueEx(hKey, L"PortAWinPosY", NULL, REG_DWORD, (LPBYTE)&y, size);
+		}
+		else
+		{
+			RegSetValueEx(hKey, L"PortBWinPosX", NULL, REG_DWORD, (LPBYTE)&x, size);
+			RegSetValueEx(hKey, L"PortBWinPosY", NULL, REG_DWORD, (LPBYTE)&y, size);
+
+		}		 
+		
+		RegCloseKey(hKey);
+	}	
+}
+
 struct MyDLGTEMPLATE : DLGTEMPLATE
 {
 	WORD ext[3];
@@ -408,8 +479,17 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					SetRect(&wRect, 0, 0, width, height);
 					AdjustWindowRectEx(&wRect, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
 					width = wRect.right - wRect.left;
-					height = wRect.bottom - wRect.top;                    
-					SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
+					height = wRect.bottom - wRect.top; 
+					
+					int xPos = 0;
+					int yPos = 0;
+					getEditorPosition(portNum, xPos, yPos);
+
+					if(!xPos && !yPos)
+						SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
+					else
+						SetWindowPos(hwnd, HWND_TOP, xPos, yPos, width, height, 0);
+					
 					
 					if (!sameThread[portNum])
 					{
@@ -526,6 +606,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_CLOSE:		
 		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 		portNum = *(int*)effect->user;
+
+		RECT rect;
+		GetWindowRect(hwnd, &rect);
+		setEditorPosition(portNum, rect.left, rect.top); 
 
 		KillTimer(hwnd, 1);
 		if (effect)
