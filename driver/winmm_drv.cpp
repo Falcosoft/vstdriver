@@ -1,19 +1,19 @@
 /* Copyright (C) 2003, 2004, 2005 Dean Beeler, Jerome Fisher
- * Copyright (C) 2011, 2012 Dean Beeler, Jerome Fisher, Sergey V. Mikayev
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU Lesser General Public License as published by
- *  the Free Software Foundation, either version 2.1 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU Lesser General Public License for more details.
- *
- *  You should have received a copy of the GNU Lesser General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2011, 2012 Dean Beeler, Jerome Fisher, Sergey V. Mikayev
+*
+*  This program is free software: you can redistribute it and/or modify
+*  it under the terms of the GNU Lesser General Public License as published by
+*  the Free Software Foundation, either version 2.1 of the License, or
+*  (at your option) any later version.
+*
+*  This program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*  GNU Lesser General Public License for more details.
+*
+*  You should have received a copy of the GNU Lesser General Public License
+*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
 #include "stdafx.h"
 #include <math.h>
@@ -29,15 +29,15 @@ static bool synthOpened = false;
 static int driverCount;
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ){
-    if (fdwReason == DLL_PROCESS_ATTACH){
-        hinst_vst_driver = hinstDLL;
-        //DisableThreadLibraryCalls(hinstDLL);
-    }else if(fdwReason == DLL_PROCESS_DETACH){
-        //;
-   //if (synthOpened)
-   //	midiSynth.Close();
-    }
-    return TRUE;
+	if (fdwReason == DLL_PROCESS_ATTACH){
+		hinst_vst_driver = hinstDLL;
+		//DisableThreadLibraryCalls(hinstDLL);
+	}else if(fdwReason == DLL_PROCESS_DETACH){
+		//;
+		//if (synthOpened)
+		//	midiSynth.Close();
+	}
+	return TRUE;
 }
 
 struct Driver {
@@ -115,19 +115,19 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 	CHAR synthName[] = "VST MIDI Synth\0";
 	WCHAR synthNameW[] = L"VST MIDI Synth\0";
 
-    CHAR synthPortA[] = " (port A)\0";
-    WCHAR synthPortAW[] = L" (port A)\0";
-    
-    CHAR synthPortB[] = " (port B)\0";
-    WCHAR synthPortBW[] = L" (port B)\0";
-    
+	CHAR synthPortA[] = " (port A)\0";
+	WCHAR synthPortAW[] = L" (port A)\0";
+
+	CHAR synthPortB[] = " (port B)\0";
+	WCHAR synthPortBW[] = L" (port B)\0";
+
 	switch (capsSize) {
 	case (sizeof(MIDIOUTCAPSA)):
 		myCapsA = (MIDIOUTCAPSA *)capsPtr;
 		myCapsA->wMid = MM_UNMAPPED;
 		myCapsA->wPid = MM_MPU401_MIDIOUT;
 		memcpy(myCapsA->szPname, synthName, sizeof(synthName));
-        memcpy(myCapsA->szPname + strlen(synthName), uDeviceID ? synthPortB : synthPortA, sizeof(synthPortA));
+		memcpy(myCapsA->szPname + strlen(synthName), uDeviceID ? synthPortB : synthPortA, sizeof(synthPortA));
 		myCapsA->wTechnology = MOD_MIDIPORT;
 		myCapsA->vDriverVersion = 0x0090;
 		myCapsA->wVoices = 0;
@@ -141,7 +141,7 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 		myCapsW->wMid = MM_UNMAPPED;
 		myCapsW->wPid = MM_MPU401_MIDIOUT;
 		memcpy(myCapsW->szPname, synthNameW, sizeof(synthNameW));
-        memcpy(myCapsW->szPname + wcslen(synthNameW), uDeviceID ? synthPortBW : synthPortAW, sizeof(synthPortAW));
+		memcpy(myCapsW->szPname + wcslen(synthNameW), uDeviceID ? synthPortBW : synthPortAW, sizeof(synthPortAW));
 		myCapsW->wTechnology = MOD_MIDIPORT;
 		myCapsW->vDriverVersion = 0x0090;
 		myCapsW->wVoices = 0;
@@ -155,7 +155,7 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 		myCaps2A->wMid = MM_UNMAPPED;
 		myCaps2A->wPid = MM_MPU401_MIDIOUT;
 		memcpy(myCaps2A->szPname, synthName, sizeof(synthName));
-        memcpy(myCaps2A->szPname + strlen(synthName), uDeviceID ? synthPortB : synthPortA, sizeof(synthPortA));
+		memcpy(myCaps2A->szPname + strlen(synthName), uDeviceID ? synthPortB : synthPortA, sizeof(synthPortA));
 		myCaps2A->wTechnology = MOD_MIDIPORT;
 		myCaps2A->vDriverVersion = 0x0090;
 		myCaps2A->wVoices = 0;
@@ -169,7 +169,7 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 		myCaps2W->wMid = MM_UNMAPPED;
 		myCaps2W->wPid = MM_MPU401_MIDIOUT;
 		memcpy(myCaps2W->szPname, synthNameW, sizeof(synthNameW));
-        memcpy(myCaps2W->szPname + wcslen(synthNameW), uDeviceID ? synthPortBW : synthPortAW, sizeof(synthPortAW));
+		memcpy(myCaps2W->szPname + wcslen(synthNameW), uDeviceID ? synthPortBW : synthPortAW, sizeof(synthPortAW));
 		myCaps2W->wTechnology = MOD_MIDIPORT;
 		myCaps2W->vDriverVersion = 0x0090;
 		myCaps2W->wVoices = 0;
@@ -240,7 +240,7 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		}
 
 		instance = NULL;		
-		
+
 		res = OpenDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
 		driver->clients[*(LONG *)dwUser].synth_instance = instance;
 		return res;
@@ -249,22 +249,22 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		if (driver->clients[dwUser].allocated == false) {
 			return MMSYSERR_ERROR;
 		}
-		
+
 		res = CloseDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
 		if (synthOpened) 
 		{			
-			 if(!drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
+			if(!drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
 
-			 int clientCounts = 0;
-			 for (int driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
-				 clientCounts += drivers[driverNum].clientCount;
-				 if (clientCounts) break;
-			 }
+			int clientCounts = 0;
+			for (int driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
+				clientCounts += drivers[driverNum].clientCount;
+				if (clientCounts) break;
+			}
 
-			 if(!clientCounts) {
+			if(!clientCounts) {
 				midiSynth.Close();
 				synthOpened = false;
-			 }
+			}
 		}
 		return res;
 
@@ -296,12 +296,12 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		midiHdr->dwFlags |= MHDR_DONE;
 		midiHdr->dwFlags &= ~MHDR_INQUEUE;
 		DoCallback(uDeviceID, dwUser, MOM_DONE, dwParam1, NULL);
- 		return MMSYSERR_NOERROR;
- 	
+		return MMSYSERR_NOERROR;
+
 	case MODM_GETVOLUME:
-	    *(DWORD*)dwParam1 = driver->volume;
+		*(DWORD*)dwParam1 = driver->volume;
 		return MMSYSERR_NOERROR;	
-		
+
 	case MODM_SETVOLUME:
 		driver->volume = (DWORD)dwParam1;	 
 		midiSynth.SetVolume(uDeviceID, sqrt(float(LOWORD(dwParam1)) / 65535.f)); //falco: for separate port A/B note velocity

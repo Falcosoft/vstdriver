@@ -34,7 +34,7 @@ namespace Command {
 		RenderAudioSamples4channel = 11,
 		SetHighDpiMode = 12,
 		SetSinglePort32ChMode = 13
-		
+
 	};
 };
 
@@ -308,22 +308,22 @@ static BOOL settings_save(AEffect* pEffect)
 			lstrcat(vst_path, L".set");
 
 			HANDLE fileHandle = CreateFile(vst_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-						
+
 			if (fileHandle != INVALID_HANDLE_VALUE)
 			{
 				std::vector<uint8_t> chunk;
 				if (pEffect) getChunk(pEffect, chunk);;
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-				
+
 				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);   
 #else
-				
+
 				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
 #endif
-				
+
 				CloseHandle(fileHandle);
 			}
-			
+
 		}		
 		RegCloseKey(hKey);
 	}
@@ -334,7 +334,7 @@ static BOOL settings_save(AEffect* pEffect)
 static void getEditorPosition (int port, int &x, int &y)
 {
 	HKEY hKey;
-	
+
 	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
 	if (result == NO_ERROR)
 	{
@@ -350,9 +350,9 @@ static void getEditorPosition (int port, int &x, int &y)
 			RegQueryValueEx(hKey, L"PortBWinPosY", NULL, NULL, (LPBYTE)&y, &size);
 
 		}		 
-		
+
 		RegCloseKey(hKey);
-		
+
 		// Deal with changed multimonitor setup to prevent dialogs positioned outside of currently available desktop.
 		int xWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN); // 0 result means error. This can happen on NT4
 		int yWidth = GetSystemMetrics(SM_CYVIRTUALSCREEN); // 0 result means error. This can happen on NT4
@@ -366,7 +366,7 @@ static void getEditorPosition (int port, int &x, int &y)
 
 			return;
 		}
-		
+
 		xWidth = GetSystemMetrics(SM_CXSCREEN); //for systems that support only primary monitor.
 		yWidth = GetSystemMetrics(SM_CYSCREEN);
 		if (xWidth - 24 < x || yWidth - 24 < y)
@@ -381,7 +381,7 @@ static void getEditorPosition (int port, int &x, int &y)
 static void setEditorPosition (int port, int x, int y)
 {
 	HKEY hKey;
-	
+
 	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WRITE, &hKey);
 	if (result == NO_ERROR)
 	{
@@ -397,7 +397,7 @@ static void setEditorPosition (int port, int x, int y)
 			RegSetValueEx(hKey, L"PortBWinPosY", NULL, REG_DWORD, (LPBYTE)&y, size);
 
 		}		 
-		
+
 		RegCloseKey(hKey);
 	}	
 }
@@ -430,7 +430,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_INITDIALOG:
 		{	
 			effect = (AEffect*)lParam;
-			
+
 			if (effect)
 			{
 				/*
@@ -443,7 +443,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				HDC screen = GetDC(0);
 				dpiMul = (float)(GetDeviceCaps(screen, LOGPIXELSY)) / 96.0f; 
 				ReleaseDC(0, screen);
-				
+
 				portNum = *(int*)effect->user;
 				editorHandle[portNum] = hwnd;
 
@@ -480,7 +480,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					AdjustWindowRectEx(&wRect, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
 					width = wRect.right - wRect.left;
 					height = wRect.bottom - wRect.top; 
-					
+
 					int xPos = 0;
 					int yPos = 0;
 					getEditorPosition(portNum, xPos, yPos);
@@ -489,17 +489,17 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 						SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
 					else
 						SetWindowPos(hwnd, HWND_TOP, xPos, yPos, width, height, 0);
-					
-					
+
+
 					if (!sameThread[portNum])
 					{
 						LOGFONT lf;				
-											
+
 						checkBoxWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Always on Top",  WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 						SendMessage(checkBoxWnd[portNum], BM_SETCHECK, BST_CHECKED, 0);
-						
+
 						buttonWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Save Settings",  WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul) , hwnd, NULL , ((LPCREATESTRUCT)lParam)->hInstance, NULL);
-						
+
 						GetObject (GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf); 
 						hFont[portNum] = CreateFontIndirect(&lf);
 						SendMessage(checkBoxWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
@@ -523,7 +523,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_SIZE: //Fixes SC-VA display bug after parts section opened/closed
 		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 		portNum = *(int*)effect->user;
-		
+
 		if (effect && wParam == SIZE_RESTORED)
 		{	
 			dialogMutex.Enter();
@@ -543,13 +543,13 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				width = wRect.right - wRect.left;
 				height = wRect.bottom - wRect.top;
 				SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
-				
+
 				if (!sameThread[portNum])
 				{					
 					SetWindowPos(checkBoxWnd[portNum], NULL, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
 					if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
 						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-					
+
 					SetWindowPos(buttonWnd[portNum], NULL, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
 				}			
 			}
@@ -568,7 +568,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				for (int channel = 0; channel < effect->numOutputs; channel++) {
 					samples[channel] = (float*)malloc(sizeof(float*) * sampleFrames);					
 				}				
-				
+
 				effect->processReplacing(effect, samples, samples, sampleFrames); //ADLPlug's editor is frozen without this.
 				sample_pos += sampleFrames;
 
@@ -578,28 +578,28 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				free(samples);				
 			}
-			
+
 			effect->dispatcher(effect, effEditIdle, 0, 0, 0, 0);
 		}
 		break;
 	case WM_COMMAND: 		
 		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 		portNum = *(int*)effect->user;
-		
+
 		if(HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)checkBoxWnd[portNum])
 		{            
-		 	if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
+			if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
 				SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 			else
 				SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-			
+
 			return 0;
 		}
 		else if(HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)buttonWnd[portNum])
 		{            
-		 	if(!settings_save(effect)) MessageBox(hwnd, L"Cannot save plugin settings!\r\nMaybe you do not have permission to write plugin's folder \r\nor the plugin has nothing to save.", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
+			if(!settings_save(effect)) MessageBox(hwnd, L"Cannot save plugin settings!\r\nMaybe you do not have permission to write plugin's folder \r\nor the plugin has nothing to save.", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
 			else MessageBox(hwnd, L"Plugin settings have been saved successfully!", L"VST MIDI Driver", MB_OK | MB_ICONINFORMATION);	
-			
+
 			return 0;
 		}
 		break;
@@ -620,7 +620,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 		if (hFont[portNum]) DeleteObject(hFont[portNum]);
 		EndDialog(hwnd, IDOK);	
-				
+
 		break;
 	case WM_DESTROY:
 		if(!sameThread[portNum]) PostQuitMessage(0);
@@ -648,7 +648,7 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 	case audioMasterCurrentId:
 		if (data) return data->effect_number;
 		break;
-	
+
 	case audioMasterGetTime: //Some VST requires this. E.g. Genny throws AV without this.  
 		vstTimeInfo.flags = kVstTransportPlaying | kVstNanosValid | kVstTempoValid | kVstTimeSigValid;
 		vstTimeInfo.samplePos = sample_pos;
@@ -665,7 +665,7 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 
 	case audioMasterGetBlockSize:
 		return BUFFER_SIZE;	
-	
+
 	case audioMasterCanDo:					
 		if (_stricmp((char*)ptr, "supplyidle") == 0
 			|| _stricmp((char*)ptr, "sendvstevents") == 0		
@@ -883,9 +883,9 @@ static unsigned __stdcall EditorThread(void* threadparam)
 	if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
 
 	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
-	
+
 	_endthreadex(0);
-    return 0;
+	return 0;
 }
 
 int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
@@ -911,7 +911,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 #endif
 
 	unsigned code = Response::NoError;
-	
+
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
 	AEffect* pEffect[2] = { 0, 0 };
@@ -1105,7 +1105,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					MyDLGTEMPLATE t;
 					t.style = WS_POPUPWINDOW | WS_DLGFRAME | DS_MODALFRAME | DS_CENTER;
 					t.dwExtendedStyle = WS_EX_TOPMOST;
-					
+
 					if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
 
 					DialogBoxIndirectParam(0, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)(pEffect[0]));
@@ -1694,7 +1694,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 exit:
 	if (editorHandle[0] != 0) SendMessageTimeout(editorHandle[0], WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, NULL);
 	if (editorHandle[1] != 0) SendMessageTimeout(editorHandle[1], WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, NULL);
-	
+
 	if (pEffect[1])
 	{
 		if (blState.size()) pEffect[1]->dispatcher(pEffect[1], effStopProcess, 0, 0, 0, 0);

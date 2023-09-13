@@ -216,7 +216,7 @@ namespace VSTMIDIDRV{
 
 				}
 			}
-			
+
 			RegCloseKey(hKey);
 		}
 
@@ -271,7 +271,7 @@ namespace VSTMIDIDRV{
 			hEvent = CreateEvent(NULL, false, true, NULL);
 			callback = (DWORD_PTR)hEvent;
 			callbackType = CALLBACK_EVENT;
-			
+
 			for (int i = 0; i < 10; i++) errorShown[i] = false;
 
 			//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;			
@@ -357,10 +357,10 @@ namespace VSTMIDIDRV{
 			int wResult = waveOutReset(hWaveOut);
 			if (wResult != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToReset]) {
-						MessageBox(NULL, L"Failed to Reset WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
-						errorShown[VSTMIDIDRV::FailedToReset] = true;
-					}
-				
+					MessageBox(NULL, L"Failed to Reset WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					errorShown[VSTMIDIDRV::FailedToReset] = true;
+				}
+
 				return 8;
 			}
 
@@ -371,7 +371,7 @@ namespace VSTMIDIDRV{
 						MessageBox(NULL, L"Failed to Unprepare Wave Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 						errorShown[VSTMIDIDRV::FailedToUnprepare] = true;
 					}
-					
+
 					return 8;
 				}
 			}
@@ -381,10 +381,10 @@ namespace VSTMIDIDRV{
 			wResult = waveOutClose(hWaveOut);
 			if (wResult != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToClose]) {
-						MessageBox(NULL, L"Failed to Close WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
-						errorShown[VSTMIDIDRV::FailedToClose] = true;
-					}
-				
+					MessageBox(NULL, L"Failed to Close WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					errorShown[VSTMIDIDRV::FailedToClose] = true;
+				}
+
 				return 8;
 			}
 			if (hEvent != NULL) {
@@ -403,7 +403,7 @@ namespace VSTMIDIDRV{
 						MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
 						errorShown[VSTMIDIDRV::FailedToWrite] = true;
 					}
-					
+
 					return 4;
 				}
 			}
@@ -414,10 +414,10 @@ namespace VSTMIDIDRV{
 		int Pause(){
 			if (waveOutPause(hWaveOut) != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToPause]) {
-						MessageBox(NULL, L"Failed to Pause wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
-						errorShown[VSTMIDIDRV::FailedToPause] = true;
-					}
-				
+					MessageBox(NULL, L"Failed to Pause wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					errorShown[VSTMIDIDRV::FailedToPause] = true;
+				}
+
 				return 9;
 			}
 			return 0;
@@ -426,10 +426,10 @@ namespace VSTMIDIDRV{
 		int Resume(){
 			if (waveOutRestart(hWaveOut) != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToResume]) {
-						MessageBox(NULL, L"Failed to Resume wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
-						errorShown[VSTMIDIDRV::FailedToResume] = true;
-					}
-				
+					MessageBox(NULL, L"Failed to Resume wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					errorShown[VSTMIDIDRV::FailedToResume] = true;
+				}
+
 				return 9;
 			}
 			return 0;
@@ -454,18 +454,18 @@ namespace VSTMIDIDRV{
 
 			if (waveOutGetPosition(hWaveOut, &mmTime, sizeof(MMTIME)) != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToGetPosition]) {
-						MessageBox(NULL, L"Failed to get current playback position", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
-						errorShown[VSTMIDIDRV::FailedToGetPosition] = true;
-					}
-				
+					MessageBox(NULL, L"Failed to get current playback position", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					errorShown[VSTMIDIDRV::FailedToGetPosition] = true;
+				}
+
 				return 10;
 			}
 			if (mmTime.wType != TIME_SAMPLES) {
 				if (!errorShown[VSTMIDIDRV::FailedToGetSamples]) {
-						MessageBox(NULL, L"Failed to get # of samples played", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
-						errorShown[VSTMIDIDRV::FailedToGetSamples] = true;
-					}
-				
+					MessageBox(NULL, L"Failed to get # of samples played", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					errorShown[VSTMIDIDRV::FailedToGetSamples] = true;
+				}
+
 				return 10;
 			}
 			mmTime.u.sample &= WRAP_MASK;
@@ -561,12 +561,11 @@ namespace VSTMIDIDRV{
 			//PathRemoveFileSpec(installPath);
 			wchar_t *chrP = wcsrchr(installPath, '\\'); //removes SHLWAPI dependency for WIN NT4
 			if(chrP) chrP[0] = 0;
-			
+
 			lstrcat(installPath, _T("\\vstmididrv\\"));
 
 			lstrcpy(bassAsioPath, installPath);
 			lstrcat(bassAsioPath, _T("bassasio.dll"));
-
 		}
 
 		bool LoadBassAsio()
@@ -601,8 +600,6 @@ namespace VSTMIDIDRV{
 				LOADBASSASIOFUNCTION(BASS_ASIO_ChannelSetFormat);
 				LOADBASSASIOFUNCTION(BASS_ASIO_GetLatency);
 				LOADBASSASIOFUNCTION(BASS_ASIO_GetInfo);
-
-
 			}
 			else
 			{
@@ -650,7 +647,7 @@ namespace VSTMIDIDRV{
 					}
 
 				}						
-								
+
 #else
 				result = RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, NULL, &dwSize);
 				if (result == NO_ERROR && dwType == REG_SZ)
@@ -672,13 +669,13 @@ namespace VSTMIDIDRV{
 
 				}
 #endif				
-			
+
 				RegCloseKey(hKey);
 			}
 
 			return wresult;
 		}
-		
+
 		void GetSelectedAsioDriver(int& selectedDeviceId, int& selectedChannelId)
 		{
 			selectedDeviceId = 0;
@@ -1051,7 +1048,7 @@ namespace VSTMIDIDRV{
 
 		return false;
 	}
-	
+
 
 	void MidiSynth::LoadSettings(){
 		channels = GetChannelCount();
@@ -1063,7 +1060,7 @@ namespace VSTMIDIDRV{
 		chunkSize = MillisToFrames(chunkSizeMS);
 		midiLatencyMS = 0;
 		midiLatency = MillisToFrames(midiLatencyMS);
-		
+
 		usingFloat = GetUsingFloat();
 		useAsio = UseAsio();
 		enableSinglePort32ChMode = GetEnableSinglePort32ChMode();
@@ -1075,7 +1072,7 @@ namespace VSTMIDIDRV{
 			bufferSize = chunks * chunkSize;
 		}
 	}	
-	
+
 	void MidiSynth::InitDialog(unsigned uDeviceID){
 
 		if(IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID);
@@ -1083,7 +1080,7 @@ namespace VSTMIDIDRV{
 
 	int MidiSynth::Init(unsigned uDeviceID){
 		LoadSettings();
-		
+
 		if (sampleRate == 0) sampleRate = 48000;
 		if (!useAsio && !bufferSize) {
 			bufferSize = MillisToFrames(80);
@@ -1180,7 +1177,7 @@ namespace VSTMIDIDRV{
 	}
 
 	void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg){
-		
+
 		synthMutex.Enter();	
 
 		//// support for F5 xx port select message (FSMP can send this message)
@@ -1193,13 +1190,13 @@ namespace VSTMIDIDRV{
 			}
 			//F5 xx command uses 1 as first port, but we use 0 and we have only A/B ports. This way 1 -> 0, 2 -> 1, 3 -> 0, 4 -> 1 and so on. 
 			virtualPortNum = !(((unsigned char*)&msg)[1] & 1);
-			
+
 			synthMutex.Leave();
 			return;
 		}
 		if (isSinglePort32Ch) uDeviceID = virtualPortNum;
 		////
-		
+
 		////falco: running status support
 		if ((unsigned char)msg >= 0x80 && (unsigned char)msg <= 0xEF) {
 			statusBuff[uDeviceID] = (unsigned char)msg; //store status in case of normal Channel/Voice messages.
@@ -1212,7 +1209,7 @@ namespace VSTMIDIDRV{
 		}		
 		if ((unsigned char)msg == 0) return; //no status always means malformed Midi message 
 		////	
-		
+
 		////falco: midiOutSetVolume support
 		if (midiVol[uDeviceID] != 1.0f) {
 			if ((msg & 0xF0) == 0x90 ) {				
@@ -1230,20 +1227,20 @@ namespace VSTMIDIDRV{
 	}
 
 	void MidiSynth::PlaySysex(unsigned uDeviceID, unsigned char *bufpos, DWORD len){
-				
+
 		synthMutex.Enter();
 
 		//// support for F5 xx port select message (FSMP can send this message)
 		if (bufpos[0] == 0xF5 && len > 1 && enableSinglePort32ChMode) {
 			if (!isSinglePort32Ch) {
-                
+
 				vstDriver->setSinglePort32ChMode();
 				InitDialog((unsigned int)!uDeviceID);
 				isSinglePort32Ch = true;
 			}
 			//F5 xx command uses 1 as first port, but we use 0 and we have only A/B ports. This way 1 -> 0, 2 -> 1, 3 -> 0, 4 -> 1 and so on.
 			virtualPortNum = !(bufpos[1] & 1);
-			
+
 			synthMutex.Leave();
 			return;
 		}		
@@ -1251,7 +1248,7 @@ namespace VSTMIDIDRV{
 		////
 
 		statusBuff[uDeviceID] = 0; //clear running status also in case of SysEx messages
-		
+
 		if (useAsio) midiStream.PutSysex(uDeviceID, bufpos, len, min(bassAsioOut.GetPos() + midiLatency, bufferSize - 1));
 		else midiStream.PutSysex(uDeviceID, bufpos, len, (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize));
 
@@ -1259,7 +1256,7 @@ namespace VSTMIDIDRV{
 	}
 
 	void MidiSynth::SetVolume(unsigned uDeviceID, float volume){
-	    midiVol[uDeviceID] = volume;
+		midiVol[uDeviceID] = volume;
 	}
 
 	void MidiSynth::Close(){

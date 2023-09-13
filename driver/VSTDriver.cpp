@@ -1,18 +1,18 @@
 /* Copyright (C) 2011 Chris Moeller, Brad Miller
- *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU Lesser General Public License as published by
- *  the Free Software Foundation, either version 2.1 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU Lesser General Public License for more details.
- *
- *  You should have received a copy of the GNU Lesser General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+*
+*  This program is free software: you can redistribute it and/or modify
+*  it under the terms of the GNU Lesser General Public License as published by
+*  the Free Software Foundation, either version 2.1 of the License, or
+*  (at your option) any later version.
+*
+*  This program is distributed in the hope that it will be useful,
+*  but WITHOUT ANY WARRANTY; without even the implied warranty of
+*  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+*  GNU Lesser General Public License for more details.
+*
+*  You should have received a copy of the GNU Lesser General Public License
+*  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
 #include "VSTDriver.h"
 
@@ -60,11 +60,11 @@ VSTDriver::VSTDriver() {
 	hProcess = NULL;
 	hThread = NULL;
 	hReadEvent = NULL;
-    hChildStd_IN_Rd = NULL;
-    hChildStd_IN_Wr = NULL;
-    hChildStd_OUT_Rd = NULL;
-    hChildStd_OUT_Wr = NULL;
-    uNumOutputs = 0;
+	hChildStd_IN_Rd = NULL;
+	hChildStd_IN_Wr = NULL;
+	hChildStd_OUT_Rd = NULL;
+	hChildStd_OUT_Wr = NULL;
+	uNumOutputs = 0;
 	sName = NULL;
 	sVendor = NULL;
 	sProduct = NULL;
@@ -229,19 +229,19 @@ std::wstring VSTDriver::GetVsthostPath()
 	GetModuleFileName( hinst_vst_driver, my_path, _countof(my_path) );
 
 	std::wstring sDir(my_path);
-    size_t idx = sDir.find_last_of( L'\\' ) + 1;
-    if (idx != std::wstring::npos)
-	  sDir.resize( idx );
-    std::wstring sSubdir(my_path + idx);
-    idx = sSubdir.find_last_of( L'.' );
-    if (idx != std::wstring::npos)
-      sSubdir.resize(idx);
-    sSubdir += L'\\';
-    std::wstring sFile((uPluginPlatform == 64) ? L"vstbridgeapp64.exe" : L"vstbridgeapp32.exe");
+	size_t idx = sDir.find_last_of( L'\\' ) + 1;
+	if (idx != std::wstring::npos)
+		sDir.resize( idx );
+	std::wstring sSubdir(my_path + idx);
+	idx = sSubdir.find_last_of( L'.' );
+	if (idx != std::wstring::npos)
+		sSubdir.resize(idx);
+	sSubdir += L'\\';
+	std::wstring sFile((uPluginPlatform == 64) ? L"vstbridgeapp64.exe" : L"vstbridgeapp32.exe");
 
-    std::wstring sHostPath = sDir + sFile;
-    if (::GetFileAttributesW(sHostPath.c_str()) == INVALID_FILE_ATTRIBUTES)
-      sHostPath = sDir + sSubdir + sFile;
+	std::wstring sHostPath = sDir + sFile;
+	if (::GetFileAttributesW(sHostPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+		sHostPath = sDir + sSubdir + sFile;
 
 	return sHostPath;
 }
@@ -273,28 +273,28 @@ bool VSTDriver::process_create()
 		return false;
 	}
 
-    HANDLE hPipe = CreateNamedPipe( pipe_name_in.c_str(), PIPE_ACCESS_OUTBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED, PIPE_TYPE_BYTE, 1, 65536, 65536, 0, &saAttr );
-    if ( hPipe == INVALID_HANDLE_VALUE )
-    {
-        process_terminate();
-        return false;
-    }
-    hChildStd_IN_Rd = CreateFile( pipe_name_in.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &saAttr, OPEN_EXISTING, 0, NULL );
-    DuplicateHandle( GetCurrentProcess(), hPipe, GetCurrentProcess(), &hChildStd_IN_Wr, 0, FALSE, DUPLICATE_SAME_ACCESS );
-    CloseHandle( hPipe );
+	HANDLE hPipe = CreateNamedPipe( pipe_name_in.c_str(), PIPE_ACCESS_OUTBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED, PIPE_TYPE_BYTE, 1, 65536, 65536, 0, &saAttr );
+	if ( hPipe == INVALID_HANDLE_VALUE )
+	{
+		process_terminate();
+		return false;
+	}
+	hChildStd_IN_Rd = CreateFile( pipe_name_in.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &saAttr, OPEN_EXISTING, 0, NULL );
+	DuplicateHandle( GetCurrentProcess(), hPipe, GetCurrentProcess(), &hChildStd_IN_Wr, 0, FALSE, DUPLICATE_SAME_ACCESS );
+	CloseHandle( hPipe );
 
-    hPipe = CreateNamedPipe( pipe_name_out.c_str(), PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED, PIPE_TYPE_BYTE, 1, 65536, 65536, 0, &saAttr );
-    if ( hPipe == INVALID_HANDLE_VALUE )
-    {
-        process_terminate();
-        return false;
-    }
-    hChildStd_OUT_Wr = CreateFile( pipe_name_out.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &saAttr, OPEN_EXISTING, 0, NULL );
-    DuplicateHandle( GetCurrentProcess(), hPipe, GetCurrentProcess(), &hChildStd_OUT_Rd, 0, FALSE, DUPLICATE_SAME_ACCESS );
-    CloseHandle( hPipe );
+	hPipe = CreateNamedPipe( pipe_name_out.c_str(), PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED, PIPE_TYPE_BYTE, 1, 65536, 65536, 0, &saAttr );
+	if ( hPipe == INVALID_HANDLE_VALUE )
+	{
+		process_terminate();
+		return false;
+	}
+	hChildStd_OUT_Wr = CreateFile( pipe_name_out.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &saAttr, OPEN_EXISTING, 0, NULL );
+	DuplicateHandle( GetCurrentProcess(), hPipe, GetCurrentProcess(), &hChildStd_OUT_Rd, 0, FALSE, DUPLICATE_SAME_ACCESS );
+	CloseHandle( hPipe );
 
 	std::wstring szCmdLine = L"\"";
-    szCmdLine += GetVsthostPath();
+	szCmdLine += GetVsthostPath();
 	szCmdLine += L"\" \"";
 	szCmdLine += szPluginPath;
 	szCmdLine += L"\" ";
@@ -313,10 +313,10 @@ bool VSTDriver::process_create()
 	STARTUPINFO siStartInfo = {0};
 
 	siStartInfo.cb = sizeof(siStartInfo);
-    siStartInfo.hStdInput = hChildStd_IN_Rd;
-    siStartInfo.hStdOutput = hChildStd_OUT_Wr;
-    siStartInfo.hStdError = GetStdHandle( STD_ERROR_HANDLE );
-    siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
+	siStartInfo.hStdInput = hChildStd_IN_Rd;
+	siStartInfo.hStdOutput = hChildStd_OUT_Wr;
+	siStartInfo.hStdError = GetStdHandle( STD_ERROR_HANDLE );
+	siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
 	TCHAR CmdLine[MAX_PATH];
 	_tcscpy_s(CmdLine, _countof(CmdLine), szCmdLine.c_str());
@@ -327,12 +327,12 @@ bool VSTDriver::process_create()
 		return false;
 	}
 
-    // Close remote handles so pipes will break when process terminates
-    CloseHandle( hChildStd_OUT_Wr );
-    CloseHandle( hChildStd_IN_Rd );
-    hChildStd_OUT_Wr = NULL;
-    hChildStd_IN_Rd = NULL;
-    
+	// Close remote handles so pipes will break when process terminates
+	CloseHandle( hChildStd_OUT_Wr );
+	CloseHandle( hChildStd_IN_Rd );
+	hChildStd_OUT_Wr = NULL;
+	hChildStd_IN_Rd = NULL;
+
 	hProcess = piProcInfo.hProcess;
 	hThread = piProcInfo.hThread;
 
@@ -386,21 +386,21 @@ void VSTDriver::process_terminate()
 		CloseHandle( hThread );
 		CloseHandle( hProcess );
 	}
-    if ( hChildStd_IN_Rd ) CloseHandle( hChildStd_IN_Rd );
-    if ( hChildStd_IN_Wr ) CloseHandle( hChildStd_IN_Wr );
-    if ( hChildStd_OUT_Rd ) CloseHandle( hChildStd_OUT_Rd );
-    if ( hChildStd_OUT_Wr ) CloseHandle( hChildStd_OUT_Wr );
-    if ( hReadEvent ) CloseHandle( hReadEvent );
+	if ( hChildStd_IN_Rd ) CloseHandle( hChildStd_IN_Rd );
+	if ( hChildStd_IN_Wr ) CloseHandle( hChildStd_IN_Wr );
+	if ( hChildStd_OUT_Rd ) CloseHandle( hChildStd_OUT_Rd );
+	if ( hChildStd_OUT_Wr ) CloseHandle( hChildStd_OUT_Wr );
+	if ( hReadEvent ) CloseHandle( hReadEvent );
 	if ( bInitialized && !bInitializedOtherModel ) CoUninitialize();
 	bInitialized = false;
 	bInitializedOtherModel = false;
 	hProcess = NULL;
 	hThread = NULL;
 	hReadEvent = NULL;
-    hChildStd_IN_Rd = NULL;
-    hChildStd_IN_Wr = NULL;
-    hChildStd_OUT_Rd = NULL;
-    hChildStd_OUT_Wr = NULL;
+	hChildStd_IN_Rd = NULL;
+	hChildStd_IN_Wr = NULL;
+	hChildStd_OUT_Rd = NULL;
+	hChildStd_OUT_Wr = NULL;
 }
 
 bool VSTDriver::process_running()
@@ -574,7 +574,7 @@ void VSTDriver::setSinglePort32ChMode()
 	if (code != NoError) {
 		process_terminate();
 	}
-	
+
 }
 
 void VSTDriver::setSampleRate(unsigned int sampleRate)
@@ -593,7 +593,7 @@ void VSTDriver::displayEditorModal(unsigned int uDeviceID)
 {
 	uint32_t code = uDeviceID == 255 ? Command::DisplayEditorModal : Command::DisplayEditorModalThreaded;
 	process_write_code( code );
-	
+
 	if (code == Command::DisplayEditorModalThreaded) {		
 		process_write_code( uDeviceID );
 	}
@@ -628,7 +628,7 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 			return FALSE;
 		}
 
-        if (blChunk.size()) {
+		if (blChunk.size()) {
 			process_write_code( Command::SetChunkData );
 			process_write_code( (uint32_t)blChunk.size() );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
@@ -640,10 +640,10 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 			if ( code != NoError ) {
 				process_terminate();
 				return FALSE;
-	        }
+			}
 
 		}		
-		
+
 		return TRUE;
 	}
 
