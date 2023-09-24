@@ -498,7 +498,7 @@ namespace VSTMIDIDRV{
 
 		static unsigned __stdcall RenderingThread(void* pthis)
 		{
-			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 			WaveOutWin32* _this = (WaveOutWin32*)pthis;
 
 			while (!waveOut.stopProcessing)
