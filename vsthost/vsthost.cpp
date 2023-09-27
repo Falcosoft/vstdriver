@@ -312,7 +312,7 @@ static BOOL settings_save(AEffect* pEffect)
 			if (fileHandle != INVALID_HANDLE_VALUE)
 			{
 				std::vector<uint8_t> chunk;
-				if (pEffect) getChunk(pEffect, chunk);;
+				if (pEffect) getChunk(pEffect, chunk);
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 
 				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);   
@@ -360,8 +360,8 @@ static void getEditorPosition (int port, int &x, int &y)
 		{
 			if (xWidth - 24 < x || yWidth - 24 < y) 
 			{
-				x = 0;
-				y = 0;
+				x = 0xFFFFFF;
+				y = 0xFFFFFF;
 			}
 
 			return;
@@ -371,8 +371,8 @@ static void getEditorPosition (int port, int &x, int &y)
 		yWidth = GetSystemMetrics(SM_CYSCREEN);
 		if (xWidth - 24 < x || yWidth - 24 < y)
 		{
-			x = 0;
-			y = 0;
+			x = 0xFFFFFF;
+			y = 0xFFFFFF;
 		}		
 	}	
 }
@@ -481,11 +481,11 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					width = wRect.right - wRect.left;
 					height = wRect.bottom - wRect.top; 
 
-					int xPos = 0;
-					int yPos = 0;
+					int xPos = 0xFFFFFF; //16M not likely to be real window position
+					int yPos = 0xFFFFFF;
 					getEditorPosition(portNum, xPos, yPos);
 
-					if(!xPos && !yPos)
+					if(xPos == 0xFFFFFF || yPos == 0xFFFFFF)
 						SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
 					else
 						SetWindowPos(hwnd, HWND_TOP, xPos, yPos, width, height, 0);
