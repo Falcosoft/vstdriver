@@ -69,6 +69,8 @@ $(TARGET): vstmididrv.mak \
         output\vstbridgeapp32.exe \
         output\vstmididrvcfg.exe \
         output\bassasio.dll \
+        output\cpltasks32.xml \
+        output\cpltasks64.xml \
         output\64\vstmididrv.dll \
         output\64\bassasio.dll \
         output\64\vstbridgeapp64.exe \
@@ -84,6 +86,12 @@ output\bassasio.dll: external_packages\lib\bassasio.dll
 
 output\64\bassasio.dll: external_packages\lib64\bassasio.dll
         @copy /y external_packages\lib64\bassasio.dll output\64\bassasio.dll
+        
+output\cpltasks32.xml: drivercfg\cpltasks32.xml
+        @copy /y drivercfg\cpltasks32.xml output\cpltasks32.xml
+        
+output\cpltasks64.xml: drivercfg\cpltasks64.xml
+        @copy /y drivercfg\cpltasks64.xml output\cpltasks64.xml        
 
       
        

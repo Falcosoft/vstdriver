@@ -43,6 +43,7 @@ struct __declspec(uuid("00000003-0000-0010-8000-00aa00389b71")) KSDATAFORMAT_SUB
 using std::wstring;
 
 extern "C"{ extern HINSTANCE hinst_vst_driver; }
+extern "C" { extern bool isSCVA; };
 
 
 namespace VSTMIDIDRV{
@@ -1138,6 +1139,7 @@ namespace VSTMIDIDRV{
 			return 1;
 		}
 
+		vstDriver->initSysTray();
 		vstDriver->setHighDpiMode(GetHighDpiMode());
 		InitDialog(uDeviceID);
 

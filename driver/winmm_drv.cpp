@@ -14,11 +14,14 @@
 *  You should have received a copy of the GNU Lesser General Public License
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+#pragma warning(disable : 4996)
+#pragma warning(disable : 4482)
 
 #include "stdafx.h"
 #include <math.h>
 
 extern "C" { HINSTANCE hinst_vst_driver = 0; }
+extern "C" { bool isSCVA = false; }
 
 #define MAX_DRIVERS 2
 #define MAX_CLIENTS 8 // Per driver
@@ -54,7 +57,54 @@ struct Driver {
 	} clients[MAX_CLIENTS];
 } drivers[MAX_DRIVERS];
 
+#pragma comment(lib,"Version.lib") 
+wchar_t* GetFileVersion(wchar_t* Result)
+{
+	DWORD               dwSize = 0;
+	BYTE* pVersionInfo = NULL;
+	VS_FIXEDFILEINFO* pFileInfo = NULL;
+	UINT                pLenFileInfo = 0;
+	wchar_t tmpBuff[MAX_PATH];
+
+	GetModuleFileName(hinst_vst_driver, tmpBuff, MAX_PATH);
+
+	dwSize = GetFileVersionInfoSize(tmpBuff, NULL);
+	if (dwSize == 0)
+	{           
+		return NULL;
+	}
+
+	pVersionInfo = new BYTE[dwSize]; 
+
+	if (!GetFileVersionInfo(tmpBuff, 0, dwSize, pVersionInfo))
+	{           
+		delete[] pVersionInfo;
+		return NULL;
+	}
+
+	if (!VerQueryValue(pVersionInfo, TEXT("\\"), (LPVOID*)&pFileInfo, &pLenFileInfo))
+	{            
+		delete[] pVersionInfo;
+		return NULL;
+	}      
+
+	lstrcat(Result, L"version: ");
+	lstrcat(Result, _ultow((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, 10));
+	lstrcat(Result, L".");
+	lstrcat(Result, _ultow((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, 10));
+	lstrcat(Result, L".");
+	lstrcat(Result, _ultow((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, 10));
+	//lstrcat(Result, L".");
+	//lstrcat(Result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+
+	return Result;
+}
+
+
 STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwParam1, DWORD dwParam2) {
+
+	wchar_t fileversionBuff[64] = L"Driver ";
+
 	switch(wMessage) {
 	case DRV_LOAD:
 		memset(drivers, 0, sizeof(drivers));
@@ -82,8 +132,9 @@ STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwP
 	case DRV_PNPINSTALL:
 		return DRV_OK;
 	case DRV_QUERYCONFIGURE:
-		return 0;
-	case DRV_CONFIGURE:
+		return DRVCNF_OK;
+	case DRV_CONFIGURE:	
+		MessageBox((HWND)dwParam1, GetFileVersion(fileversionBuff), L"VST MIDI Driver (Falcomod)", MB_OK | MB_ICONINFORMATION);
 		return DRVCNF_OK;
 	case DRV_CLOSE:
 		for (int i = 0; i < MAX_DRIVERS; i++) {
@@ -95,12 +146,14 @@ STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwP
 		}
 		return DRV_CANCEL;
 	case DRV_DISABLE:
-		return DRV_OK;
+	case DRV_REMOVE:		
 	case DRV_FREE:
-		if (synthOpened) midiSynth.Close();
-		return DRV_OK;
-	case DRV_REMOVE:
-		return DRV_OK;
+		if (synthOpened)
+		{
+			midiSynth.Close();
+			synthOpened = false;			
+		}
+		return DRV_OK;	
 	}
 	return DRV_OK;
 }
@@ -252,19 +305,21 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 
 		res = CloseDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
 		if (synthOpened) 
-		{			
-			if(!drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
-
+		{
 			int clientCounts = 0;
 			for (int driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
-				clientCounts += drivers[driverNum].clientCount;
-				if (clientCounts) break;
+			clientCounts += drivers[driverNum].clientCount;
+			if (clientCounts) break;
 			}
 
-			if(!clientCounts) {
+			if(!clientCounts && !isSCVA) {
 				midiSynth.Close();
 				synthOpened = false;
 			}
+			else if(!drivers[uDeviceID].clientCount) {
+				 midiSynth.Reset(uDeviceID);
+			}			
+
 		}
 		return res;
 

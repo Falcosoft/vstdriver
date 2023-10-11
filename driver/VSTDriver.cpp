@@ -15,6 +15,7 @@
 */
 
 #include "VSTDriver.h"
+#include <commdlg.h>
 
 #include <assert.h>
 
@@ -47,7 +48,8 @@ namespace Command {
 		DisplayEditorModalThreaded = 10,
 		RenderAudioSamples4channel = 11,
 		SetHighDpiMode = 12,
-		SetSinglePort32ChMode = 13
+		SetSinglePort32ChMode = 13,
+		InitSysTray = 14
 	};
 };
 
@@ -222,6 +224,7 @@ bool VSTDriver::connect_pipe( HANDLE hPipe )
 }
 
 extern "C" { extern HINSTANCE hinst_vst_driver; };
+extern "C" { extern bool isSCVA; };
 
 std::wstring VSTDriver::GetVsthostPath()
 {
@@ -320,6 +323,13 @@ bool VSTDriver::process_create()
 
 	TCHAR CmdLine[MAX_PATH];
 	_tcscpy_s(CmdLine, _countof(CmdLine), szCmdLine.c_str());
+    
+	TCHAR exe_path[MAX_PATH];
+	TCHAR exe_title[MAX_PATH];
+	GetModuleFileName(NULL, exe_path, _countof(exe_path));
+	GetFileTitle(exe_path, exe_title, MAX_PATH - 1);
+    _tcscat(CmdLine, L" ");
+	_tcscat(CmdLine, exe_title);
 
 	if ( !CreateProcess( NULL, CmdLine, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo ) )
 	{
@@ -372,6 +382,7 @@ bool VSTDriver::process_create()
 	sName[ name_string_length ] = 0;
 	sVendor[ vendor_string_length ] = 0;
 	sProduct[ product_string_length ] = 0;
+	if(!strcmp(sProduct, "SOUND Canvas VA")) isSCVA = true;
 
 	return true;
 }
@@ -566,6 +577,16 @@ void VSTDriver::setHighDpiMode(unsigned int modeNum)
 	}
 }
 
+void VSTDriver::initSysTray() 
+{
+	process_write_code(Command::InitSysTray);
+	
+	uint32_t code = process_read_code();
+	if (code != NoError) {
+		process_terminate();
+	}
+}
+
 void VSTDriver::setSinglePort32ChMode() 
 {	
 	process_write_code(Command::SetSinglePort32ChMode);	
@@ -592,6 +613,7 @@ void VSTDriver::setSampleRate(unsigned int sampleRate)
 void VSTDriver::displayEditorModal(unsigned int uDeviceID)
 {
 	uint32_t code = uDeviceID == 255 ? Command::DisplayEditorModal : Command::DisplayEditorModalThreaded;
+	if (uDeviceID == 1) Sleep(50);
 	process_write_code( code );
 
 	if (code == Command::DisplayEditorModalThreaded) {		
@@ -651,6 +673,7 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 }
 
 void VSTDriver::ResetDriver(unsigned int uDeviceID) {
+
 	process_write_code( Command::Reset );
 	process_write_code( uDeviceID );
 	uint32_t code = process_read_code();

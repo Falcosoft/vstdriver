@@ -16,7 +16,7 @@
     <security>
       <requestedPrivileges>
         <requestedExecutionLevel
-          level="asInvoker"
+          level="highestAvailable"
           uiAccess="false"/>
         </requestedPrivileges>
        </security>

@@ -1,0 +1,22 @@
+<?xml version="1.0" ?>
+<applications xmlns="http://schemas.microsoft.com/windows/cpltasks/v1" 
+              xmlns:sh="http://schemas.microsoft.com/windows/tasks/v1">
+    
+    <!-- VST Driver GUID -->
+    <application id="{E33B77CA-8645-49E7-8CBD-1E39673C8C43}"> 
+        
+        <!-- x86 -->
+        <sh:task id="{65FF5C5C-1563-408D-8FE5-184502CF58D6}" needsElevation="true">            
+            <sh:name>Configure VST MIDI Driver</sh:name>
+            <sh:keywords>vst;midi;synth</sh:keywords>
+            <sh:command>C:\Windows\System32\vstmididrv\vstmididrvcfg.exe</sh:command>
+        </sh:task>           
+        
+        <!-- Category assignments -->
+        <!-- Sound -->
+        <category id="2">        
+            <sh:task idref="{65FF5C5C-1563-408D-8FE5-184502CF58D6}"/>
+        </category>       
+                
+   </application>
+</applications>

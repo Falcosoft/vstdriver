@@ -1,0 +1,30 @@
+<?xml version="1.0" ?>
+<applications xmlns="http://schemas.microsoft.com/windows/cpltasks/v1" 
+              xmlns:sh="http://schemas.microsoft.com/windows/tasks/v1">
+    
+    <!-- VST Driver GUID -->
+    <application id="{E33B77CA-8645-49E7-8CBD-1E39673C8C43}"> 
+        
+        <!-- x86 -->
+        <sh:task id="{65FF5C5C-1563-408D-8FE5-184502CF58D6}" needsElevation="true">            
+            <sh:name>Configure VST MIDI Driver (x86)</sh:name>
+            <sh:keywords>vst;midi;synth;x86</sh:keywords>
+            <sh:command>C:\Windows\SysWOW64\vstmididrv\vstmididrvcfg.exe</sh:command>
+        </sh:task>
+
+        <!-- x64 -->
+        <sh:task id="{3AB76258-5DF3-4392-B4F5-9D3AE7006301}" needsElevation="true">             
+            <sh:name>Configure VST MIDI Driver (x64)</sh:name>
+            <sh:keywords>vst;midi;synth;x64</sh:keywords>
+            <sh:command>C:\Windows\System32\vstmididrv\vstmididrvcfg.exe</sh:command>
+        </sh:task>        
+        
+        <!-- Category assignments -->
+        <!-- Sound -->
+        <category id="2">        
+            <sh:task idref="{65FF5C5C-1563-408D-8FE5-184502CF58D6}"/>   
+            <sh:task idref="{3AB76258-5DF3-4392-B4F5-9D3AE7006301}"/>            
+        </category>       
+                
+   </application>
+</applications>

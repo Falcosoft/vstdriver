@@ -2,6 +2,10 @@
 !include MUI2.nsh
 !include WinVer.nsh
 ManifestDPIAware true
+
+!define MUI_ICON "drivercfg\drivercfg.ico"
+!define MUI_UNICON "drivercfg\uninstall.ico"
+
 ; The name of the installer
 !getdllversion "output\vstmididrvcfg.exe" expv_
 Name "VST MIDI System Synth (Falcomod) ${expv_1}.${expv_2}.${expv_3}"
@@ -127,6 +131,9 @@ Section "Needed (required)"
     File output\bassasio.dll   
     File output\vstmididrvcfg.exe
     File output\vstbridgeapp32.exe
+    ${If} ${AtLeastWinVista}
+      File output\cpltasks64.xml
+    ${Endif}
     File output\64\vstbridgeapp64.exe   
 !ifndef INNER
     File $%TEMP%\vstmididrvuninstall.exe
@@ -139,7 +146,7 @@ Section "Needed (required)"
     File output\vstbridgeapp32.exe
     File output\64\vstbridgeapp64.exe
     
-    ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "falcosoft" "ROOT\vstmididrv"
+    ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "Falcosoft" "ROOT\vstmididrv"
     pop $2
     pop $0
     pop $1
@@ -150,14 +157,14 @@ Section "Needed (required)"
     ${Else}
       SetRegView 64
       WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-        "MIDI" "midi$1"
+        "MIDI64" "midi$0"
       WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-        "MIDIDRV" "$0"
+        "MIDIDRV64" "$1"
       SetRegView 32
       WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-        "MIDI64" "midi$1"
+        "MIDI" "midi$0"
       WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-        "MIDIDRV64" "$0"
+        "MIDIDRV" "$1"
     ${EndIf}
   
   ${Else}
@@ -171,12 +178,15 @@ Section "Needed (required)"
     SetOutPath "$WINDIR\System32\vstmididrv"   
     File output\bassasio.dll   
     File output\vstmididrvcfg.exe
+    ${If} ${AtLeastWinVista}
+      File output\cpltasks32.xml
+    ${Endif}
     File output\vstbridgeapp32.exe    
 !ifndef INNER
     File $%TEMP%\vstmididrvuninstall.exe
 !endif
     
-    ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "falcosoft" "ROOT\vstmididrv"
+    ummidiplg::SetupRegistry "vstmididrv.dll" "VST MIDI Driver" "Falcosoft" "ROOT\vstmididrv"
     pop $2
     pop $0
     pop $1
@@ -186,9 +196,9 @@ Section "Needed (required)"
       MessageBox MB_OK "Something went wrong with the registry setup. Installation will continue, but it might not work. $2" /SD IDOK
     ${Else}
       WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-        "MIDI" "midi$1"
+        "MIDI" "midi$0"
       WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-        "MIDIDRV" "$0"
+        "MIDIDRV" "$1"
     ${EndIf}
  ${EndIf}
    
@@ -199,6 +209,19 @@ REGDONE:
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "NoRepair" 1  
   CreateDirectory "$SMPROGRAMS\VST MIDI System Synth"
   ${If} ${RunningX64}
+    SetRegView 64
+    WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "" "VST MIDI Driver"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "" "VST MIDI Driver"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.ApplicationName" "Falcosoft.VstMidiDriver"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.ControlPanel.Category" "2,4"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "InfoTip" "Configure VST MIDI Driver"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "{305CA226-D286-468E-B848-2B2E8E697B74} 2" "2,4"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}\DefaultIcon" "" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}\Shell\Open\Command" "" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe"
+    ${If} ${AtLeastWinVista}
+      WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.Software.TasksFileUrl" "$WINDIR\SysWow64\vstmididrv\cpltasks64.xml"	
+    ${Endif}
+    SetRegView 32
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe"'
     WriteRegStr HKLM "Software\VST MIDI Driver" "path" "$WINDIR\SysWow64\vstmididrv"
     SetOutPath "$WINDIR\SysWow64\vstmididrv\Help" 
@@ -210,6 +233,17 @@ REGDONE:
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver (x64).lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
     SetOutPath "$WINDIR\SysNative\vstmididrv" 
   ${Else}
+    WriteRegStr HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "" "VST MIDI Driver"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "" "VST MIDI Driver"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.ApplicationName" "Falcosoft.VstMidiDriver"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.ControlPanel.Category" "2,4"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "InfoTip" "Configure VST MIDI Driver"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "{305CA226-D286-468E-B848-2B2E8E697B74} 2" "2,4"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}\DefaultIcon" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe"
+    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}\Shell\Open\Command" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe"
+    ${If} ${AtLeastWinVista}
+      WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.Software.TasksFileUrl" "$WINDIR\System32\vstmididrv\cpltasks32.xml"	
+    ${Endif}
     WriteRegStr HKLM "Software\VST MIDI Driver" "path" "$WINDIR\System32\vstmididrv"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString" '"$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe"'
     SetOutPath "$WINDIR\System32\vstmididrv\Help"
@@ -219,10 +253,10 @@ REGDONE:
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
   ${EndIf}  
   ${If} ${IsWinNT4}
-	MessageBox MB_YESNO|MB_ICONQUESTION "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver.$\nYou need to reboot in order for control panel to show the driver!$\nIs it OK to reboot?" /SD IDNO IDNO +2
-	Reboot
+    MessageBox MB_YESNO|MB_ICONQUESTION "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver.$\nYou need to reboot in order for control panel to show the driver!$\nIs it OK to reboot?" /SD IDNO IDNO +2
+    Reboot
   ${Else}
-	MessageBox MB_OK "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver." /SD IDOK
+    MessageBox MB_OK "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver." /SD IDOK
   ${EndIf}
   
 
@@ -243,22 +277,27 @@ Section "Uninstall"
   ${EndIf}
   
   ; Remove registry keys
-   ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
+  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
      "MIDI"
   ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
     "MIDIDRV"
   WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\Drivers32" "$0" "$1"
   ${If} ${RunningX64}
+    SetRegView 64
     ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
       "MIDI64"
     ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-      "MIDIDRV64"
-    SetRegView 64
+      "MIDIDRV64"   
     WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\Drivers32" "$0" "$1"
+    DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth"
+    DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}"
+    DeleteRegKey HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}"
     SetRegView 32
   ${EndIf}
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth"
   DeleteRegKey HKLM "Software\VST MIDI Driver"
+  DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}"
+  DeleteRegKey HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}"
   RMDir /r "$SMPROGRAMS\VST MIDI System Synth"
   
  ${If} ${RunningX64}
