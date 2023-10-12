@@ -351,7 +351,7 @@ namespace VSTMIDIDRV{
 			stopProcessing = true;
 			SetEvent(hEvent);
 			if (hThread != NULL) {
-				WaitForSingleObject(hThread, 2000);
+				WaitForSingleObject(hThread, 1000);
 				CloseHandle(hThread);
 				hThread = NULL;
 			}

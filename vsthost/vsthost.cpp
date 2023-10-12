@@ -66,6 +66,13 @@ namespace Error {
 	};
 };
 
+#ifdef WIN64
+	static wchar_t bitnessStr[8] =L" 64-bit"; 
+#else
+	static wchar_t bitnessStr[8] =L" 32-bit"; 
+#endif	
+
+static wchar_t clientBitnessStr[8] = { 0 };
 
 bool need_idle = false;
 bool idle_started = false;
@@ -87,6 +94,9 @@ static uint32_t sample_pos = 0;
 
 static DWORD MainThreadId;
 static char* dll_dir = NULL;
+
+static char product_string[256] = { 0 };
+static wchar_t midiClient[64] = { 0 };
 static wchar_t trayTip[MAX_PATH] = { 0 };
 
 static HANDLE null_file = NULL;
@@ -98,6 +108,8 @@ static AEffect* pEffect[2] = { NULL };
 static VstTimeInfo vstTimeInfo = { 0 };
 
 static HWND trayWndHandle = NULL;
+static volatile int aboutBoxResult = 0;
+static bool isSCVA = false;
 
 static const unsigned char gmReset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7 };
 static const unsigned char gsReset[] = { 0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7 };
@@ -129,6 +141,55 @@ void Log(LPCTSTR szFormat, ...)
 void NoLog(LPCTSTR szFormat, ...) {}
 #define Log while(0) NoLog
 #endif
+
+#pragma comment(lib,"Version.lib") 
+static wchar_t* GetFileVersion(wchar_t* filePath, wchar_t* result)
+{
+	DWORD               dwSize = 0;
+	BYTE* pVersionInfo = NULL;
+	VS_FIXEDFILEINFO* pFileInfo = NULL;
+	UINT                pLenFileInfo = 0;
+	wchar_t tmpBuff[MAX_PATH];
+
+	if(!filePath)
+		GetModuleFileName(NULL, tmpBuff, MAX_PATH);
+	else
+		lstrcpy(tmpBuff, filePath);
+
+	dwSize = GetFileVersionInfoSize(tmpBuff, NULL);
+	if (dwSize == 0)
+	{           
+		return NULL;
+	}
+
+	pVersionInfo = new BYTE[dwSize]; 
+
+	if (!GetFileVersionInfo(tmpBuff, 0, dwSize, pVersionInfo))
+	{           
+		delete[] pVersionInfo;
+		return NULL;
+	}
+
+	if (!VerQueryValue(pVersionInfo, TEXT("\\"), (LPVOID*)&pFileInfo, &pLenFileInfo))
+	{            
+		delete[] pVersionInfo;
+		return NULL;
+	}      
+
+	lstrcat(result, L"version: ");
+	_ultow_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+	lstrcat(result, tmpBuff);
+	lstrcat(result, L".");
+	_ultow_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
+	lstrcat(result, tmpBuff);	
+	lstrcat(result, L".");
+	_ultow_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+	lstrcat(result, tmpBuff);
+	//lstrcat(result, L".");
+	//lstrcat(result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+
+	return result;
+}
 
 static bool IsWinNT4()
 {
@@ -977,6 +1038,9 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 12, L"Send GS Reset");
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 13, L"Send XG Reset");
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 14, L"Send GM2 Reset");
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, L"");
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 21, L"Info...");
+
 
 			nIconData.cbSize = sizeof(NOTIFYICONDATA);
 			nIconData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
@@ -1020,9 +1084,27 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			return 0;
 		}
 		break;
+	case WM_HELP:
+		{
+			wchar_t tmpPath[MAX_PATH] = { 0 };			
 
+			GetWindowsDirectory(tmpPath, MAX_PATH);
+			lstrcat(tmpPath, L"\\SysWOW64\\vstmididrv\\Help\\Readme.html");
+			if(GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
+			{
+				GetWindowsDirectory(tmpPath, MAX_PATH);
+				lstrcat(tmpPath, L"\\System32\\vstmididrv\\Help\\Readme.html");
+			}	
+						
+			ShellExecute(hwnd, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+		}
+		break;
 	case WM_COMMAND:
 		{
+			wchar_t tempBuff[MAX_PATH] = {0};
+			wchar_t versionBuff[MAX_PATH] = L"MIDI client: ";
+			MSGBOXPARAMS params = {0};
+
 			switch (wParam)
 			{
 			case 0:
@@ -1040,6 +1122,39 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				return 0;
 			case 14:
 				sendSysExEvent((char*)gm2Reset, sizeof(gm2Reset));
+				return 0;
+			case 21:
+				if (aboutBoxResult == 255) return 0;
+
+				lstrcat(versionBuff, midiClient);
+				lstrcat(versionBuff, L" "); 
+				lstrcat(versionBuff, clientBitnessStr);
+				lstrcat(versionBuff, L"\r\nPlugin: ");
+				mbstowcs(tempBuff, product_string, 64);
+				lstrcat(versionBuff, tempBuff);
+				lstrcat(versionBuff, bitnessStr);
+				
+				lstrcat(versionBuff, L"\r\n \r\n");
+				
+				lstrcat(versionBuff, L"Synth driver ");				
+				GetSystemDirectory(tempBuff, MAX_PATH);
+				lstrcat(tempBuff, L"\\vstmididrv.dll");
+				GetFileVersion(tempBuff, versionBuff);
+				
+				lstrcat(versionBuff, L"\r\nHost bridge ");
+				GetFileVersion(NULL, versionBuff);
+                
+				params.cbSize = sizeof(params);
+				params.dwStyle = MB_OK | MB_USERICON | MB_TOPMOST | MB_HELP;
+				params.hInstance = GetModuleHandle(NULL);
+				params.hwndOwner = hwnd;
+				params.lpszCaption = L"VST MIDI Synth (Falcomod)";
+				params.lpszText = versionBuff;
+				params.lpszIcon = MAKEINTRESOURCE(32512);
+
+				aboutBoxResult = 255;
+				aboutBoxResult = MessageBoxIndirect(&params);				
+				
 				return 0;
 			}
 		}
@@ -1079,7 +1194,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	int argc = 0;
 	LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 
-	if (argv == NULL || argc != 4) return Error::InvalidCommandLineArguments;
+	if (argv == NULL || argc != 5) return Error::InvalidCommandLineArguments;
 
 	wchar_t* end_char = 0;
 	unsigned in_sum = wcstoul(argv[2], &end_char, 16);
@@ -1104,6 +1219,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		lstrcpy(trayTip, L"VST Midi Synth \r\n");
 
 	wcsncat(trayTip, argv[3], _countof(trayTip) - wcslen(trayTip));
+	wcsncpy(midiClient, argv[3], _countof(midiClient));
+    
+	wcsncpy(clientBitnessStr, argv[4], _countof(clientBitnessStr)); 
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
@@ -1205,8 +1323,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 	{
 		char name_string[256] = { 0 };
-		char vendor_string[256] = { 0 };
-		char product_string[256] = { 0 };
+		char vendor_string[256] = { 0 };		
 		uint32_t name_string_length;
 		uint32_t vendor_string_length;
 		uint32_t product_string_length;
@@ -1216,6 +1333,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		pEffect[0]->dispatcher(pEffect[0], effGetEffectName, 0, 0, &name_string, 0);
 		pEffect[0]->dispatcher(pEffect[0], effGetVendorString, 0, 0, &vendor_string, 0);
 		pEffect[0]->dispatcher(pEffect[0], effGetProductString, 0, 0, &product_string, 0);
+        
+		if(!strcmp(product_string, "SOUND Canvas VA")) isSCVA = true;
+
 		name_string_length = (uint32_t)strlen(name_string);
 		vendor_string_length = (uint32_t)strlen(vendor_string);
 		product_string_length = (uint32_t)strlen(product_string);
@@ -1358,7 +1478,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			break;
 
 		case Command::Reset: // Reset 
-			{
+			{				
+				if (isSCVA) sendSysExEvent((char*)gsReset, sizeof(gsReset));
+
 				uint32_t port_num = get_code();
 
 				if (isSinglePort32Ch)
@@ -1388,7 +1510,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					}									
 
 				}
-
+				
 				blState.resize(0);
 				freeChain();	
 

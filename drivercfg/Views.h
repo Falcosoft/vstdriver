@@ -474,7 +474,7 @@ public:
 	}
 
 #pragma comment(lib,"Version.lib") 
-	wchar_t* GetFileVersion(wchar_t* Result)
+	wchar_t* GetFileVersion(wchar_t* result)
 	{
 		DWORD               dwSize = 0;
 		BYTE* pVersionInfo = NULL;
@@ -504,16 +504,19 @@ public:
 			return NULL;
 		}      
 
-		lstrcat(Result, L"version: ");
-		lstrcat(Result, _ultow((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, 10));
-		lstrcat(Result, L".");
-		lstrcat(Result, _ultow((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, 10));
-		lstrcat(Result, L".");
-		lstrcat(Result, _ultow((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, 10));
-		//lstrcat(Result, L".");
-		//lstrcat(Result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+		lstrcat(result, L"version: ");
+		_ultow_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+		lstrcat(result, tmpBuff);
+		lstrcat(result, L".");
+		_ultow_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
+		lstrcat(result, tmpBuff);	
+		lstrcat(result, L".");
+		_ultow_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+		lstrcat(result, tmpBuff);
+		//lstrcat(result, L".");
+		//lstrcat(result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
 
-		return Result;
+		return result;
 	}
 
 	void ResetDriverSettings() 

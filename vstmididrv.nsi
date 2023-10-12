@@ -3,7 +3,7 @@
 !include WinVer.nsh
 ManifestDPIAware true
 
-!define MUI_ICON "drivercfg\drivercfg.ico"
+!define MUI_ICON "drivercfg\install.ico"
 !define MUI_UNICON "drivercfg\uninstall.ico"
 
 ; The name of the installer
@@ -253,10 +253,10 @@ REGDONE:
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
   ${EndIf}  
   ${If} ${IsWinNT4}
-    MessageBox MB_YESNO|MB_ICONQUESTION "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver.$\nYou need to reboot in order for control panel to show the driver!$\nIs it OK to reboot?" /SD IDNO IDNO +2
+    MessageBox MB_YESNO|MB_ICONQUESTION "Installation complete! Use the driver configuration tool shortcut to configure the driver.$\nYou need to reboot in order for control panel to show the driver!$\nIs it OK to reboot?" /SD IDNO IDNO +2
     Reboot
   ${Else}
-    MessageBox MB_OK "Installation complete! Use the driver configuration tool which is in the 'VST MIDI System Synth' program shortcut directory to configure the driver." /SD IDOK
+    MessageBox MB_OK "Installation complete! Use the driver configuration tool shortcut or the control panel item to configure the driver." /SD IDOK
   ${EndIf}
   
 
@@ -277,18 +277,20 @@ Section "Uninstall"
   ${EndIf}
   
   ; Remove registry keys
-  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-     "MIDI"
-  ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-    "MIDIDRV"
-  WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\Drivers32" "$0" "$1"
+  
+  ; The whole restore process does not make much sense in the current form...
+  ; ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
+  ;   "MIDI"
+  ;  ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
+  ;  "MIDIDRV"
+  ;  WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\Drivers32" "$0" "$1"
   ${If} ${RunningX64}
     SetRegView 64
-    ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-      "MIDI64"
-    ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
-      "MIDIDRV64"   
-    WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\Drivers32" "$0" "$1"
+  ; ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
+  ;    "MIDI64"
+  ;  ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth\Backup" \
+  ;    "MIDIDRV64"   
+  ;  WriteRegStr HKLM "Software\Microsoft\Windows NT\CurrentVersion\Drivers32" "$0" "$1"
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth"
     DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}"
     DeleteRegKey HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}"

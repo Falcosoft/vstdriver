@@ -326,10 +326,17 @@ bool VSTDriver::process_create()
     
 	TCHAR exe_path[MAX_PATH];
 	TCHAR exe_title[MAX_PATH];
+#ifdef WIN64
+	TCHAR bitnessStr[8] =L" 64-bit"; 
+#else
+	TCHAR bitnessStr[8] =L" 32-bit"; 
+#endif	
+
 	GetModuleFileName(NULL, exe_path, _countof(exe_path));
 	GetFileTitle(exe_path, exe_title, MAX_PATH - 1);
     _tcscat(CmdLine, L" ");
-	_tcscat(CmdLine, exe_title);
+	_tcscat(CmdLine, exe_title);	
+	_tcscat(CmdLine, bitnessStr);
 
 	if ( !CreateProcess( NULL, CmdLine, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo ) )
 	{
@@ -613,7 +620,8 @@ void VSTDriver::setSampleRate(unsigned int sampleRate)
 void VSTDriver::displayEditorModal(unsigned int uDeviceID)
 {
 	uint32_t code = uDeviceID == 255 ? Command::DisplayEditorModal : Command::DisplayEditorModalThreaded;
-	if (uDeviceID == 1) Sleep(50);
+	if (uDeviceID == 0) Sleep(50);
+	else if (uDeviceID == 1) Sleep(75);
 	process_write_code( code );
 
 	if (code == Command::DisplayEditorModalThreaded) {		

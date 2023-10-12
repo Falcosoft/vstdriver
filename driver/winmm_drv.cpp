@@ -14,8 +14,6 @@
 *  You should have received a copy of the GNU Lesser General Public License
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma warning(disable : 4996)
-#pragma warning(disable : 4482)
 
 #include "stdafx.h"
 #include <math.h>
@@ -58,7 +56,7 @@ struct Driver {
 } drivers[MAX_DRIVERS];
 
 #pragma comment(lib,"Version.lib") 
-wchar_t* GetFileVersion(wchar_t* Result)
+static wchar_t* GetFileVersion(wchar_t* result)
 {
 	DWORD               dwSize = 0;
 	BYTE* pVersionInfo = NULL;
@@ -88,22 +86,25 @@ wchar_t* GetFileVersion(wchar_t* Result)
 		return NULL;
 	}      
 
-	lstrcat(Result, L"version: ");
-	lstrcat(Result, _ultow((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, 10));
-	lstrcat(Result, L".");
-	lstrcat(Result, _ultow((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, 10));
-	lstrcat(Result, L".");
-	lstrcat(Result, _ultow((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, 10));
-	//lstrcat(Result, L".");
-	//lstrcat(Result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+	lstrcat(result, L"version: ");
+	_ultow_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+	lstrcat(result, tmpBuff);
+	lstrcat(result, L".");
+	_ultow_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
+	lstrcat(result, tmpBuff);	
+	lstrcat(result, L".");
+	_ultow_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+	lstrcat(result, tmpBuff);
+	//lstrcat(result, L".");
+	//lstrcat(result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
 
-	return Result;
+	return result;
 }
 
 
 STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwParam1, DWORD dwParam2) {
 
-	wchar_t fileversionBuff[64] = L"Driver ";
+	wchar_t fileversionBuff[32] = L"Driver ";
 
 	switch(wMessage) {
 	case DRV_LOAD:
@@ -306,6 +307,8 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		res = CloseDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
 		if (synthOpened) 
 		{
+			if(!drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
+						
 			int clientCounts = 0;
 			for (int driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
 			clientCounts += drivers[driverNum].clientCount;
@@ -315,10 +318,7 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 			if(!clientCounts && !isSCVA) {
 				midiSynth.Close();
 				synthOpened = false;
-			}
-			else if(!drivers[uDeviceID].clientCount) {
-				 midiSynth.Reset(uDeviceID);
-			}			
+			}		
 
 		}
 		return res;
