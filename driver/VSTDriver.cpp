@@ -218,7 +218,7 @@ bool VSTDriver::connect_pipe( HANDLE hPipe )
 		if ( error == ERROR_PIPE_CONNECTED ) return true;
 		if ( error != ERROR_IO_PENDING ) return false;
 
-		if ( WaitForSingleObject( hReadEvent, 10000 ) == WAIT_TIMEOUT ) return false;
+		if ( WaitForSingleObject( hReadEvent, 5000 ) == WAIT_TIMEOUT ) return false;
 	}
 	return true;
 }

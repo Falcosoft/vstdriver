@@ -351,7 +351,7 @@ namespace VSTMIDIDRV{
 			stopProcessing = true;
 			SetEvent(hEvent);
 			if (hThread != NULL) {
-				WaitForSingleObject(hThread, 1000);
+				WaitForSingleObject(hThread, 2000);
 				CloseHandle(hThread);
 				hThread = NULL;
 			}
@@ -524,7 +524,7 @@ namespace VSTMIDIDRV{
 				if (allBuffersRendered) {
 					// Ensure the playback position is monitored frequently enough in order not to miss a wraparound
 					waveOut.GetPos(_this->channels);
-					WaitForSingleObject(waveOut.hEvent, INFINITE);
+					WaitForSingleObject(waveOut.hEvent, 2000);
 				}
 			}
 			_endthreadex(0);
@@ -1203,14 +1203,18 @@ namespace VSTMIDIDRV{
 		if ((unsigned char)msg >= 0x80 && (unsigned char)msg <= 0xEF) {
 			statusBuff[uDeviceID] = (unsigned char)msg; //store status in case of normal Channel/Voice messages.
 		}
-		else if((unsigned char)msg < 0x80) {
+		else if((unsigned char)msg < 0x80 && statusBuff[uDeviceID] >= 0x80 && statusBuff[uDeviceID] <= 0xEF) {
 			msg = (msg << 8) | statusBuff[uDeviceID]; //expand messages without status to full messages.								
 		}
 		else if((unsigned char)msg > 0xF0 && (unsigned char)msg < 0xF7) {
 			statusBuff[uDeviceID] = 0;  //clear running status in case of System Common messages				
 		}		
-		if ((unsigned char)msg == 0) return; //no status always means malformed Midi message 
-		////	
+		else if ((unsigned char)msg < 0x80) 
+		{			
+			synthMutex.Leave();
+			return; //no valid status always means malformed Midi message 
+		}
+			
 
 		////falco: midiOutSetVolume support
 		if (midiVol[uDeviceID] != 1.0f) {
