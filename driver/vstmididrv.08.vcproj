@@ -65,7 +65,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="winmm.lib Shlwapi.lib"
+				AdditionalDependencies="winmm.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
 				AdditionalLibraryDirectories="..\external_packages\lib"
@@ -148,7 +148,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="dxguid.lib winmm.lib Shlwapi.lib"
+				AdditionalDependencies="winmm.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
 				AdditionalLibraryDirectories="..\external_packages\lib64"
@@ -231,7 +231,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="winmm.lib Shlwapi.lib"
+				AdditionalDependencies="winmm.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
 				AdditionalLibraryDirectories="..\external_packages\lib"
@@ -317,7 +317,7 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="winmm.lib Shlwapi.lib"
+				AdditionalDependencies="winmm.lib"
 				ShowProgress="0"
 				OutputFile="$(OutDir)\vstmididrv.dll"
 				AdditionalLibraryDirectories="..\external_packages\lib64"
