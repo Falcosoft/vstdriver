@@ -334,8 +334,9 @@ bool VSTDriver::process_create()
 
 	GetModuleFileName(NULL, exe_path, _countof(exe_path));
 	GetFileTitle(exe_path, exe_title, MAX_PATH - 1);
-    _tcscat(CmdLine, L" ");
-	_tcscat(CmdLine, exe_title);	
+    _tcscat(CmdLine, L" \"");
+	_tcscat(CmdLine, exe_title);
+	_tcscat(CmdLine, L"\"");
 	_tcscat(CmdLine, bitnessStr);
 
 	if ( !CreateProcess( NULL, CmdLine, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo ) )
