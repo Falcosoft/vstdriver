@@ -1175,6 +1175,8 @@ static unsigned __stdcall TrayThread(void* threadparam)
 	windowClass.lpfnWndProc = TrayWndProc;
 	windowClass.lpszClassName = L"VSTHostUtilWindow";
 
+	if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext((HANDLE) -2); //System aware
+
 	RegisterClass(&windowClass);
 	trayWndHandle = CreateWindowEx(WS_EX_TOOLWINDOW, windowClass.lpszClassName, L"VSTTray", WS_POPUP, 0, 0, 0, 0, 0, 0, GetModuleHandle(NULL), NULL);
 

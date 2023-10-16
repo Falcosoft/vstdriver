@@ -1138,9 +1138,9 @@ namespace VSTMIDIDRV{
 			vstDriver = NULL;
 			return 1;
 		}
-
-		vstDriver->initSysTray();
+		
 		vstDriver->setHighDpiMode(GetHighDpiMode());
+		vstDriver->initSysTray();
 		InitDialog(uDeviceID);
 
 		framesRendered = 0;
