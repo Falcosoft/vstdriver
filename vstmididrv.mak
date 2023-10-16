@@ -63,7 +63,6 @@ clean:
 
 $(TARGET): vstmididrv.mak \
         vstmididrv.nsi \
-        Release\ummidiplg.dll \
         ReleaseUnicode\ummidiplg.dll \
         output\vstmididrv.dll \
         output\vstbridgeapp32.exe \

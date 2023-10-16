@@ -34,6 +34,9 @@
     <ClInclude Include="MidiSynth.h" />
     <ClInclude Include="VSTDriver.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="vstmididrv.rc" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectName>vstmidi_win32drv</ProjectName>
     <ProjectGuid>{4666F6D4-704E-4223-B3A0-D27A4486C6A0}</ProjectGuid>
