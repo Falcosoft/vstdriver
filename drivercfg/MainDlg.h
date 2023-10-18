@@ -112,8 +112,35 @@ public:
 		//	LRESULT CommandHandler(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 		//	LRESULT NotifyHandler(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOOL& /*bHandled*/)
 
-		LRESULT OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+	LRESULT OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
+		//only 1 instance of a kind		
+#ifdef WIN64
+		wchar_t windowName[32] = L"VSTi Driver Configuration (x64)";
+		SetWindowText(windowName);
+		CreateMutex(NULL, true, L"vstmididrvcfg64");
+		
+#else	
+		wchar_t windowName[32] = L"VSTi Driver Configuration";
+		CreateMutex(NULL, true, L"vstmididrvcfg32");
+#endif	
+				
+		if(GetLastError() == ERROR_ALREADY_EXISTS) 
+		{
+			
+			SetWindowText(L"Closing");
+			//MessageBox(L"An instance is already running!", windowName, MB_OK | MB_ICONWARNING);
+			HWND winHandle = ::FindWindow(NULL, windowName);			
+			if (winHandle) 
+			{
+				m_hWnd = winHandle; //hacky but works...
+				CenterWindow();
+				::SetForegroundWindow(winHandle);				
+			}
+				
+			ExitProcess(0);
+		}
+		
 		// center the dialog on the screen
 		alwaysOnTop = GetDlgItem(IDC_ALWAYSONTOP);
 		alwaysOnTop.SetCheck(1);
@@ -123,10 +150,7 @@ public:
 		SetIcon(hIcon, TRUE);
 		HICON hIconSmall = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
 		SetIcon(hIconSmall, FALSE);
-#ifdef WIN64
-
-		SetWindowText(L"VSTi Driver Configuration (x64)");
-#endif		
+		
 		m_ctrlTab.SubclassWindow(GetDlgItem(IDC_TAB));
 		m_view1.Create(m_hWnd);
 
