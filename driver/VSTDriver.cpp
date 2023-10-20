@@ -390,7 +390,8 @@ bool VSTDriver::process_create()
 	sName[ name_string_length ] = 0;
 	sVendor[ vendor_string_length ] = 0;
 	sProduct[ product_string_length ] = 0;
-	if(!strcmp(sProduct, "SOUND Canvas VA")) isSCVA = true;
+
+	if(uUniqueId == (uint32_t)'scva') isSCVA = true;
 
 	return true;
 }

@@ -3,6 +3,8 @@
 
 #include "stdafx.h"
 #include <process.h>
+#include <shellapi.h>
+
 #include "../version.h"
 
 // #define LOG_EXCHANGE
@@ -1334,15 +1336,15 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		pEffect[0]->dispatcher(pEffect[0], effGetEffectName, 0, 0, &name_string, 0);
 		pEffect[0]->dispatcher(pEffect[0], effGetVendorString, 0, 0, &vendor_string, 0);
-		pEffect[0]->dispatcher(pEffect[0], effGetProductString, 0, 0, &product_string, 0);
-        
-		if(!strcmp(product_string, "SOUND Canvas VA")) isSCVA = true;
-
+		pEffect[0]->dispatcher(pEffect[0], effGetProductString, 0, 0, &product_string, 0);       
+		
 		name_string_length = (uint32_t)strlen(name_string);
 		vendor_string_length = (uint32_t)strlen(vendor_string);
 		product_string_length = (uint32_t)strlen(product_string);
 		vendor_version = (uint32_t)pEffect[0]->dispatcher(pEffect[0], effGetVendorVersion, 0, 0, 0, 0);
 		unique_id = pEffect[0]->uniqueID;
+
+		if(unique_id == (uint32_t)'scva') isSCVA = true;
 
 		put_code(Response::NoError);
 		put_code(name_string_length);
