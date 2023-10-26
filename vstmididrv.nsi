@@ -54,11 +54,11 @@ VIAddVersionKey "LegalCopyright" "kode54, Arakula, DB50XG, Falcosoft"
 !insertmacro MUI_PAGE_WELCOME
 Page Custom LockedListShow
 !define MUI_COMPONENTSPAGE_SMALLDESC
-!define MUI_COMPONENTSPAGE_TEXT_DESCRIPTION_INFO "If you have problems with your ASIO driver then you can skip installing the ASIO Output component."
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 UninstPage Custom un.LockedListShow
 !insertmacro MUI_UNPAGE_CONFIRM
+!insertmacro MUI_UNPAGE_COMPONENTS
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
@@ -118,7 +118,7 @@ done:
  FunctionEnd
 ; The stuff to install
 
-Section "Core components (required)"
+Section "Core components (required)" instsect1
   SectionIn RO
   ; Copy files according to whether its x64 or not.
    DetailPrint "Copying driver and synth..."
@@ -262,7 +262,7 @@ REGDONE:
 
 SectionEnd
 
-Section "ASIO Output (BassASIO)"
+Section "ASIO Output (BassASIO)" instsect2
 
   ${If} ${RunningX64}
     ;===========================================================================
@@ -289,8 +289,14 @@ SectionEnd
 ; Uninstaller
 
 !ifdef INNER
-Section "Uninstall"
+Section /o "un.User registry settings" uninstsect1
+  SetShellVarContext All
+	DeleteRegKey HKCU "Software\VSTi Driver"
+SectionEnd
 
+Section "un.Driver files/settings" uninstsect2
+
+  SectionIn RO
   SetShellVarContext All
   ummidiplg::CleanupRegistry "vstmididrv.dll" "VST MIDI Driver" "ROOT\vstmididrv"
   pop $0
@@ -368,3 +374,21 @@ Section "Uninstall"
  
 SectionEnd
 !endif
+
+LangString DESC_instSection1 ${LANG_ENGLISH} "Core VSTi driver components. Installation is required."
+LangString DESC_instSection2 ${LANG_ENGLISH} "If you have problems with your ASIO driver then you can skip installing the ASIO Output component."
+
+LangString DESC_uninstSection1 ${LANG_ENGLISH} "If you want to clear all user settings then select this. Otherwise your settings are preserved."
+LangString DESC_uninstSection2 ${LANG_ENGLISH} "Core VSTi driver components. They have to be uninstalled."
+
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${instsect1} $(DESC_instSection1)
+  !insertmacro MUI_DESCRIPTION_TEXT ${instsect2} $(DESC_instSection2)
+!insertmacro MUI_FUNCTION_DESCRIPTION_END
+
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${uninstsect1} $(DESC_uninstSection1)
+  !insertmacro MUI_DESCRIPTION_TEXT ${uninstsect2} $(DESC_uninstSection2)
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_END
+
+
