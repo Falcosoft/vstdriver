@@ -921,10 +921,12 @@ public:
 		}
 		else {
 			selectedDriverMode = L"WinMM WaveOut";
-			driverMode.SelectString(0, L"WinMM WaveOut");
+			driverMode.SelectString(0, L"WinMM WaveOut");			
 			LoadWaveOutDrivers();
 			asio_openctlp.ShowWindow(SW_HIDE);
-		}        
+		}     
+		
+		SaveOutputDriver(L"Driver Mode", selectedDriverMode);
 
 		return 0;
 	}

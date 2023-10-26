@@ -53,6 +53,9 @@ VIAddVersionKey "LegalCopyright" "kode54, Arakula, DB50XG, Falcosoft"
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
 Page Custom LockedListShow
+!define MUI_COMPONENTSPAGE_SMALLDESC
+!define MUI_COMPONENTSPAGE_TEXT_DESCRIPTION_INFO "If you have problems with your ASIO driver then you can skip installing the ASIO Output component."
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 UninstPage Custom un.LockedListShow
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -114,7 +117,8 @@ done:
    NoAbort:
  FunctionEnd
 ; The stuff to install
-Section "Needed (required)"
+
+Section "Core components (required)"
   SectionIn RO
   ; Copy files according to whether its x64 or not.
    DetailPrint "Copying driver and synth..."
@@ -127,8 +131,7 @@ Section "Needed (required)"
     File output\vstmididrv.dll 
     SetOutPath "$WINDIR\SysWow64\vstmididrv\Help"
     File /a /r "Help\*" 
-    SetOutPath "$WINDIR\SysWow64\vstmididrv"   
-    File output\bassasio.dll   
+    SetOutPath "$WINDIR\SysWow64\vstmididrv"  
     File output\vstmididrvcfg.exe
     File output\vstbridgeapp32.exe
     ${If} ${AtLeastWinVista}
@@ -141,7 +144,6 @@ Section "Needed (required)"
     SetOutPath "$WINDIR\SysNative"
     File output\64\vstmididrv.dll
     SetOutPath "$WINDIR\SysNative\vstmididrv" 
-    File output\64\bassasio.dll   
     File output\64\vstmididrvcfg.exe
     File output\vstbridgeapp32.exe
     File output\64\vstbridgeapp64.exe
@@ -176,7 +178,6 @@ Section "Needed (required)"
     SetOutPath "$WINDIR\System32\vstmididrv\Help"
     File /a /r "Help\*" 
     SetOutPath "$WINDIR\System32\vstmididrv"   
-    File output\bassasio.dll   
     File output\vstmididrvcfg.exe
     ${If} ${AtLeastWinVista}
       File output\cpltasks32.xml
@@ -257,10 +258,32 @@ REGDONE:
     Reboot
   ${Else}
     MessageBox MB_OK "Installation complete! Use the driver configuration tool shortcut or the control panel item to configure the driver." /SD IDOK
-  ${EndIf}
-  
+  ${EndIf}  
 
 SectionEnd
+
+Section "ASIO Output (BassASIO)"
+
+  ${If} ${RunningX64}
+    ;===========================================================================
+    ;installer running on 64bit OS
+    ;===========================================================================
+    SetOutPath "$WINDIR\SysWow64\vstmididrv"   
+    File output\bassasio.dll   
+    SetOutPath "$WINDIR\SysNative\vstmididrv" 
+    File output\64\bassasio.dll   
+  
+  ${Else}
+    ;===========================================================================
+    ;installer running on 32bit OS
+    ;===========================================================================
+    SetOutPath "$WINDIR\System32\vstmididrv"   
+    File output\bassasio.dll   
+    
+  ${EndIf}   
+
+SectionEnd
+
 ;--------------------------------
 
 ; Uninstaller

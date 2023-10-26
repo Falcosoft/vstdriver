@@ -573,6 +573,8 @@ namespace VSTMIDIDRV{
 		{
 			// Load Bass Asio
 			bassAsio = LoadLibrary(bassAsioPath);
+			if (!bassAsio) return false;
+			
 			LOADBASSASIOFUNCTION(BASS_ASIO_GetDeviceInfo);
 
 
