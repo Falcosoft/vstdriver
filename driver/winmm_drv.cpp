@@ -360,12 +360,28 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 	case MODM_SETVOLUME:
 		driver->volume = (DWORD)dwParam1;	 
 		midiSynth.SetVolume(uDeviceID, sqrt(float(LOWORD(dwParam1)) / 65535.f)); //falco: for separate port A/B note velocity
-		return MMSYSERR_NOERROR;	
+		return MMSYSERR_NOERROR;
+	
+	case MODM_RESET:
+		for (int i = 0; i <= 15; i++)
+		{
+			DWORD msg = 0;
+			msg = (0xB0 | i) | (0x40 << 8); //Sustain off
+			midiSynth.PushMIDI(uDeviceID, msg);
+			msg = (0xB0 | i) | (0x7B << 8); //All Notes off
+			midiSynth.PushMIDI(uDeviceID, msg);
+			msg = (0xB0 | i) | (0x79 << 8);  //All Controllers off
+			midiSynth.PushMIDI(uDeviceID, msg);
+			msg = (0xB0 | i) | (0x78 << 8);  //All Sounds off
+			midiSynth.PushMIDI(uDeviceID, msg);
+		}
+		return MMSYSERR_NOERROR;
 
 	case MODM_GETNUMDEVS:
 		return MAX_DRIVERS;
 
 	default:
+		
 		return MMSYSERR_NOERROR;
 		break;
 	}
