@@ -175,6 +175,9 @@ Section "Core components (required)" instsect1
     ;===========================================================================
     SetOutPath "$WINDIR\System32"
     File output\vstmididrv.dll 
+    ${If} ${IsWinNT4}
+     File output\vstmididrvcfg.cpl
+    ${EndIf}    
     SetOutPath "$WINDIR\System32\vstmididrv\Help"
     File /a /r "Help\*" 
     SetOutPath "$WINDIR\System32\vstmididrv"   
@@ -203,7 +206,7 @@ Section "Core components (required)" instsect1
     ${EndIf}
  ${EndIf}
    
-REGDONE:
+; REGDONE:
   ; Write the uninstall keys
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "DisplayName" "VST MIDI System Synth"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "NoModify" 1
@@ -354,6 +357,9 @@ Section "un.Driver files/settings" uninstsect2
      RMDir /r /REBOOTOK $WINDIR\SysNative\vstmididrv 
    ${Endif}
  ${Else}
+   ${If} ${IsWinNT4}
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrvcfg.cpl
+   ${EndIf}   
    ${If} ${AtLeastWinVista}
      Delete /REBOOTOK "$WINDIR\System32\vstmididrv.dll"
      RMDir /r /REBOOTOK "$WINDIR\System32\vstmididrv"
@@ -373,22 +379,25 @@ Section "un.Driver files/settings" uninstsect2
  noreboot:
  
 SectionEnd
+
+LangString DESC_uninstSection1 ${LANG_ENGLISH} "If you want to clear all user settings then select this. Otherwise your settings are preserved."
+LangString DESC_uninstSection2 ${LANG_ENGLISH} "Core VSTi driver components. They have to be uninstalled."
+
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
+  !insertmacro MUI_DESCRIPTION_TEXT ${uninstsect1} $(DESC_uninstSection1)
+  !insertmacro MUI_DESCRIPTION_TEXT ${uninstsect2} $(DESC_uninstSection2)
+!insertmacro MUI_UNFUNCTION_DESCRIPTION_END
+
 !endif
 
 LangString DESC_instSection1 ${LANG_ENGLISH} "Core VSTi driver components. Installation is required."
 LangString DESC_instSection2 ${LANG_ENGLISH} "If you have problems with your ASIO driver then you can skip installing the ASIO Output component."
-
-LangString DESC_uninstSection1 ${LANG_ENGLISH} "If you want to clear all user settings then select this. Otherwise your settings are preserved."
-LangString DESC_uninstSection2 ${LANG_ENGLISH} "Core VSTi driver components. They have to be uninstalled."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${instsect1} $(DESC_instSection1)
   !insertmacro MUI_DESCRIPTION_TEXT ${instsect2} $(DESC_instSection2)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
-!insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${uninstsect1} $(DESC_uninstSection1)
-  !insertmacro MUI_DESCRIPTION_TEXT ${uninstsect2} $(DESC_uninstSection2)
-!insertmacro MUI_UNFUNCTION_DESCRIPTION_END
+
 
 

@@ -70,6 +70,7 @@ $(TARGET): vstmididrv.mak \
         output\bassasio.dll \
         output\cpltasks32.xml \
         output\cpltasks64.xml \
+        output\vstmididrvcfg.cpl \
         output\64\vstmididrv.dll \
         output\64\bassasio.dll \
         output\64\vstbridgeapp64.exe \
