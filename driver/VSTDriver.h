@@ -32,6 +32,7 @@
 #include <vector>
 
 bool IsWinNT4();
+bool UseAsio();
 
 class VSTDriver {
 private:

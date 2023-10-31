@@ -32,6 +32,35 @@ bool IsWinNT4()
 	return false;
 }
 
+bool UseAsio()
+{
+	HKEY hKey;
+	DWORD dwType = REG_SZ;
+	DWORD dwSize = 0;
+	wchar_t* regValue;
+
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
+	if (result == NO_ERROR) 
+	{
+		result = RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, NULL, &dwSize);
+		if (result == NO_ERROR && dwType == REG_SZ) {
+
+			regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
+			RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
+			if (!wcscmp(regValue, L"Bass ASIO"))
+			{
+				free(regValue);
+				RegCloseKey(hKey);
+				return true;
+			}
+		}
+
+		RegCloseKey(hKey);
+	}
+
+	return false;
+}
+
 namespace Command {
 	enum : uint32_t
 	{
@@ -338,6 +367,7 @@ bool VSTDriver::process_create()
 	_tcscat(CmdLine, exe_title);
 	_tcscat(CmdLine, L"\"");
 	_tcscat(CmdLine, bitnessStr);
+	_tcscat(CmdLine, UseAsio() ? L" A" : L" W");
 
 	if ( !CreateProcess( NULL, CmdLine, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo ) )
 	{

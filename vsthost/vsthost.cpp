@@ -3,8 +3,6 @@
 
 #include "stdafx.h"
 #include <process.h>
-#include <shellapi.h>
-
 #include "../version.h"
 
 // #define LOG_EXCHANGE
@@ -75,6 +73,7 @@ namespace Error {
 #endif	
 
 static wchar_t clientBitnessStr[8] = { 0 };
+static wchar_t outputModeStr[8] = { 0 };
 
 bool need_idle = false;
 bool idle_started = false;
@@ -117,6 +116,17 @@ static const unsigned char gmReset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7 };
 static const unsigned char gsReset[] = { 0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7 };
 static const unsigned char xgReset[] = { 0xF0, 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00, 0xF7 };
 static const unsigned char gm2Reset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x03, 0xF7 };
+
+static const DWORD resetEventCount = 64; //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
+struct ResetVstEvents
+{
+	VstInt32 numEvents;
+	VstIntPtr reserved;
+	VstEvent* events[resetEventCount];
+};
+
+static VstMidiEvent resetMidiEvents[resetEventCount] = { 0 };
+static ResetVstEvents resetEvents = { 0 };
 
 #ifdef LOG
 void Log(LPCTSTR szFormat, ...)
@@ -507,6 +517,56 @@ static void sendSysExEvent(char* sysExBytes, int size)
 	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &events, 0);
 	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &events, 0);
 
+}
+
+static void InitSimpleResetEvents()
+{
+	resetEvents.numEvents = resetEventCount;
+	resetEvents.reserved = 0;
+
+	for (int i = 0; i <= 15; i++)
+	{
+		DWORD msg, index;		
+
+		msg = (0xB0 | i) | (0x40 << 8); //Sustain off		
+		index = i * 4;
+		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
+		resetMidiEvents[index].type = kVstMidiType;
+		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
+		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
+		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
+
+		msg = (0xB0 | i) | (0x7B << 8); //All Notes off
+		index = i * 4 + 1;
+		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
+		resetMidiEvents[index].type = kVstMidiType;
+		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
+		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
+		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
+
+		msg = (0xB0 | i) | (0x79 << 8);  //All Controllers off
+		index = i * 4 + 2;
+		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
+		resetMidiEvents[index].type = kVstMidiType;
+		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
+		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
+		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
+
+		msg = (0xB0 | i) | (0x78 << 8);  //All Sounds off
+		index = i * 4 + 3;
+		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
+		resetMidiEvents[index].type = kVstMidiType;
+		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
+		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
+		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
+	}
+
+}
+
+static void sendSimpleResetEvents()
+{
+	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &resetEvents, 0);
+	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &resetEvents, 0);		
 }
 
 struct MyDLGTEMPLATE : DLGTEMPLATE
@@ -1040,6 +1100,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 12, L"Send GS Reset");
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 13, L"Send XG Reset");
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 14, L"Send GM2 Reset");
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 15, L"All Notes/CC Off");
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, L"");
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 21, L"Info...");
 
@@ -1052,6 +1113,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
 			lstrcpyn(nIconData.szTip, trayTip, _countof(nIconData.szTip));
 			Shell_NotifyIcon(NIM_ADD, &nIconData);
+
+			InitSimpleResetEvents();
 
 			return 0;
 		}
@@ -1125,6 +1188,9 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			case 14:
 				sendSysExEvent((char*)gm2Reset, sizeof(gm2Reset));
 				return 0;
+			case 15:
+				sendSimpleResetEvents();
+				return 0;
 			case 21:
 				if (aboutBoxResult == 255) return 0;
 
@@ -1135,6 +1201,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				mbstowcs(tempBuff, product_string, 64);
 				lstrcat(versionBuff, tempBuff);
 				lstrcat(versionBuff, bitnessStr);
+				lstrcat(versionBuff, L"\r\nDriver mode: ");
+				lstrcat(versionBuff, outputModeStr);
 				
 				lstrcat(versionBuff, L"\r\n \r\n");
 				
@@ -1176,7 +1244,7 @@ static unsigned __stdcall TrayThread(void* threadparam)
 	windowClass.hInstance = GetModuleHandle(NULL);
 	windowClass.lpfnWndProc = TrayWndProc;
 	windowClass.lpszClassName = L"VSTHostUtilWindow";
-
+	
 	if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext((HANDLE) -2); //System aware
 
 	RegisterClass(&windowClass);
@@ -1198,7 +1266,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	int argc = 0;
 	LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 
-	if (argv == NULL || argc != 5) return Error::InvalidCommandLineArguments;
+	if (argv == NULL || argc != 6) return Error::InvalidCommandLineArguments;
 
 	wchar_t* end_char = 0;
 	unsigned in_sum = wcstoul(argv[2], &end_char, 16);
@@ -1223,9 +1291,10 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		lstrcpy(trayTip, L"VST Midi Synth \r\n");
 
 	wcsncat(trayTip, argv[3], _countof(trayTip) - wcslen(trayTip));
-	wcsncpy(midiClient, argv[3], _countof(midiClient));
-    
+	wcsncpy(midiClient, argv[3], _countof(midiClient));    
 	wcsncpy(clientBitnessStr, argv[4], _countof(clientBitnessStr)); 
+	
+	wcsncpy(outputModeStr, wcscmp(argv[5], L"W") ? L"ASIO": L"WaveOut", _countof(outputModeStr));
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
@@ -1336,15 +1405,15 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		pEffect[0]->dispatcher(pEffect[0], effGetEffectName, 0, 0, &name_string, 0);
 		pEffect[0]->dispatcher(pEffect[0], effGetVendorString, 0, 0, &vendor_string, 0);
-		pEffect[0]->dispatcher(pEffect[0], effGetProductString, 0, 0, &product_string, 0);       
-		
+		pEffect[0]->dispatcher(pEffect[0], effGetProductString, 0, 0, &product_string, 0);
+        		
 		name_string_length = (uint32_t)strlen(name_string);
 		vendor_string_length = (uint32_t)strlen(vendor_string);
 		product_string_length = (uint32_t)strlen(product_string);
 		vendor_version = (uint32_t)pEffect[0]->dispatcher(pEffect[0], effGetVendorVersion, 0, 0, 0, 0);
 		unique_id = pEffect[0]->uniqueID;
 
-		if(unique_id == (uint32_t)'scva') isSCVA = true;
+		if (unique_id == (uint32_t)'scva') isSCVA = true;
 
 		put_code(Response::NoError);
 		put_code(name_string_length);

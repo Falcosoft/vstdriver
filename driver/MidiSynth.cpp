@@ -1020,38 +1020,7 @@ namespace VSTMIDIDRV{
 		BOOL EnableSinglePort32ChMode = TRUE;
 		EnableSinglePort32ChMode = GetDwordData(L"EnableSinglePort32ChMode", EnableSinglePort32ChMode);
 		return EnableSinglePort32ChMode != FALSE;
-	}
-
-	bool UseAsio(){
-
-		HKEY hKey;
-		DWORD dwType = REG_SZ;
-		DWORD dwSize = 0;
-		wchar_t* regValue;
-
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
-		if (result == NO_ERROR) 
-		{
-
-			result = RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, NULL, &dwSize);
-			if (result == NO_ERROR && dwType == REG_SZ) {
-
-				regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
-				RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
-				if (!wcscmp(regValue, L"Bass ASIO"))
-				{
-					free(regValue);
-					RegCloseKey(hKey);
-					return true;
-				}
-			}
-
-			RegCloseKey(hKey);
-		}
-
-		return false;
-	}
-
+	}	
 
 	void MidiSynth::LoadSettings(){
 		channels = GetChannelCount();
