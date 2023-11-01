@@ -219,7 +219,7 @@ Section "Core components (required)" instsect1
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.ApplicationName" "Falcosoft.VstMidiDriver"
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.ControlPanel.Category" "2,4"
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "InfoTip" "Configure VST MIDI Driver"
-    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "{305CA226-D286-468E-B848-2B2E8E697B74} 2" "2,4"
+    WriteRegDword HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "{305CA226-D286-468E-B848-2B2E8E697B74} 2" 0x00000004
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}\DefaultIcon" "" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe"
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}\Shell\Open\Command" "" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe"
     ${If} ${AtLeastWinVista}
@@ -242,7 +242,7 @@ Section "Core components (required)" instsect1
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.ApplicationName" "Falcosoft.VstMidiDriver"
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "System.ControlPanel.Category" "2,4"
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "InfoTip" "Configure VST MIDI Driver"
-    WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "{305CA226-D286-468E-B848-2B2E8E697B74} 2" "2,4"
+    WriteRegDword HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}" "{305CA226-D286-468E-B848-2B2E8E697B74} 2" 0x00000004
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}\DefaultIcon" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe"
     WriteRegStr HKLM "SOFTWARE\Classes\CLSID\{E33B77CA-8645-49E7-8CBD-1E39673C8C43}\Shell\Open\Command" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe"
     ${If} ${AtLeastWinVista}
