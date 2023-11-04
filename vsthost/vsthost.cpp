@@ -633,9 +633,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}				
 
 				SetTimer(hwnd, 1, timerPeriodMS, 0);
+				ERect* eRect = NULL;
+				effect->dispatcher(effect, effEditGetRect, 0, 0, &eRect, 0); // dummy call in order S-YXG50 debug panel mode to work...
 				effect->dispatcher(effect, effEditOpen, 0, 0, hwnd, 0);
-				effect->dispatcher(effect, effSetEditKnobMode, 0, 2, NULL, 0); // Set knob mode to linear(2)
-				ERect* eRect = 0;
+				effect->dispatcher(effect, effSetEditKnobMode, 0, 2, NULL, 0); // Set knob mode to linear(2)				
 				effect->dispatcher(effect, effEditGetRect, 0, 0, &eRect, 0);
 				if (eRect)
 				{
@@ -843,12 +844,13 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 
 	case audioMasterGetBlockSize:
 		return BUFFER_SIZE;
-
+	
 	case audioMasterCanDo:
 		if (_stricmp((char*)ptr, "supplyidle") == 0
 			|| _stricmp((char*)ptr, "sendvstevents") == 0
 			|| _stricmp((char*)ptr, "sendvstmidievent") == 0
 			|| _stricmp((char*)ptr, "sendvsttimeinfo") == 0
+			|| _stricmp((char*)ptr, "sizewindow") == 0
 			|| _stricmp((char*)ptr, "startstopprocess") == 0)
 		{
 			return 1;
@@ -1061,8 +1063,10 @@ static unsigned __stdcall EditorThread(void* threadparam)
 	
 	if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
 
+	CoInitialize(NULL);
 	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
-
+	CoUninitialize();
+	
 	_endthreadex(0);
 	return 0;
 }
