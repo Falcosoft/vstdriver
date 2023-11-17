@@ -19,6 +19,41 @@
 
 #include <assert.h>
 
+UINT GetWaveOutDeviceId() {
+
+	HKEY hKey;
+	DWORD dwType = REG_SZ;
+	DWORD dwSize = 0;
+	WAVEOUTCAPSW caps;
+	wchar_t* regValue;
+
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
+	if (result == NO_ERROR)
+	{
+
+		result = RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, NULL, &dwSize);
+		if (result == NO_ERROR && dwType == REG_SZ)
+		{
+			regValue = (TCHAR*)calloc(dwSize + sizeof(TCHAR), 1);
+			RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+
+			for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId) {
+				if (!wcscmp(regValue, caps.szPname))
+				{
+					RegCloseKey(hKey);
+					return deviceId;
+				}
+
+			}
+		}
+
+		RegCloseKey(hKey);
+	}
+
+	return WAVE_MAPPER;
+
+}
+
 bool IsWinNT4() 
 {
 	OSVERSIONINFOEX osvi;

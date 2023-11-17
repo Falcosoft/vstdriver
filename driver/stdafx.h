@@ -16,6 +16,7 @@
 #include <mmsystem.h>
 #include <mmddk.h>
 #include <mmreg.h>
+#include "../external_packages/audiodefs.h"
 #include <process.h>
 #include <vector>
 #include <iostream>

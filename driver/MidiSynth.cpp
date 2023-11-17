@@ -18,18 +18,6 @@
 
 #undef GetMessage
 
-
-// Define WAVEFORMATEXTENSIBLE GUIDS if they are missing
-#if !defined( KSDATAFORMAT_SUBTYPE_PCM )
-struct __declspec(uuid("00000001-0000-0010-8000-00aa00389b71")) KSDATAFORMAT_SUBTYPE_PCM_STRUCT;
-#define KSDATAFORMAT_SUBTYPE_PCM __uuidof(KSDATAFORMAT_SUBTYPE_PCM_STRUCT) 
-#endif
-
-#if !defined( KSDATAFORMAT_SUBTYPE_IEEE_FLOAT )
-struct __declspec(uuid("00000003-0000-0010-8000-00aa00389b71")) KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT;
-#define KSDATAFORMAT_SUBTYPE_IEEE_FLOAT __uuidof(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT_STRUCT)  
-#endif
-
 // Define BASSASIO functions as pointers
 #define BASSASIODEF(f) (WINAPI *f)
 #define LOADBASSASIOFUNCTION(f) *((void**)&f)=GetProcAddress(bassAsio,#f)
@@ -188,42 +176,7 @@ namespace VSTMIDIDRV{
 			LeaveCriticalSection(&cCritSec);
 		}
 	}synthMutex;
-
-
-	static UINT GetWaveOutDeviceId(){
-
-		HKEY hKey;
-		DWORD dwType = REG_SZ;
-		DWORD dwSize = 0;
-		WAVEOUTCAPSW caps;
-		wchar_t* regValue;
-
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
-		if (result == NO_ERROR) 
-		{
-
-			result = RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, NULL, &dwSize);
-			if (result == NO_ERROR && dwType == REG_SZ)
-			{
-				regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
-				RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
-
-				for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId) {
-					if (!wcscmp(regValue, caps.szPname))
-					{
-						RegCloseKey(hKey);
-						return deviceId;
-					}
-
-				}
-			}
-
-			RegCloseKey(hKey);
-		}
-
-		return WAVE_MAPPER;
-
-	}
+			
 
 	static DWORD GetDwordData (LPCWSTR valueName, DWORD defaultValue) 
 	{
@@ -304,7 +257,7 @@ namespace VSTMIDIDRV{
 				wFormat.Format.wBitsPerSample = usingFloat ? 32 : 16;
 				wFormat.Format.nBlockAlign = wFormat.Format.nChannels * wFormat.Format.wBitsPerSample / 8;
 				wFormat.Format.nAvgBytesPerSec = wFormat.Format.nBlockAlign * wFormat.Format.nSamplesPerSec;
-				wFormat.dwChannelMask = channels == 2 ? SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT : SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT | SPEAKER_BACK_LEFT | SPEAKER_BACK_RIGHT;
+				wFormat.dwChannelMask = channels == 2 ? SPEAKER_STEREO : SPEAKER_QUAD;
 				wFormat.Samples.wValidBitsPerSample = wFormat.Format.wBitsPerSample;
 				wFormat.SubFormat = usingFloat ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : KSDATAFORMAT_SUBTYPE_PCM;
 			}
@@ -542,7 +495,7 @@ namespace VSTMIDIDRV{
 
 		TCHAR* outputDriver;
 
-		bool soundOutFloat;
+		bool usingFloat;
 		DWORD buflen;
 		WORD channels;
 		unsigned int samplerate;
@@ -705,7 +658,7 @@ namespace VSTMIDIDRV{
 	public:
 		BassAsioOut()
 		{
-			soundOutFloat = true;
+			usingFloat = true;
 			buflen = 0;
 			channels = 2;
 			bassAsio = NULL;
@@ -751,8 +704,8 @@ namespace VSTMIDIDRV{
 				// Enable 1st output channel
 				if (!BASS_ASIO_ChannelEnable(FALSE, channelId, AsioProc, this)) return -2;
 
-				soundOutFloat = useFloat;
-				if(!BASS_ASIO_ChannelSetFormat(FALSE, channelId, soundOutFloat ? BASS_ASIO_FORMAT_FLOAT : BASS_ASIO_FORMAT_16BIT)) return -2;
+				usingFloat = useFloat;
+				if(!BASS_ASIO_ChannelSetFormat(FALSE, channelId, usingFloat ? BASS_ASIO_FORMAT_FLOAT : BASS_ASIO_FORMAT_16BIT)) return -2;
 				//if(!BASS_ASIO_ChannelSetRate(FALSE, channelId, sampleRate)) return -2;
 
 				// Join the next channel to it (stereo)
@@ -855,18 +808,18 @@ namespace VSTMIDIDRV{
 		static DWORD CALLBACK AsioProc(BOOL input, DWORD channel, void* buffer, DWORD length, void* user)
 		{
 			BassAsioOut* _this = (BassAsioOut*)user;
-			if (_this->soundOutFloat)
+			if (_this->usingFloat)
 			{
-				midiSynth.RenderFloat((float*)buffer, length / (sizeof(float) * _this->channels));
-				if(_this->queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&_this->startTimeQp));
-				else _this->startTime = timeGetTime();			
+				midiSynth.RenderFloat((float*)buffer, length / (sizeof(float) * _this->channels));					
 			}
 			else
 			{				
-				midiSynth.Render((short*)buffer, length / (sizeof(short) * _this->channels));
-				if(_this->queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&_this->startTimeQp));
-				else _this->startTime = timeGetTime();
+				midiSynth.Render((short*)buffer, length / (sizeof(short) * _this->channels));				
 			}
+
+			if (_this->queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&_this->startTimeQp));
+			else _this->startTime = timeGetTime();
+			
 			return length;
 		}
 

@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 
+UINT GetWaveOutDeviceId();
 bool IsWinNT4();
 bool UseAsio();
 

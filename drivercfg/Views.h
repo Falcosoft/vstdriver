@@ -2,6 +2,7 @@
 #define AFX_VIEWS_H__20020629_8D64_963C_A351_0080AD509054__INCLUDED_
 
 #include "../external_packages/mmddk.h"
+#include "../external_packages/audiodefs.h"
 #include "../driver/VSTDriver.h"
 
 /// Define BASSASIO functions as pointers
@@ -36,6 +37,40 @@ MyDLGTEMPLATE ()
 { memset (this, 0, sizeof(*this)); };
 };
 */
+
+static bool IsWaveFormatSupported(UINT sampleRate, UINT deviceId)
+{
+	PCMWAVEFORMAT wFormatLegacy = { 0 };
+	WAVEFORMATEXTENSIBLE wFormat = { 0 };
+	WORD channels = 2;	 
+
+	if(isWinNT4)
+	{
+		wFormatLegacy.wf.wFormatTag = WAVE_FORMAT_PCM;
+		wFormatLegacy.wf.nChannels = channels;
+		wFormatLegacy.wf.nSamplesPerSec = sampleRate;
+		wFormatLegacy.wBitsPerSample = 16;
+		wFormatLegacy.wf.nBlockAlign = wFormatLegacy.wf.nChannels * wFormatLegacy.wBitsPerSample / 8;
+		wFormatLegacy.wf.nAvgBytesPerSec = wFormatLegacy.wf.nBlockAlign * wFormatLegacy.wf.nSamplesPerSec;
+	}
+	else
+	{	
+		//if a given sample rate is supported with 32-bit float then it is sure to be also supported with 16-bit int 
+		wFormat.Format.cbSize = sizeof(wFormat) - sizeof(wFormat.Format);
+		wFormat.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+		wFormat.Format.nChannels = channels;
+		wFormat.Format.nSamplesPerSec = sampleRate;
+		wFormat.Format.wBitsPerSample = 32;
+		wFormat.Format.nBlockAlign = wFormat.Format.nChannels * wFormat.Format.wBitsPerSample / 8;
+		wFormat.Format.nAvgBytesPerSec = wFormat.Format.nBlockAlign * wFormat.Format.nSamplesPerSec;
+		wFormat.dwChannelMask = SPEAKER_STEREO;
+		wFormat.Samples.wValidBitsPerSample = wFormat.Format.wBitsPerSample;
+		wFormat.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
+	}
+	
+	if (waveOutOpen(NULL, deviceId, isWinNT4 ? (LPWAVEFORMATEX)&wFormatLegacy : &wFormat.Format, NULL, NULL, WAVE_FORMAT_QUERY) == MMSYSERR_NOERROR) return true;
+	return false;
+}
 
 static BOOL IsASIO() 
 {		
@@ -521,6 +556,13 @@ public:
 
 	void ResetDriverSettings() 
 	{			
+		
+		wchar_t bufferText[8] = {0};
+		vst_buffer_size.GetLBText(vst_buffer_size.GetCurSel(), bufferText);
+
+		wchar_t sampleRateText[8] = {0};
+		vst_sample_rate.GetLBText(vst_sample_rate.GetCurSel(), sampleRateText);
+		
 		vst_buffer_size.ResetContent();
 		vst_sample_rate.ResetContent();
 
@@ -533,8 +575,10 @@ public:
 			vst_buffer_size.AddString(L"15");
 			vst_buffer_size.AddString(L"20");
 			vst_buffer_size.AddString(L"30");
-			vst_buffer_size.AddString(L"40");			
-			vst_buffer_size.SelectString(-1, L"Default");
+			vst_buffer_size.AddString(L"50");
+
+			if(vst_buffer_size.SelectString(-1, bufferText) == CB_ERR) 
+				vst_buffer_size.SelectString(-1, L"Default");
 
 			vst_sample_format.EnableWindow(TRUE);
 			vst_4chmode.EnableWindow(TRUE);
@@ -555,14 +599,25 @@ public:
 
 			if (BASS_ASIO_Init(selectedOutputDriverInt, 0))
 			{
-				if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
+				
+				bool is48K = false;
+				if(BASS_ASIO_CheckRate(22050.0))vst_sample_rate.AddString(L"22050");
 				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
 				if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(L"44100");
-				if(BASS_ASIO_CheckRate(48000.0))vst_sample_rate.AddString(L"48000");
+				if(BASS_ASIO_CheckRate(48000.0))
+				{
+					vst_sample_rate.AddString(L"48000");
+					is48K = true;
+				}
 				if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(L"49716");
 				if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(L"96000");
 				if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(L"192000");
-				vst_sample_rate.SelectString(-1, L"48000");
+				
+				if(vst_sample_rate.SelectString(-1, sampleRateText) == CB_ERR) 
+				{
+					if(is48K)vst_sample_rate.SelectString(-1, L"48000");
+					else vst_sample_rate.SetCurSel(vst_sample_rate.GetCount() - 1);
+				}
 
 				BASS_ASIO_Free();
 			}
@@ -579,17 +634,31 @@ public:
 			vst_buffer_size.AddString(L"160");
 			vst_buffer_size.AddString(L"180");
 			vst_buffer_size.AddString(L"200");
-			vst_buffer_size.SelectString(-1, L"80");
+
+			if(vst_buffer_size.SelectString(-1, bufferText) == CB_ERR) 
+				vst_buffer_size.SelectString(-1, L"80");
+			
 			vst_4chmode.SetWindowTextW(L"4 channel mode (port A: Front speakers; port B: Rear speakers)");
 
-			vst_sample_rate.AddString(L"22050");
-			vst_sample_rate.AddString(L"32000");
-			vst_sample_rate.AddString(L"44100");
-			vst_sample_rate.AddString(L"48000");
-			vst_sample_rate.AddString(L"49716");
-			vst_sample_rate.AddString(L"96000");
-			vst_sample_rate.AddString(L"192000");
-			vst_sample_rate.SelectString(-1, L"48000");	
+			bool is48K = false;
+			UINT deviceId = GetWaveOutDeviceId();
+			if (IsWaveFormatSupported(22050, deviceId))vst_sample_rate.AddString(L"22050");
+			if (IsWaveFormatSupported(32000, deviceId))vst_sample_rate.AddString(L"32000");
+			if (IsWaveFormatSupported(44100, deviceId))vst_sample_rate.AddString(L"44100");
+			if (IsWaveFormatSupported(48000, deviceId))
+			{
+				vst_sample_rate.AddString(L"48000");
+				is48K = true;
+			}
+			if (IsWaveFormatSupported(49716, deviceId))vst_sample_rate.AddString(L"49716");
+			if (IsWaveFormatSupported(96000, deviceId))vst_sample_rate.AddString(L"96000");
+			if (IsWaveFormatSupported(192000, deviceId))vst_sample_rate.AddString(L"192000");
+
+			if(vst_sample_rate.SelectString(-1, sampleRateText) == CB_ERR) 
+			{
+				if (is48K)vst_sample_rate.SelectString(-1, L"48000");
+				else vst_sample_rate.SetCurSel(vst_sample_rate.GetCount() - 1);
+			}
 
 			if(isWinNT4) {
 				vst_4chmode.SetCheck(0);
@@ -654,7 +723,7 @@ public:
 			vst_buffer_size.AddString(L"15");
 			vst_buffer_size.AddString(L"20");
 			vst_buffer_size.AddString(L"30");
-			vst_buffer_size.AddString(L"40");			
+			vst_buffer_size.AddString(L"50");			
 			vst_buffer_size.SelectString(-1, L"Default");
 
 #ifdef WIN64
@@ -669,14 +738,21 @@ public:
 
 			if (BASS_ASIO_Init(selectedOutputDriverInt, 0))	
 			{
+				bool is48K = false;
 				if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
 				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
 				if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(L"44100");
-				if(BASS_ASIO_CheckRate(48000.0))vst_sample_rate.AddString(L"48000");
+				if(BASS_ASIO_CheckRate(48000.0))
+				{
+					vst_sample_rate.AddString(L"48000");
+					is48K = true;
+				}
 				if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(L"49716");
 				if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(L"96000");
 				if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(L"192000");
-				vst_sample_rate.SelectString(-1, L"48000");
+				
+				if(is48K)vst_sample_rate.SelectString(-1, L"48000");
+				else vst_sample_rate.SetCurSel(vst_sample_rate.GetCount() - 1);
 
 				BASS_ASIO_Free();
 			}
@@ -695,14 +771,22 @@ public:
 			vst_buffer_size.SelectString(-1, L"80");
 			vst_4chmode.SetWindowTextW(L"4 channel mode (port A: Front speakers; port B: Rear speakers)");
 
-			vst_sample_rate.AddString(L"22050");
-			vst_sample_rate.AddString(L"32000");
-			vst_sample_rate.AddString(L"44100");
-			vst_sample_rate.AddString(L"48000");
-			vst_sample_rate.AddString(L"49716");
-			vst_sample_rate.AddString(L"96000");
-			vst_sample_rate.AddString(L"192000");
-			vst_sample_rate.SelectString(-1, L"48000");
+			bool is48K = false;
+			UINT deviceId = GetWaveOutDeviceId();
+			if (IsWaveFormatSupported(22050, deviceId))vst_sample_rate.AddString(L"22050");
+			if (IsWaveFormatSupported(32000, deviceId))vst_sample_rate.AddString(L"32000");
+			if (IsWaveFormatSupported(44100, deviceId))vst_sample_rate.AddString(L"44100");
+			if (IsWaveFormatSupported(48000, deviceId))
+			{
+				vst_sample_rate.AddString(L"48000");
+				is48K = true;
+			}
+			if (IsWaveFormatSupported(49716, deviceId))vst_sample_rate.AddString(L"49716");
+			if (IsWaveFormatSupported(96000, deviceId))vst_sample_rate.AddString(L"96000");
+			if (IsWaveFormatSupported(192000, deviceId))vst_sample_rate.AddString(L"192000");
+			
+			if (is48K)vst_sample_rate.SelectString(-1, L"48000");
+			else vst_sample_rate.SetCurSel(vst_sample_rate.GetCount() - 1);
 		}
 
 		volume_slider.SetRange(-12, 12);
@@ -1044,6 +1128,7 @@ public:
 				else
 				{
 					SaveOutputDriver(L"WinMM WaveOut", selectedOutputDriver);
+					driverChanged = true;
 				}
 			}
 		}
