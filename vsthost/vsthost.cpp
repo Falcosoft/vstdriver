@@ -14,6 +14,11 @@
 
 #define WM_ICONMSG  WM_APP + 1
 
+#if(_WIN32_WINNT < 0x0500) 
+	#define SM_CXVIRTUALSCREEN  78
+	#define SM_CYVIRTUALSCREEN  79
+	#define ASFW_ANY    ((DWORD)-1)
+#endif 
 
 enum
 {
@@ -79,6 +84,7 @@ bool need_idle = false;
 bool idle_started = false;
 
 static HINSTANCE user32 = NULL;
+static HANDLE USER32DEF(AllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
 static HANDLE USER32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 static HANDLE highDpiMode = NULL;
 
@@ -1315,6 +1321,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 	user32 = GetModuleHandle(L"user32.dll");
 	if (user32)	LOADUSER32FUNCTION(SetThreadDpiAwarenessContext);
+	if (user32)	LOADUSER32FUNCTION(AllowSetForegroundWindow);
 
 	null_file = CreateFile(_T("NUL"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
@@ -1500,6 +1507,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					DialogBoxIndirectParam(0, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)(pEffect[0]));
 					//getChunk(pEffect[0], chunk);
 					//setChunk(pEffect[1], chunk);
+					
+					if(AllowSetForegroundWindow) AllowSetForegroundWindow(ASFW_ANY); //allows drivercfg to get back focus 
 				}
 
 				put_code(Response::NoError);

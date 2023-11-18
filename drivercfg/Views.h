@@ -446,17 +446,18 @@ public:
 	{
 		if(effect && effect->hasEditor())
 		{
-			HWND m_hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
-			::EnableWindow(m_hWnd, FALSE);
+			HWND hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
+			::EnableWindow(hWnd, FALSE);
 			effect->setHighDpiMode(highDpiMode);
 
 			wchar_t tmpBuff[8];
 			vst_sample_rate.GetWindowTextW(tmpBuff, 8);	      
 			effect->setSampleRate(_wtoi(tmpBuff));
-
+			
 			effect->displayEditorModal();
-			::EnableWindow(m_hWnd, TRUE);
-
+			::EnableWindow(hWnd, TRUE);
+			::SetForegroundWindow(this->m_hWnd);			
+			
 			effect->ProcessMIDIMessage(0, 0x90); //force some plugins to enable save/load functions.
 			float sample[2];
 			effect->RenderFloat(&sample[0], 1);
@@ -569,11 +570,11 @@ public:
 		if (usingASIO) 
 		{
 			vst_buffer_size.AddString(L"Default");
-			vst_buffer_size.AddString(L"2");
+			vst_buffer_size.AddString(L"2 ");
 			vst_buffer_size.AddString(L"5");
-			vst_buffer_size.AddString(L"10");
+			vst_buffer_size.AddString(L"10 ");
 			vst_buffer_size.AddString(L"15");
-			vst_buffer_size.AddString(L"20");
+			vst_buffer_size.AddString(L"20 ");
 			vst_buffer_size.AddString(L"30");
 			vst_buffer_size.AddString(L"50");
 
@@ -632,7 +633,7 @@ public:
 			vst_buffer_size.AddString(L"120");
 			vst_buffer_size.AddString(L"140");
 			vst_buffer_size.AddString(L"160");
-			vst_buffer_size.AddString(L"180");
+			//vst_buffer_size.AddString(L"180");
 			vst_buffer_size.AddString(L"200");
 
 			if(vst_buffer_size.SelectString(-1, bufferText) == CB_ERR) 
@@ -717,11 +718,11 @@ public:
 		if (usingASIO) 
 		{
 			vst_buffer_size.AddString(L"Default");
-			vst_buffer_size.AddString(L"2");
+			vst_buffer_size.AddString(L"2 ");
 			vst_buffer_size.AddString(L"5");
-			vst_buffer_size.AddString(L"10");
+			vst_buffer_size.AddString(L"10 ");
 			vst_buffer_size.AddString(L"15");
-			vst_buffer_size.AddString(L"20");
+			vst_buffer_size.AddString(L"20 ");
 			vst_buffer_size.AddString(L"30");
 			vst_buffer_size.AddString(L"50");			
 			vst_buffer_size.SelectString(-1, L"Default");
@@ -766,7 +767,7 @@ public:
 			vst_buffer_size.AddString(L"120");
 			vst_buffer_size.AddString(L"140");
 			vst_buffer_size.AddString(L"160");
-			vst_buffer_size.AddString(L"180");
+			//vst_buffer_size.AddString(L"180");
 			vst_buffer_size.AddString(L"200");
 			vst_buffer_size.SelectString(-1, L"80");
 			vst_4chmode.SetWindowTextW(L"4 channel mode (port A: Front speakers; port B: Rear speakers)");

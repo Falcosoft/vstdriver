@@ -6,6 +6,8 @@
 // set the _WIN32_WINNT macro to the platform you wish to support before including SDKDDKVer.h.
 
 //#include <winsdkver.h>
-#define _WIN32_WINNT 0x0500
+#define _WIN32_WINNT 0x0400
+#define _WIN32_IE 0x0400
+#define WINVER 0x0400
 
 //#include <SDKDDKVer.h>
