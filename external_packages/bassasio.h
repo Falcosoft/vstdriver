@@ -1,6 +1,6 @@
 /*
 	BASSASIO 1.4 C/C++ header file
-	Copyright (c) 2005-2019 Un4seen Developments Ltd.
+	Copyright (c) 2005-2023 Un4seen Developments Ltd.
 
 	See the BASSASIO.CHM file for more detailed documentation
 */
@@ -68,6 +68,10 @@ typedef struct {
 #define BASS_ASIO_FORMAT_24BIT		17 // 24-bit integer
 #define BASS_ASIO_FORMAT_32BIT		18 // 32-bit integer
 #define BASS_ASIO_FORMAT_FLOAT		19 // 32-bit floating-point
+#define BASS_ASIO_FORMAT_32BIT16	24 // 32-bit integer with 16-bit alignment
+#define BASS_ASIO_FORMAT_32BIT18	25 // 32-bit integer with 18-bit alignment
+#define BASS_ASIO_FORMAT_32BIT20	26 // 32-bit integer with 20-bit alignment
+#define BASS_ASIO_FORMAT_32BIT24	27 // 32-bit integer with 24-bit alignment
 #define BASS_ASIO_FORMAT_DSD_LSB	32 // DSD (LSB 1st)
 #define BASS_ASIO_FORMAT_DSD_MSB	33 // DSD (MSB 1st)
 #define BASS_ASIO_FORMAT_DITHER		0x100 // flag: apply dither when converting from floating-point to integer

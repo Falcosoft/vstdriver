@@ -9,6 +9,17 @@
 #define BASSASIODEF(f) (WINAPI *f)
 #define LOADBASSASIOFUNCTION(f) *((void**)&f)=GetProcAddress(bassasio,#f)
 
+#if(_WIN32_WINNT < 0x0500) 
+	#define     GA_PARENT       1
+	#define     GA_ROOT         2
+	#define     GA_ROOTOWNER    3
+	
+	// Actually this is supported by Win NT4 SP6 but built-in headers only contain these definitions if _WIN32_WINNT >= 0x0500	
+	extern "C" {
+		WINUSERAPI HWND WINAPI GetAncestor( __in HWND hwnd, __in UINT gaFlags);
+	}
+#endif	
+
 #include "../external_packages/bassasio.h"
 
 using namespace std;
@@ -456,7 +467,7 @@ public:
 			
 			effect->displayEditorModal();
 			::EnableWindow(hWnd, TRUE);
-			::SetForegroundWindow(this->m_hWnd);			
+			::SetForegroundWindow(this->m_hWnd); //Gets back focus after editor is closed. AllowSetForegroundWindow has to be called by vsthost.			
 			
 			effect->ProcessMIDIMessage(0, 0x90); //force some plugins to enable save/load functions.
 			float sample[2];
