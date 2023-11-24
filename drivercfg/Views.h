@@ -120,10 +120,11 @@ static BOOL IsASIO()
 
 			static const GUID CLSID_ASIO2WASAPI_DRIVER = { 0x3981c4c8, 0xfe12, 0x4b0f, { 0x98, 0xa0, 0xd1, 0xb6, 0x67, 0xbd, 0xa6, 0x15 } };
 			BASS_ASIO_AddDevice(&CLSID_ASIO2WASAPI_DRIVER, "ASIO2WASAPI.dll", "VSTDriver-ASIO2WASAPI");
+		
 		}
 
 		BASS_ASIO_DEVICEINFO info;
-		return BASS_ASIO_GetDeviceInfo(0, &info);			
+		return BASS_ASIO_GetDeviceInfo(0, &info);		
 	}	
 
 	return FALSE;	
@@ -958,16 +959,14 @@ public:
 
 		BASS_ASIO_DEVICEINFO asioDeviceInfo;
 
-		for (int deviceId = 0; BASS_ASIO_Init(deviceId, 0); ++deviceId)
-		{
-			BASS_ASIO_GetDeviceInfo(deviceId, &asioDeviceInfo);
+		for (int deviceId = 0; BASS_ASIO_GetDeviceInfo(deviceId, &asioDeviceInfo); ++deviceId)
+		{			
+			if (!BASS_ASIO_Init(deviceId, 0)) continue;
 
-			deviceName = CString(asioDeviceInfo.name);            
-
+			deviceName = CString(asioDeviceInfo.name);           
 			BASS_ASIO_INFO info;
 			BASS_ASIO_GetInfo(&info);
 			drvChArr.push_back(info.outputs);
-
 			BASS_ASIO_CHANNELINFO channelInfo;	
 
 			for (DWORD channel = 0; BASS_ASIO_ChannelGetInfo(FALSE, channel, &channelInfo); ++channel)
