@@ -33,7 +33,6 @@ using std::wstring;
 extern "C"{ extern HINSTANCE hinst_vst_driver; }
 extern "C" { extern bool isSCVA; };
 
-
 namespace VSTMIDIDRV{
 
 	static MidiSynth &midiSynth = MidiSynth::getInstance();
@@ -499,6 +498,7 @@ namespace VSTMIDIDRV{
 		DWORD buflen;
 		WORD channels;
 		unsigned int samplerate;
+		bool isASIO2WASAPI;
 
 		volatile DWORD startTime;
 		volatile LARGE_INTEGER startTimeQp;
@@ -506,7 +506,7 @@ namespace VSTMIDIDRV{
 
 		TCHAR installPath[MAX_PATH];
 		TCHAR bassAsioPath[MAX_PATH];
-
+		TCHAR asio2WasapiPath[MAX_PATH];
 
 
 		void InitializePaths()
@@ -526,10 +526,21 @@ namespace VSTMIDIDRV{
 		{
 			// Load Bass Asio
 			bassAsio = LoadLibrary(bassAsioPath);
-			if (!bassAsio) return false;
-			
-			LOADBASSASIOFUNCTION(BASS_ASIO_GetDeviceInfo);
+			if (!bassAsio) return false;	
+						
+			lstrcpy(asio2WasapiPath, installPath);
+			lstrcat(asio2WasapiPath, _T("ASIO2WASAPI.dll"));
+			if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
+			{
+				LOADBASSASIOFUNCTION(BASS_ASIO_AddDevice);
+				
+				::SetCurrentDirectory(installPath);
 
+				static const GUID CLSID_ASIO2WASAPI_DRIVER = { 0x3981c4c8, 0xfe12, 0x4b0f, { 0x98, 0xa0, 0xd1, 0xb6, 0x67, 0xbd, 0xa6, 0x15 } };
+				BASS_ASIO_AddDevice(&CLSID_ASIO2WASAPI_DRIVER, "ASIO2WASAPI.dll", "VSTDriver-ASIO2WASAPI");
+			}
+
+			LOADBASSASIOFUNCTION(BASS_ASIO_GetDeviceInfo);
 
 			/// Check if there is at least one ASIO capable device
 			BASS_ASIO_DEVICEINFO info;
@@ -555,7 +566,8 @@ namespace VSTMIDIDRV{
 				LOADBASSASIOFUNCTION(BASS_ASIO_ChannelIsActive);
 				LOADBASSASIOFUNCTION(BASS_ASIO_ChannelSetFormat);
 				LOADBASSASIOFUNCTION(BASS_ASIO_GetLatency);
-				LOADBASSASIOFUNCTION(BASS_ASIO_GetInfo);
+				LOADBASSASIOFUNCTION(BASS_ASIO_GetInfo);			
+								
 			}
 			else
 			{
@@ -655,14 +667,18 @@ namespace VSTMIDIDRV{
 			return portbOffset;
 		}
 
-	public:
+	public:		
+
 		BassAsioOut()
 		{
 			usingFloat = true;
 			buflen = 0;
 			channels = 2;
 			bassAsio = NULL;
+			isASIO2WASAPI = false;
 		}
+
+		bool getIsASIO2WASAPI() { return isASIO2WASAPI; }		
 
 		int Init(unsigned int bufferSizeMS, unsigned int sampleRate, bool useFloat, WORD channelCount)
 		{
@@ -690,12 +706,21 @@ namespace VSTMIDIDRV{
 					return (int)res;
 				}
 
+				BASS_ASIO_SetNotify(AsioNotifyProc, this);
+
 				BASS_ASIO_SetRate(sampleRate);
 
 				sampleRate = (int)BASS_ASIO_GetRate();
 				samplerate = sampleRate;
 
-				buflen = bufferSizeMS == 0 ? 0 : DWORD(bufferSizeMS * (sampleRate / 1000.0f));
+				buflen = bufferSizeMS == 0 ? 0 : DWORD(bufferSizeMS * (sampleRate / 1000.0f));				
+				wstring selectedOutputDriver = GetAsioDriverName();
+				if (selectedOutputDriver.find(L"VSTDriver-ASIO2WASAPI") != wstring::npos)
+				{
+					buflen = 0;
+					isASIO2WASAPI = true;
+				}
+
 				channels = channelCount;
 
 				BASS_ASIO_INFO info;
@@ -822,6 +847,20 @@ namespace VSTMIDIDRV{
 			
 			return length;
 		}
+
+		static void CALLBACK resetTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
+		{		
+			bassAsioOut.Close();
+			bassAsioOut.Init(midiSynth.getBufferSizeMS(), midiSynth.getSampleRate(), midiSynth.getUsingFloat(), midiSynth.getChannels());
+			bassAsioOut.Start();
+		}
+
+		static void CALLBACK AsioNotifyProc(DWORD notify, void* user)
+		{
+			if(notify == BASS_ASIO_NOTIFY_RESET)
+				timeSetEvent(10, 10, resetTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);			
+		}
+		
 
 	}bassAsioOut;
 
@@ -1032,6 +1071,7 @@ namespace VSTMIDIDRV{
 			else
 			{
 				sampleRate = (int)BASS_ASIO_GetRate();
+				if (bassAsioOut.getIsASIO2WASAPI()) bufferSize = 0;
 				if (!bufferSize)
 				{
 					BASS_ASIO_INFO info;

@@ -85,37 +85,7 @@ Function un.LockedListShow
   Pop $R0
  ${EndIf}
 FunctionEnd
-;--------------------------------
-Function .onInit
 
- SetShellVarContext All
- ${IfNot} ${IsNT}
-  MessageBox MB_OK|MB_ICONSTOP "This driver cannot be installed on Windows 9x systems." /SD IDOK  
-  Abort 
- ${EndIf}
-
-!ifdef INNER
-  WriteUninstaller "$%TEMP%\vstmididrvuninstall.exe"
-  Quit
-!endif
-
-ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString"
-  StrCmp $R0 "" done
-  MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
-  "The MIDI driver is already installed. $\n$\nClick `OK` to remove the \
-  previous version or `Cancel` to cancel this upgrade." \
-  /SD IDOK IDOK uninst
-  Abort
-;Run the uninstaller
-uninst:
-  ClearErrors
-  Exec $R0
-  Abort
-done:
-   MessageBox MB_YESNO "This will install the VST MIDI System Synth. Continue?" /SD IDYES IDYES NoAbort
-     Abort ; causes installer to quit.
-   NoAbort:
- FunctionEnd
 ; The stuff to install
 
 Section "Core components (required)" instsect1
@@ -273,19 +243,95 @@ Section "ASIO Output (BassASIO)" instsect2
     ;===========================================================================
     SetOutPath "$WINDIR\SysWow64\vstmididrv"   
     File output\bassasio.dll   
+        
     SetOutPath "$WINDIR\SysNative\vstmididrv" 
     File output\64\bassasio.dll   
-  
+       
   ${Else}
     ;===========================================================================
     ;installer running on 32bit OS
     ;===========================================================================
     SetOutPath "$WINDIR\System32\vstmididrv"   
-    File output\bassasio.dll   
-    
+    File output\bassasio.dll
+        
   ${EndIf}   
 
 SectionEnd
+
+Section "ASIO2WASAPI Plugin" instsect3
+
+  ${If} ${RunningX64}
+    ;===========================================================================
+    ;installer running on 64bit OS
+    ;===========================================================================
+    SetOutPath "$WINDIR\SysWow64\vstmididrv"   
+   	File output\ASIO2WASAPI.dll 
+       
+    SetOutPath "$WINDIR\SysNative\vstmididrv" 
+    File output\64\ASIO2WASAPI.dll 
+   
+  ${Else}
+    ;===========================================================================
+    ;installer running on 32bit OS
+    ;===========================================================================
+    SetOutPath "$WINDIR\System32\vstmididrv"   
+   	File output\ASIO2WASAPI.dll  
+    
+  ${EndIf}
+
+SectionEnd 
+
+Function .onSelChange
+${If} $9 == "1"
+	StrCpy $9 0
+	${If} ${SectionIsSelected} ${instsect3}
+    !insertmacro SelectSection ${instsect2}     
+	${EndIf}
+${Else}
+	StrCpy $9 1
+	${IfNot} ${SectionIsSelected} ${instsect2}
+    !insertmacro UnSelectSection ${instsect3}     
+	${EndIf}
+${EndIf}
+FunctionEnd
+
+;--------------------------------
+Function .onInit
+
+ StrCpy $9 0
+ SetShellVarContext All
+ ${IfNot} ${IsNT}
+  MessageBox MB_OK|MB_ICONSTOP "This driver cannot be installed on Windows 9x systems." /SD IDOK  
+  Abort 
+ ${EndIf}
+ 
+ ${IfNot} ${AtLeastWinVista}
+  !insertmacro UnSelectSection ${instsect3}   
+  SectionSetText ${instsect3} ""
+ ${Endif}
+
+!ifdef INNER
+  WriteUninstaller "$%TEMP%\vstmididrvuninstall.exe"
+  Quit
+!endif
+
+ReadRegStr $R0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VST MIDI System Synth" "UninstallString"
+  StrCmp $R0 "" done
+  MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \
+  "The MIDI driver is already installed. $\n$\nClick `OK` to remove the \
+  previous version or `Cancel` to cancel this upgrade." \
+  /SD IDOK IDOK uninst
+  Abort
+;Run the uninstaller
+uninst:
+  ClearErrors
+  Exec $R0
+  Abort
+done:
+   MessageBox MB_YESNO "This will install the VST MIDI System Synth. Continue?" /SD IDYES IDYES NoAbort
+     Abort ; causes installer to quit.
+   NoAbort:
+FunctionEnd
 
 ;--------------------------------
 
@@ -342,18 +388,20 @@ Section "un.Driver files/settings" uninstsect2
      RMDir /r /REBOOTOK "$WINDIR\SysNative\vstmididrv"
    ${Else}
 ;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers." /SD IDOK
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv.dll  
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bassasio.dll  
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv.dll     
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstbridgeapp32.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstbridgeapp64.exe
-     RMDir /r /REBOOTOK $WINDIR\SysWow64\vstmididrv     
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv.dll 
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\bassasio.dll  
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstmididrvcfg.exe   
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bassasio.dll 
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\ASIO2WASAPI.dll 
+     RMDir /r /REBOOTOK $WINDIR\SysWow64\vstmididrv 
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv.dll     
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstmididrvcfg.exe 
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstbridgeapp32.exe
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstbridgeapp64.exe
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\bassasio.dll  
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\ASIO2WASAPI.dll 
      RMDir /r /REBOOTOK $WINDIR\SysNative\vstmididrv 
    ${Endif}
  ${Else}
@@ -365,11 +413,12 @@ Section "un.Driver files/settings" uninstsect2
      RMDir /r /REBOOTOK "$WINDIR\System32\vstmididrv"
    ${Else}
 ;    MessageBox MB_OK "Note: The uninstaller will reboot your system to remove drivers." /SD IDOK
-     ${DeleteOnReboot} $WINDIR\System32\vstmididrv.dll 
-     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bassasio.dll    
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrv.dll     
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstbridgeapp32.exe
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bassasio.dll 
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\ASIO2WASAPI.dll 
      RMDir /r /REBOOTOK $WINDIR\System32\vstmididrv
    ${Endif}
  ${EndIf}
@@ -391,13 +440,11 @@ LangString DESC_uninstSection2 ${LANG_ENGLISH} "Core VSTi driver components. The
 !endif
 
 LangString DESC_instSection1 ${LANG_ENGLISH} "Core VSTi driver components. Installation is required."
-LangString DESC_instSection2 ${LANG_ENGLISH} "If you have problems with your ASIO driver then you can skip installing the ASIO Output component."
+LangString DESC_instSection2 ${LANG_ENGLISH} "If you have problems with your ASIO driver then you can skip installing the ASIO components."
+LangString DESC_instSection3 ${LANG_ENGLISH} "If ASIO is installed you can also install ASIO2WASAPI plugin to use WASAPI exclusive mode."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${instsect1} $(DESC_instSection1)
   !insertmacro MUI_DESCRIPTION_TEXT ${instsect2} $(DESC_instSection2)
+  !insertmacro MUI_DESCRIPTION_TEXT ${instsect3} $(DESC_instSection3)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
-
-
-
-

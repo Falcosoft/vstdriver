@@ -86,7 +86,8 @@ static bool IsWaveFormatSupported(UINT sampleRate, UINT deviceId)
 static BOOL IsASIO() 
 {		
 	TCHAR installpath[MAX_PATH];        
-	TCHAR bassasiopath[MAX_PATH];	
+	TCHAR bassasiopath[MAX_PATH];
+	TCHAR asio2WasapiPath[MAX_PATH];
 
 	GetModuleFileName(hinst_vst_driver, installpath, MAX_PATH);
 	//PathRemoveFileSpec(installpath);
@@ -107,7 +108,19 @@ static BOOL IsASIO()
 		LOADBASSASIOFUNCTION(BASS_ASIO_GetDeviceInfo);
 		LOADBASSASIOFUNCTION(BASS_ASIO_ChannelGetInfo);
 		LOADBASSASIOFUNCTION(BASS_ASIO_ControlPanel);
-		LOADBASSASIOFUNCTION(BASS_ASIO_CheckRate);			
+		LOADBASSASIOFUNCTION(BASS_ASIO_CheckRate);
+				
+		lstrcpy(asio2WasapiPath, installpath);
+		lstrcat(asio2WasapiPath, L"\\ASIO2WASAPI.dll");
+		if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
+		{
+			LOADBASSASIOFUNCTION(BASS_ASIO_AddDevice);
+
+			::SetCurrentDirectory(installpath);
+
+			static const GUID CLSID_ASIO2WASAPI_DRIVER = { 0x3981c4c8, 0xfe12, 0x4b0f, { 0x98, 0xa0, 0xd1, 0xb6, 0x67, 0xbd, 0xa6, 0x15 } };
+			BASS_ASIO_AddDevice(&CLSID_ASIO2WASAPI_DRIVER, "ASIO2WASAPI.dll", "VSTDriver-ASIO2WASAPI");
+		}
 
 		BASS_ASIO_DEVICEINFO info;
 		return BASS_ASIO_GetDeviceInfo(0, &info);			
@@ -580,7 +593,13 @@ public:
 
 		if (usingASIO) 
 		{
-			vst_buffer_size.AddString(L"Default");
+			
+#ifdef WIN64
+			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
+#else
+			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+#endif
+			vst_buffer_size.AddString(L"Default");	
 			vst_buffer_size.AddString(L"2 ");
 			vst_buffer_size.AddString(L"5");
 			vst_buffer_size.AddString(L"10 ");
@@ -588,6 +607,7 @@ public:
 			vst_buffer_size.AddString(L"20 ");
 			vst_buffer_size.AddString(L"30");
 			vst_buffer_size.AddString(L"50");
+			
 
 			if(vst_buffer_size.SelectString(-1, bufferText) == CB_ERR) 
 				vst_buffer_size.SelectString(-1, L"Default");
@@ -595,11 +615,6 @@ public:
 			vst_sample_format.EnableWindow(TRUE);
 			vst_4chmode.EnableWindow(TRUE);
 
-#ifdef WIN64
-			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
-#else
-			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
-#endif
 			CString selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
 			int selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);
@@ -728,21 +743,24 @@ public:
 
 		if (usingASIO) 
 		{
-			vst_buffer_size.AddString(L"Default");
-			vst_buffer_size.AddString(L"2 ");
-			vst_buffer_size.AddString(L"5");
-			vst_buffer_size.AddString(L"10 ");
-			vst_buffer_size.AddString(L"15");
-			vst_buffer_size.AddString(L"20 ");
-			vst_buffer_size.AddString(L"30");
-			vst_buffer_size.AddString(L"50");			
-			vst_buffer_size.SelectString(-1, L"Default");
 
 #ifdef WIN64
 			selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
 #else
 			selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
 #endif
+			vst_buffer_size.AddString(L"Default");
+					
+			vst_buffer_size.AddString(L"2 ");
+			vst_buffer_size.AddString(L"5");
+			vst_buffer_size.AddString(L"10 ");
+			vst_buffer_size.AddString(L"15");
+			vst_buffer_size.AddString(L"20 ");
+			vst_buffer_size.AddString(L"30");
+			vst_buffer_size.AddString(L"50");
+			
+			vst_buffer_size.SelectString(-1, L"Default");
+
 			selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
 			selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);

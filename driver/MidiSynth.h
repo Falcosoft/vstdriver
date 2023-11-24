@@ -67,6 +67,12 @@ private:
 	MidiSynth();
 
 public:	
+
+	unsigned int getSampleRate() { return sampleRate; }
+	unsigned int getBufferSizeMS() { return bufferSizeMS; }
+	bool getUsingFloat() { return usingFloat; }
+	WORD getChannels() { return channels; }
+
 	static MidiSynth &getInstance();
 	int Init(unsigned uDeviceID);
 	void InitDialog(unsigned uDeviceID);
@@ -80,4 +86,5 @@ public:
 };
 
 }
+
 #endif

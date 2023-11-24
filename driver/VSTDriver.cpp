@@ -67,6 +67,19 @@ bool IsWinNT4()
 	return false;
 }
 
+bool IsVistaOrNewer()
+{
+	OSVERSIONINFOEX osvi;
+	BOOL bOsVersionInfoEx;
+	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
+	if (bOsVersionInfoEx == FALSE) return FALSE;
+	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion > 5)		
+		return TRUE;
+	return FALSE;
+}
+
 bool UseAsio()
 {
 	HKEY hKey;

@@ -33,6 +33,7 @@
 
 UINT GetWaveOutDeviceId();
 bool IsWinNT4();
+bool IsVistaOrNewer();
 bool UseAsio();
 
 class VSTDriver {
