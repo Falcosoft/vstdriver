@@ -38,7 +38,7 @@ static bool usingASIO = false;
 static bool is4chMode = false;
 static bool isWinNT4 =  false;
 static DWORD portBOffsetVal = 2;
-
+static DWORD usePrivateAsioOnly = 0;
 
 /*
 struct MyDLGTEMPLATE: DLGTEMPLATE
@@ -264,7 +264,7 @@ class CView1 : public CDialogImpl<CView1>
 	TCHAR vst_path[MAX_PATH];
 	HANDLE hbrBkgnd;
 	DWORD highDpiMode;
-	DWORD EnableSinglePort32ChMode;
+	DWORD EnableSinglePort32ChMode;	
 
 	VSTDriver * effect;
 public:
@@ -287,6 +287,7 @@ public:
 		hbrBkgnd = NULL;
 		highDpiMode = 0;
 		EnableSinglePort32ChMode = (DWORD)-1;
+		usePrivateAsioOnly = 0;
 
 		isWinNT4 = IsWinNT4();
 		isASIO = IsASIO();
@@ -359,7 +360,12 @@ public:
 			lResult = reg.QueryDWORDValue(L"EnableSinglePort32ChMode", reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				EnableSinglePort32ChMode = reg_value;
-			}		   
+			}
+			lResult = reg.QueryDWORDValue(L"UsePrivateAsioOnly", reg_value);
+			if (lResult == ERROR_SUCCESS) {
+				usePrivateAsioOnly = reg_value;
+			}
+			
 
 			reg.Close();
 			vst_info.SetWindowText(vst_path);
@@ -497,6 +503,7 @@ public:
 			if(!settings_save(effect)) MessageBox(L"Cannot save plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
 			if(!highDpiMode)SaveDwordValue(L"HighDpiMode",(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
 			if(EnableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(L"EnableSinglePort32ChMode", 1);
+			if(IsVistaOrNewer())SaveDwordValue(L"UsePrivateAsioOnly", usePrivateAsioOnly);
 
 			delete effect;
 			effect = NULL;
@@ -959,8 +966,11 @@ public:
 
 		BASS_ASIO_DEVICEINFO asioDeviceInfo;
 
+		char firstDriverName[24] = { 0 };
 		for (int deviceId = 0; BASS_ASIO_GetDeviceInfo(deviceId, &asioDeviceInfo); ++deviceId)
 		{			
+			if (!deviceId) lstrcpynA(firstDriverName, asioDeviceInfo.name, 23);
+			if (usePrivateAsioOnly && IsVistaOrNewer() && deviceId && !strcmp(firstDriverName,"VSTDriver-ASIO2WASAPI")) break;
 			if (!BASS_ASIO_Init(deviceId, 0)) continue;
 
 			deviceName = CString(asioDeviceInfo.name);           
