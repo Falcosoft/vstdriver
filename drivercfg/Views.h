@@ -226,7 +226,7 @@ static CString LoadOutputDriver(CString valueName)
 		return value;
 	}
 
-	ULONG size;
+	ULONG size = 0;
 
 	result = reg.QueryStringValue(valueName, NULL, &size);
 	if (result == NO_ERROR && size > 0)
@@ -850,6 +850,7 @@ class CView3 : public CDialogImpl<CView3>
 	CButton asio_openctlp;
 	CStatic portbOffsetText;
 	bool driverChanged;
+	bool resetList;
 	std::vector<int> drvChArr;
 
 public:	
@@ -871,6 +872,7 @@ public:
 	CView3()
 	{		
 		driverChanged = false;
+		resetList = false;
 		drvChArr.reserve(8); //reasonable starting capacity
 	}
 
@@ -1057,20 +1059,58 @@ public:
 	LRESULT OnButtonOpen(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/ )
 	{
 		CString deviceName;
-		CString selectedOutputDriver;		
-
+		CString selectedOutputDriver;
 
 		int index = playbackDevices.GetCurSel();
 		int length = playbackDevices.GetTextLen(index);
 
-		playbackDevices.GetText(index, selectedOutputDriver.GetBuffer(length));
+		playbackDevices.GetText(index, selectedOutputDriver.GetBuffer(max(length, 2)));
 		selectedOutputDriver.ReleaseBuffer();		
 
 		int selectedOutputDriverInt = _wtoi(selectedOutputDriver.Left(2));	
 
+		CRegKeyEx reg;
+		DWORD value = 0;
+		DWORD newValue = 0;
+		bool isAsio2Wasapi = selectedOutputDriver.Find(L"VSTDriver-ASIO2WASAPI", 0) != -1;
+		if (isAsio2Wasapi)
+		{
+			reg.Open(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver\\ASIO2WASAPI", KEY_READ);
+			reg.QueryDWORDValue(L"Channels", value);
+		}
+
 		BASS_ASIO_Init(selectedOutputDriverInt, 0);
 		BASS_ASIO_ControlPanel();
-		BASS_ASIO_Free();
+		BASS_ASIO_Free();				
+
+		if (isAsio2Wasapi)
+		{				
+			reg.QueryDWORDValue(L"Channels", newValue);
+			reg.Close();
+			
+			if (value != newValue)
+			{
+				resetList = true;
+				BOOL dummyB;
+				OnCbnSelchangeCombo1(1, 1, (HWND)1, dummyB);
+				resetList = false;
+
+				BASS_ASIO_INFO info = {0};
+				BASS_ASIO_Init(0, 0);				
+				BASS_ASIO_GetInfo(&info);	
+				BASS_ASIO_Free();
+
+				drvChArr[0] = info.outputs;
+				portbOffset.ResetContent();
+				wchar_t tmpBuff[8];
+				for (unsigned int i = 1; i < info.outputs / 2; i++)
+				{
+					portbOffset.AddString(_ultow(i * 2, tmpBuff, 10));
+				}
+				if (portbOffset.SelectString(-1, _ultow(portBOffsetVal, tmpBuff, 10)) == CB_ERR)
+					portbOffset.SelectString(-1, L"2");
+			}
+		}
 
 		return 0;
 	}
@@ -1084,14 +1124,14 @@ public:
 		int index = driverMode.GetCurSel();
 		int length = driverMode.GetLBTextLen(index);
 
-		if (driverMode.GetLBText(index, newDriverMode.GetBuffer(length)))
+		if (driverMode.GetLBText(index, newDriverMode.GetBuffer(max(length, 1))))
 		{
 			newDriverMode.ReleaseBuffer();
 
 			selectedDriverMode = LoadOutputDriver(L"Driver Mode");
 
-			if (selectedDriverMode.CompareNoCase(newDriverMode) != 0)
-			{
+			if (resetList || selectedDriverMode.CompareNoCase(newDriverMode) != 0)
+			{				
 				playbackDevices.ResetContent();
 
 				driverChanged = true;
@@ -1126,14 +1166,14 @@ public:
 		int index = playbackDevices.GetCurSel();
 		int length = playbackDevices.GetTextLen(index);
 
-		if (playbackDevices.GetText(index, selectedOutputDriver.GetBuffer(length)))
+		if (playbackDevices.GetText(index, selectedOutputDriver.GetBuffer(max(length, 1))))
 		{
 			selectedOutputDriver.ReleaseBuffer();
 
 			int index = driverMode.GetCurSel();
 			int length = driverMode.GetLBTextLen(index);
 
-			if (driverMode.GetLBText(index, selectedDriverMode.GetBuffer(length)))
+			if (driverMode.GetLBText(index, selectedDriverMode.GetBuffer(max(length, 1))))
 			{
 				selectedDriverMode.ReleaseBuffer();
 
@@ -1242,7 +1282,7 @@ public:
 		long lRet;
 		int selection = synthlist.GetCurSel();
 		int n = synthlist.GetLBTextLen(selection);
-		synthlist.GetLBText(selection, device_name.GetBuffer(n));
+		synthlist.GetLBText(selection, device_name.GetBuffer(max(n, 1)));
 		device_name.ReleaseBuffer(n);
 		lRet = reg.Create(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
 		lRet = reg.DeleteSubKey(L"MIDIMap");
