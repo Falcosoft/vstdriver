@@ -750,7 +750,7 @@ namespace VSTMIDIDRV{
 			return 0;
 		}
 
-		int Close()
+		int Close(bool doDelay = true)
 		{
 			if (bassAsio)
 			{
@@ -758,11 +758,11 @@ namespace VSTMIDIDRV{
 				if (BASS_ASIO_IsStarted())
 				{
 					BASS_ASIO_Stop();
-					Sleep(50);
+					if(doDelay) Sleep(20);
 
 				}
 				BASS_ASIO_Free();
-				Sleep(50);
+				if(doDelay) Sleep(20);
 
 				FreeLibrary(bassAsio);
 				bassAsio = NULL;
@@ -850,7 +850,7 @@ namespace VSTMIDIDRV{
 
 		static void CALLBACK resetTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
 		{		
-			bassAsioOut.Close();
+			bassAsioOut.Close(false);
 			bassAsioOut.Init(midiSynth.getBufferSizeMS(), midiSynth.getSampleRate(), midiSynth.getUsingFloat(), midiSynth.getChannels());
 			bassAsioOut.Start();
 		}
@@ -858,7 +858,7 @@ namespace VSTMIDIDRV{
 		static void CALLBACK AsioNotifyProc(DWORD notify, void* user)
 		{
 			if(notify == BASS_ASIO_NOTIFY_RESET)
-				timeSetEvent(10, 10, resetTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);			
+				timeSetEvent(1, 1, resetTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);			
 		}
 		
 

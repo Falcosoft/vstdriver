@@ -1081,12 +1081,14 @@ public:
 
 		BASS_ASIO_Init(selectedOutputDriverInt, 0);
 		BASS_ASIO_ControlPanel();
-		BASS_ASIO_Free();				
+		BASS_ASIO_Free();
+
+		driverChanged = true;
 
 		if (isAsio2Wasapi)
 		{				
 			reg.QueryDWORDValue(L"Channels", newValue);
-			reg.Close();
+			reg.Close();			
 			
 			if (value != newValue)
 			{
