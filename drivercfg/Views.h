@@ -101,7 +101,9 @@ static BOOL IsASIO()
 	bassasio = LoadLibrary(bassasiopath);        
 
 	if (bassasio)
-	{          
+	{         
+		LOADBASSASIOFUNCTION(BASS_ASIO_ErrorGetCode);
+		LOADBASSASIOFUNCTION(BASS_ASIO_SetWindow);
 		LOADBASSASIOFUNCTION(BASS_ASIO_Init);
 		LOADBASSASIOFUNCTION(BASS_ASIO_Free);
 		LOADBASSASIOFUNCTION(BASS_ASIO_GetInfo);
@@ -832,12 +834,15 @@ public:
 
 		load_settings();
 
+		wchar_t tmpBuff[64];
 		if (usingASIO) 
-		{
-			wchar_t tmpBuff[64];
+		{			
 			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, selectedOutputChannelInt + portBOffsetVal, selectedOutputChannelInt + portBOffsetVal + 1); 
-			vst_4chmode.SetWindowTextW(tmpBuff);
+			vst_4chmode.SetWindowTextW(tmpBuff);				
 		}
+		
+		vst_sample_rate.GetWindowTextW(tmpBuff, 8); //list of valid sample rates could change.   
+		SaveDwordValue(L"SampleRate", _wtoi(tmpBuff));		
 
 		return TRUE;
 	}
@@ -1062,6 +1067,13 @@ public:
 		CString selectedOutputDriver;
 
 		int index = playbackDevices.GetCurSel();
+		if (index == -1)
+		{
+			playbackDevices.SetCurSel(0);
+			index = 0;
+			BOOL dummy;
+			OnLbnSelchangeList1(0, 0, 0, dummy);
+		}
 		int length = playbackDevices.GetTextLen(index);
 
 		playbackDevices.GetText(index, selectedOutputDriver.GetBuffer(max(length, 2)));
@@ -1079,8 +1091,9 @@ public:
 			reg.QueryDWORDValue(L"Channels", value);
 		}
 
+		BASS_ASIO_SetWindow(m_hWnd);
 		BASS_ASIO_Init(selectedOutputDriverInt, 0);
-		BASS_ASIO_ControlPanel();
+		if (!BASS_ASIO_ControlPanel() && BASS_ASIO_ErrorGetCode() == BASS_ERROR_ALREADY) return 0;
 		BASS_ASIO_Free();
 
 		driverChanged = true;

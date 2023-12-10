@@ -254,7 +254,9 @@ Section "ASIO Output (BassASIO)" instsect2
     SetOutPath "$WINDIR\System32\vstmididrv"   
     File output\bassasio.dll
         
-  ${EndIf}   
+  ${EndIf} 
+  
+  WriteRegDword HKCU "Software\VSTi Driver" "UsePrivateAsioOnly" 0x00000000   
 
 SectionEnd
 
@@ -281,16 +283,27 @@ Section "ASIO2WASAPI Plugin" instsect3
 
 SectionEnd 
 
+Section /o "Use only ASIO2WASAPI as ASIO driver" instsect4
+	WriteRegDword HKCU "Software\VSTi Driver" "UsePrivateAsioOnly" 0x00000001 
+
+SectionEnd 
+
 Function .onSelChange
 ${If} $9 == "1"
 	StrCpy $9 0
+	${If} ${SectionIsSelected} ${instsect4}
+    !insertmacro SelectSection ${instsect3} 
+  ${EndIf}  
 	${If} ${SectionIsSelected} ${instsect3}
     !insertmacro SelectSection ${instsect2}     
 	${EndIf}
 ${Else}
 	StrCpy $9 1
 	${IfNot} ${SectionIsSelected} ${instsect2}
-    !insertmacro UnSelectSection ${instsect3}     
+    !insertmacro UnSelectSection ${instsect3} 
+  ${EndIf}  
+  ${IfNot} ${SectionIsSelected} ${instsect3}
+    !insertmacro UnSelectSection ${instsect4}      
 	${EndIf}
 ${EndIf}
 FunctionEnd
@@ -308,6 +321,8 @@ Function .onInit
  ${IfNot} ${AtLeastWinVista}
   !insertmacro UnSelectSection ${instsect3}   
   SectionSetText ${instsect3} ""
+  !insertmacro UnSelectSection ${instsect4}   
+  SectionSetText ${instsect4} ""
  ${Endif}
 
 !ifdef INNER
@@ -440,11 +455,13 @@ LangString DESC_uninstSection2 ${LANG_ENGLISH} "Core VSTi driver components. The
 !endif
 
 LangString DESC_instSection1 ${LANG_ENGLISH} "Core VSTi driver components. Installation is required."
-LangString DESC_instSection2 ${LANG_ENGLISH} "If you have problems with your ASIO driver then you can skip installing the ASIO components."
-LangString DESC_instSection3 ${LANG_ENGLISH} "If ASIO is installed you can also install ASIO2WASAPI plugin to use WASAPI exclusive mode."
+LangString DESC_instSection2 ${LANG_ENGLISH} "If you only need the default WaveOut driver then you can skip installing the ASIO components."
+LangString DESC_instSection3 ${LANG_ENGLISH} "If ASIO is installed you can also install ASIO2WASAPI plugin to use WASAPI output modes."
+LangString DESC_instSection4 ${LANG_ENGLISH} "If you have problems with system ASIO drivers you can ignore them and use only private ASIO2WASAPI."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${instsect1} $(DESC_instSection1)
   !insertmacro MUI_DESCRIPTION_TEXT ${instsect2} $(DESC_instSection2)
   !insertmacro MUI_DESCRIPTION_TEXT ${instsect3} $(DESC_instSection3)
+  !insertmacro MUI_DESCRIPTION_TEXT ${instsect4} $(DESC_instSection4)
 !insertmacro MUI_FUNCTION_DESCRIPTION_END

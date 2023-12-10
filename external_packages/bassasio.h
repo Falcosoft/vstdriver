@@ -113,6 +113,7 @@ user   : The 'user' parameter given when calling BASS_ASIO_SetNotify */
 
 DWORD BASSASIODEF(BASS_ASIO_GetVersion)();
 BOOL BASSASIODEF(BASS_ASIO_SetUnicode)(BOOL unicode);
+void BASSASIODEF(BASS_ASIO_SetWindow)(HWND win);
 DWORD BASSASIODEF(BASS_ASIO_ErrorGetCode)();
 BOOL BASSASIODEF(BASS_ASIO_GetDeviceInfo)(DWORD device, BASS_ASIO_DEVICEINFO *info);
 DWORD BASSASIODEF(BASS_ASIO_AddDevice)(const GUID *clsid, const char *driver, const char *name);

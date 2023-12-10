@@ -1308,7 +1308,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	wcsncpy(midiClient, argv[3], _countof(midiClient));    
 	wcsncpy(clientBitnessStr, argv[4], _countof(clientBitnessStr)); 
 	
-	wcsncpy(outputModeStr, wcscmp(argv[5], L"W") ? L"ASIO": L"WaveOut", _countof(outputModeStr));
+	wcsncpy(outputModeStr, !wcscmp(argv[5], L"S") ? L"WASAPI" : !wcscmp(argv[5], L"A") ? L"ASIO" : L"WaveOut", _countof(outputModeStr));
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
