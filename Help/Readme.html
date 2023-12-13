@@ -20,9 +20,13 @@
         <br>
         <a href="https://github.com/Falcosoft/vstdriver" target="_blank">https://github.com/Falcosoft/vstdriver</a>
         <br>
-        <br> The change log and new releases can also be found on GitHub:
+        <br>The change log and new releases can also be found on GitHub:
         <br>
-      <a href="https://github.com/Falcosoft/vstdriver/releases" target="_blank">https://github.com/Falcosoft/vstdriver/releases</a></p>     
+				<a href="https://github.com/Falcosoft/vstdriver/releases" target="_blank">https://github.com/Falcosoft/vstdriver/releases</a>    
+				<br>
+				<br>The source code of the included ASIO2WASAPI plugin can also be downloaded from GitHub:
+				<br>
+				<a href="https://github.com/Falcosoft/ASIO2WASAPI/tree/VST-Midi-Driver-private-plugin" target="_blank">https://github.com/Falcosoft/ASIO2WASAPI/tree/VST-Midi-Driver-private-plugin</a></p>     
       <p>&nbsp;</p>
       <p>If you would like to support the development of VST MIDI Driver (Falcomod) you can donate through PayPal.</p>
       <form action="https://www.paypal.com/cgi-bin/webscr" method="get" target="_blank">
@@ -54,11 +58,9 @@
         <li>13. Fixed VSTi plugin's loading/saving related problems of Arakula's fork. </li>
         <li>14. Fixed high latency problem (500 ms) of Arakula's fork.</li>
         <li>15. Fixed ASIO related instabilities of DB50XG's fork. </li>
-        <li>16. Fixed dual port related problems of DB50XG's fork.
-          <strong>
-            <br>
-          </strong>
-        </li>
+        <li>16. Fixed dual port related problems of DB50XG's fork.</li>
+        <li>17. Added system tray menu. <strong><br>
+        </strong>        </li>
       </ul>
 
       <p>
@@ -132,7 +134,10 @@
             z-order problems at startup (e.g. the editors may open up behind the MIDI client that opened the port). But in some cases some VST editor
             related dialogs and ASIO control panels may open up   behind the dialog that is in  topmost state. In these cases disabling topmost status
             can be helpful. So if always on top  is disturbing for some reason then you can switch it off for both the configuration dialog and VST editor
-            dialogs.<br> 
+          dialogs.</p>
+        </li>
+        <li>
+          <p><strong>System tray menu</strong>: Even if you do not select the 'Show VST dialog when port is activated' option you can still open (and close) VST editor dialogs with the help of the system tray menu. From this menu you can also send GM/GS/XG/GM2 SysEx reset messages to active VSTi plugin instances. This way you can set your preferred Midi mode or simply reset the plugin to corresponding defaults even if the used Midi client has no such feature. 
             <br>
           </p>
         </li>
