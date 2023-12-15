@@ -185,7 +185,7 @@ namespace VSTMIDIDRV{
 		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
 		if (result == NO_ERROR)
 		{
-			DWORD size = 4;
+			DWORD size = sizeof(retResult);
 			result = RegQueryValueEx(hKey, valueName, NULL, NULL, (LPBYTE)&retResult, &size);
 			if (result == NO_ERROR)
 			{				
@@ -848,7 +848,7 @@ namespace VSTMIDIDRV{
 			return length;
 		}
 
-		static void CALLBACK resetTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
+		static void CALLBACK resetAsioTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
 		{		
 			bassAsioOut.Close(false);
 			bassAsioOut.Init(midiSynth.getBufferSizeMS(), midiSynth.getSampleRate(), midiSynth.getUsingFloat(), midiSynth.getChannels());
@@ -858,19 +858,28 @@ namespace VSTMIDIDRV{
 		static void CALLBACK AsioNotifyProc(DWORD notify, void* user)
 		{
 			if(notify == BASS_ASIO_NOTIFY_RESET)
-				timeSetEvent(1, 1, resetTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);			
+				timeSetEvent(1, 1, resetAsioTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);			
 		}
 		
 
 	}bassAsioOut;
+		
 
-	MidiSynth::MidiSynth(){}
+	MidiSynth::MidiSynth()
+	{
+		lastOpenedPort = 0;
+	}
+
+	static void CALLBACK resetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
+	{
+		midiSynth.Close();
+		midiSynth.Init(midiSynth.getLastOpenedPort());
+	}
 
 	MidiSynth &MidiSynth::getInstance(){
 		static MidiSynth *instance = new MidiSynth;
 		return *instance;
 	}	
-
 
 	// Renders totalFrames frames starting from bufpos
 	// The number of frames rendered is added to the global counter framesRendered
@@ -905,11 +914,14 @@ namespace VSTMIDIDRV{
 				framesToRender = totalFrames;
 			}
 			synthMutex.Enter();
-			vstDriver->Render(bufpos, framesToRender, outputGain, channels);
+			uint32_t result = vstDriver->Render(bufpos, framesToRender, outputGain, channels);
 			synthMutex.Leave();
 			framesRendered += framesToRender;
 			bufpos += framesToRender * channels;
 			totalFrames -= framesToRender;
+			if (result == ResetRequest)
+				timeSetEvent(1, 1, resetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
+				
 		}
 
 		// Wrap framesRendered counter
@@ -949,11 +961,13 @@ namespace VSTMIDIDRV{
 				framesToRender = totalFrames;
 			}
 			synthMutex.Enter();
-			vstDriver->RenderFloat(bufpos, framesToRender, outputGain, channels);
+			uint32_t result = vstDriver->RenderFloat(bufpos, framesToRender, outputGain, channels);
 			synthMutex.Leave();
 			framesRendered += framesToRender;
 			bufpos += framesToRender * channels;
 			totalFrames -= framesToRender;
+			if (result == ResetRequest)
+				timeSetEvent(1, 1, resetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
 		}
 
 		// Wrap framesRendered counter
@@ -1057,6 +1071,7 @@ namespace VSTMIDIDRV{
 		statusBuff[1] = 0;
 		isSinglePort32Ch = false;
 		virtualPortNum = 0;
+		lastOpenedPort = uDeviceID;
 
 		// Init synth
 		if (synthMutex.Init()) {

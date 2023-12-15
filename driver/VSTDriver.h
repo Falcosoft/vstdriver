@@ -36,6 +36,9 @@ bool IsWinNT4();
 bool IsVistaOrNewer();
 bool UseAsio();
 
+const uint32_t NoError = 0;
+const uint32_t ResetRequest = 255;
+
 class VSTDriver {
 private:
 	TCHAR      * szPluginPath;
@@ -83,8 +86,8 @@ public:
 	void ResetDriver(unsigned int uDeviceID);
 	void ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1);
 	void ProcessSysEx(DWORD dwPort, const unsigned char *sysexbuffer, int exlen);
-	void Render(short * samples, int len, float volume = 1.0f, WORD channels = 2);
-	void RenderFloat(float * samples, int len, float volume = 1.0f, WORD channels = 2);
+	uint32_t Render(short * samples, int len, float volume = 1.0f, WORD channels = 2);
+	uint32_t RenderFloat(float * samples, int len, float volume = 1.0f, WORD channels = 2);
 
 	void getEffectName(std::string & out);
 	void getVendorString(std::string & out);

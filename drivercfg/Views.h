@@ -39,6 +39,7 @@ static bool is4chMode = false;
 static bool isWinNT4 =  false;
 static DWORD portBOffsetVal = 2;
 static DWORD usePrivateAsioOnly = 0;
+static unsigned char SelectedPluginIndex = 0;
 
 /*
 struct MyDLGTEMPLATE: DLGTEMPLATE
@@ -142,9 +143,15 @@ static BOOL settings_load(VSTDriver * effect)
 
 	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WRITE);
 	if (lResult == ERROR_SUCCESS){
-		lResult = reg.QueryStringValue(L"plugin",NULL,&size);
+		TCHAR szValueName[12] = L"plugin";
+		if (SelectedPluginIndex)		
+		{
+			TCHAR szPostfix[4] = { 0 };
+			lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));			
+		}
+		lResult = reg.QueryStringValue(szValueName, NULL, &size);
 		if (lResult == ERROR_SUCCESS) {
-			reg.QueryStringValue(L"plugin",vst_path,&size);
+			reg.QueryStringValue(szValueName, vst_path, &size);
 			wchar_t *chrP = wcsrchr(vst_path, '.'); // removes extension
 			if(chrP) chrP[0] = 0;
 			lstrcat(vst_path, L".set");
@@ -188,10 +195,18 @@ static BOOL settings_save(VSTDriver * effect)
 	CRegKeyEx reg;
 
 	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WRITE); // falco fix: otherwise reg.QueryStringValue gets back an ACCESS_DENIED(5) error.
-	if (lResult == ERROR_SUCCESS){
-		lResult = reg.QueryStringValue(L"plugin",NULL,&size);
+	if (lResult == ERROR_SUCCESS) {		
+		
+		TCHAR szValueName[12] = L"plugin";
+		if (SelectedPluginIndex)
+		{
+			TCHAR szPostfix[4] = { 0 };
+			lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));
+		}		
+		lResult = reg.QueryStringValue(szValueName, NULL, &size);
+		
 		if (lResult == ERROR_SUCCESS) {
-			reg.QueryStringValue(L"plugin",vst_path,&size);
+			reg.QueryStringValue(szValueName, vst_path, &size);
 			wchar_t *chrP = wcsrchr(vst_path, '.'); // removes extension
 			if(chrP) chrP[0] = 0;
 			lstrcat(vst_path, L".set");
@@ -258,7 +273,7 @@ static void SaveDwordValue(LPCTSTR key, DWORD value)
 class CView1 : public CDialogImpl<CView1>
 {
 
-	CEdit vst_info;
+	CComboBox vst_info;
 	CComboBox vst_buffer_size, vst_sample_rate, vst_sample_format;
 	CButton vst_load, vst_configure, vst_showvst, vst_4chmode;
 	CStatic vst_vendor, vst_effect, file_info;
@@ -266,8 +281,8 @@ class CView1 : public CDialogImpl<CView1>
 	TCHAR vst_path[MAX_PATH];
 	HANDLE hbrBkgnd;
 	DWORD highDpiMode;
-	DWORD EnableSinglePort32ChMode;	
-
+	DWORD EnableSinglePort32ChMode;
+	
 	VSTDriver * effect;
 public:
 	enum { IDD = IDD_MAIN };
@@ -275,7 +290,8 @@ public:
 		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView1)
 		COMMAND_ID_HANDLER(IDC_VSTLOAD,OnButtonAdd)
 		COMMAND_ID_HANDLER(IDC_VSTCONFIG,OnButtonConfig)
-		COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)
+		COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)		
+		COMMAND_HANDLER(IDC_VSTLOADED, CBN_SELCHANGE, OnCbnSelchangeVSTLoaded)
 		COMMAND_HANDLER(IDC_SAMPLERATE, CBN_SELCHANGE, OnCbnSelchangeSamplerate)
 		COMMAND_HANDLER(IDC_BUFFERSIZE, CBN_SELCHANGE, OnCbnSelchangeBuffersize)
 		COMMAND_HANDLER(IDC_SAMPLEFORMAT, CBN_SELCHANGE, OnCbnSelchangeSampleformat)
@@ -289,7 +305,7 @@ public:
 		hbrBkgnd = NULL;
 		highDpiMode = 0;
 		EnableSinglePort32ChMode = (DWORD)-1;
-		usePrivateAsioOnly = 0;
+		usePrivateAsioOnly = 0;		
 
 		isWinNT4 = IsWinNT4();
 		isASIO = IsASIO();
@@ -319,9 +335,26 @@ public:
 		lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver");
 		if (lResult == ERROR_SUCCESS){
 
-			lResult = reg.QueryStringValue(L"plugin",NULL,&size);
+			for (int i = 0; i < 10; i++) {
+				TCHAR szValueName[8] = L"plugin";
+				if (i)
+				{
+					TCHAR szPostfix[2] = { 0 };
+					lstrcat(szValueName, _itow(i, szPostfix, 10));
+				}
+				lResult = reg.QueryStringValue(szValueName, NULL, &size);
+				if (lResult == ERROR_SUCCESS && size) {
+					wchar_t pluginPath[MAX_PATH] = { 0 };
+					reg.QueryStringValue(szValueName, pluginPath, &size);
+					vst_info.AddString(pluginPath);
+				}
+				else
+					vst_info.AddString(L"No VSTi loaded");
+			}
+
+			lResult = reg.QueryDWORDValue(L"SelectedPlugin", reg_value);
 			if (lResult == ERROR_SUCCESS) {
-				reg.QueryStringValue(L"plugin",vst_path,&size);
+				SelectedPluginIndex = (unsigned char)reg_value;				
 			}
 			lResult = reg.QueryDWORDValue(L"ShowVstDialog",reg_value);
 			if (lResult == ERROR_SUCCESS) {
@@ -366,14 +399,17 @@ public:
 			lResult = reg.QueryDWORDValue(L"UsePrivateAsioOnly", reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				usePrivateAsioOnly = reg_value;
-			}
-			
+			}			
 
 			reg.Close();
-			vst_info.SetWindowText(vst_path);
+			
+			vst_info.SetCurSel(SelectedPluginIndex);
+			vst_info.GetLBText(SelectedPluginIndex, vst_path);				
 			load_vst(vst_path);
 			if(effect) vst_configure.EnableWindow(effect->hasEditor());
 		}
+
+		vst_info.SetCurSel(SelectedPluginIndex);
 
 	}
 
@@ -397,26 +433,61 @@ public:
 
 	LRESULT OnButtonAdd(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/ )
 	{
-		TCHAR szFileName[MAX_PATH];
+		TCHAR szFileName[MAX_PATH] = {0};
 		LPCTSTR sFiles = 
 			L"VSTi instruments (*.dll)\0*.dll\0"
 			L"All Files (*.*)\0*.*\0\0";
+				 
+		vst_info.GetLBText(SelectedPluginIndex, szFileName);
+		if (wcscmp(L"No VSTi loaded", szFileName)) {
+			vst_path[0] = 0;
+			vst_info.GetLBText(SelectedPluginIndex, vst_path);
+		}
 		CFileDialog dlg( TRUE, NULL, vst_path, OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, sFiles);
 		if (dlg.DoModal() == IDOK)
 		{
+			szFileName[0] = 0;
 			lstrcpy(szFileName,dlg.m_szFileName);
 			if (load_vst(szFileName))
+			{				
+				vst_info.DeleteString(SelectedPluginIndex);
+				vst_info.InsertString(SelectedPluginIndex, szFileName);
+				vst_info.SetCurSel(SelectedPluginIndex);
+
+				// HKEY hKey, hSubKey;
+				long lResult;
+				CRegKeyEx reg;
+				lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);
+
+				TCHAR szValueName[12] = L"plugin";
+				if (SelectedPluginIndex)
+				{
+					TCHAR szPostfix[4] = { 0 };
+					lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));
+				}							
+				reg.SetStringValue(szValueName, szFileName);
+				
+				reg.Close();				
+				vst_configure.EnableWindow(effect->hasEditor());
+			}
+			else
 			{
 				// HKEY hKey, hSubKey;
 				long lResult;
 				CRegKeyEx reg;
 				lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);
-				reg.SetStringValue(L"plugin",szFileName);			   
+
+				TCHAR szValueName[12] = L"plugin";
+				if (SelectedPluginIndex)
+				{
+					TCHAR szPostfix[4] = { 0 };
+					lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));
+				}
+				reg.SetStringValue(szValueName, L"");
+
 				reg.Close();
-				vst_info.SetWindowText(szFileName);
-				vst_configure.EnableWindow(effect->hasEditor());
+				vst_configure.EnableWindow(false);
 			}
-			// do stuff
 		}
 		return 0;
 	}
@@ -433,6 +504,30 @@ public:
 		SaveDwordValue(L"Use4ChannelMode", vst_4chmode.GetCheck());
 		is4chMode = vst_4chmode.GetCheck() !=  BST_UNCHECKED;
 
+		return 0;
+	}
+
+	
+
+	LRESULT OnCbnSelchangeVSTLoaded(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{		
+		wchar_t pluginPath[MAX_PATH] = { 0 };
+		int selIndex = vst_info.GetCurSel();
+		vst_info.GetLBText(selIndex, pluginPath);
+		if (load_vst(pluginPath, false))
+		{
+			// HKEY hKey, hSubKey;
+			long lResult;
+			CRegKeyEx reg;
+			lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);
+			reg.SetDWORDValue(L"SelectedPlugin", selIndex);
+			reg.Close();
+			vst_configure.EnableWindow(effect->hasEditor());
+		}
+		else
+			vst_configure.EnableWindow(false);
+
+		SelectedPluginIndex = selIndex;
 		return 0;
 	}
 
@@ -512,7 +607,7 @@ public:
 		}
 	}
 
-	BOOL load_vst(TCHAR * szPluginPath)
+	BOOL load_vst(TCHAR * szPluginPath, bool checkValidity = true)
 	{
 		if(effect) free_vst(); // falco fix: otherwise an empty save occures at every start.
 		effect = new VSTDriver;
@@ -520,11 +615,14 @@ public:
 		{
 			delete effect;
 			effect = NULL;
-			if (szPluginPath && *szPluginPath)
-				MessageBox(L"This is NOT a VSTi synth!", L"VST MIDI Driver");
+			if (checkValidity && szPluginPath && *szPluginPath)
+				MessageBox(L"This is NOT a VSTi synth!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
 			vst_effect.SetWindowText(L"No VSTi loaded");
 			vst_vendor.SetWindowText(L"No VSTi loaded");		   
-			vst_info.SetWindowText(L"No VSTi loaded");
+			int selIndex = vst_info.GetCurSel();
+			vst_info.DeleteString(selIndex);
+			vst_info.InsertString(selIndex, L"No VSTi loaded");
+			vst_info.SetCurSel(selIndex);
 			return FALSE;
 		}
 
@@ -728,9 +826,8 @@ public:
 
 		file_info.SetWindowText(GetFileVersion(fileversionBuff));
 		vst_effect.SetWindowText(L"No VSTi loaded");
-		vst_vendor.SetWindowText(L"No VSTi loaded");		
-		vst_info.SetWindowText(L"No VSTi loaded");
-
+		vst_vendor.SetWindowText(L"No VSTi loaded");	
+		
 		vst_sample_rate.ResetContent();
 		vst_buffer_size.ResetContent();
 

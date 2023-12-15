@@ -14,6 +14,8 @@
 
 #define WM_ICONMSG  WM_APP + 1
 
+#define PORTMENUOFFSET  100
+
 #if(_WIN32_WINNT < 0x0500) 
 	#define SM_CXVIRTUALSCREEN  78
 	#define SM_CYVIRTUALSCREEN  79
@@ -57,6 +59,7 @@ namespace Response {
 		VstiIsNotAMidiSynth = 9,
 		CannotSetSampleRate = 10,
 		CommandUnknown = 12,
+		ResetRequest = 255,
 	};
 };
 
@@ -80,6 +83,7 @@ namespace Error {
 static wchar_t clientBitnessStr[8] = { 0 };
 static wchar_t outputModeStr[8] = { 0 };
 
+bool resetRequested = false;
 bool need_idle = false;
 bool idle_started = false;
 
@@ -405,13 +409,24 @@ static BOOL settings_save(AEffect* pEffect)
 	HKEY hKey;
 	wchar_t vst_path[MAX_PATH] = { 0 };
 	ULONG size;
+	
 	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
 	if (lResult == ERROR_SUCCESS)
 	{
-		lResult = RegQueryValueEx(hKey, L"plugin", NULL, &dwType, NULL, &size);
+		TCHAR szValueName[20] = L"plugin";
+		DWORD selIndex = 0;
+		size = sizeof(selIndex);
+		lResult = RegQueryValueEx(hKey, _T("SelectedPlugin"), NULL, &dwType, (LPBYTE)&selIndex, &size);
+		if (lResult == ERROR_SUCCESS && selIndex)
+		{
+			TCHAR szPostfix[12] = { 0 };
+			lstrcat(szValueName, _itow(selIndex, szPostfix, 10));
+		}
+
+		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
 		if (lResult == ERROR_SUCCESS && dwType == REG_SZ)
 		{
-			RegQueryValueEx(hKey, L"plugin", NULL, &dwType, (LPBYTE)vst_path, &size);
+			RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
 			wchar_t* chrP = wcsrchr(vst_path, '.'); // removes extension
 			if (chrP) chrP[0] = 0;
 			lstrcat(vst_path, L".set");
@@ -1097,18 +1112,108 @@ void showVstEditor(uint32_t portnum)
 	}
 }
 
+bool getPluginMenuItem(int itemIndex, wchar_t* result)
+{
+	long lResult;
+	DWORD dwType = REG_SZ;
+	HKEY hKey;
+	wchar_t vst_path[MAX_PATH] = { 0 };
+	wchar_t vst_title[MAX_PATH - 4] = { 0 };
+	ULONG size;
+
+	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
+	if (lResult == ERROR_SUCCESS)
+	{
+		TCHAR szValueName[8] = L"plugin";
+		TCHAR szPluginNum[2] = { 0 };
+		
+		if (itemIndex)
+		{			
+			lstrcat(szValueName, _itow(itemIndex, szPluginNum, 10));
+		}
+
+		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
+		if (lResult == ERROR_SUCCESS && dwType == REG_SZ)
+		{
+			lResult =  RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
+			if (lResult == ERROR_SUCCESS && size) 
+			{
+				RegCloseKey(hKey);
+				
+				GetFileTitle(vst_path, vst_title, MAX_PATH - 4);				
+				lstrcpy(result, _itow(itemIndex, szPluginNum, 10));
+				lstrcat(result, L". ");
+				lstrcat(result, vst_title);
+				return true;
+			}
+
+		}
+		RegCloseKey(hKey);
+	}
+
+	return false;
+
+}
+
+int getSelectedPluginIndex() 
+{
+	HKEY hKey;
+	int retRes = 0;
+
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WRITE, &hKey);
+	if (result == NO_ERROR)
+	{
+		DWORD size = sizeof(DWORD);
+		RegQueryValueEx(hKey, L"SelectedPlugin", NULL, NULL, (LPBYTE)&retRes, &size);		
+
+		RegCloseKey(hKey);
+	}
+
+	return retRes;
+}
+
+void setSelectedPluginIndex(int index) 
+{
+	HKEY hKey;
+
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WRITE, &hKey);
+	if (result == NO_ERROR)
+	{
+		DWORD size = sizeof(DWORD);
+		RegSetValueEx(hKey, L"SelectedPlugin", NULL, REG_DWORD, (LPBYTE)&index, size);		
+
+		RegCloseKey(hKey);
+	}
+
+	resetRequested = true;
+}
+
 LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	static NOTIFYICONDATA nIconData = { 0 };
 	static HMENU trayMenu = NULL;
+	static HMENU pluginMenu = NULL;
+	wchar_t tmpPath[MAX_PATH] = { 0 };
 
 	switch (msg)
 	{
 	case WM_CREATE:
 		{
+			pluginMenu = CreatePopupMenu();
+
+			for (int i = 0; i < 10; i++)
+				if (getPluginMenuItem(i, tmpPath)) {
+					if (getSelectedPluginIndex() == i)
+						AppendMenu(pluginMenu, MF_STRING | MF_ENABLED | MF_CHECKED, i, tmpPath);
+					else
+						AppendMenu(pluginMenu, MF_STRING | MF_ENABLED, i, tmpPath);
+				}
+			
 			trayMenu = CreatePopupMenu();
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 0, L"Port A VST Dialog");
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 1, L"Port B VST Dialog");
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORTMENUOFFSET, L"Port A VST Dialog");
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORTMENUOFFSET + 1, L"Port B VST Dialog");
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, L"");
+			AppendMenu(trayMenu, MF_POPUP, (UINT)pluginMenu, L"Switch Plugin");
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, L"");
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 11, L"Send GM Reset");
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 12, L"Send GS Reset");
@@ -1150,10 +1255,10 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				POINT cursorPoint;
 				bool hasEditor = pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor;
 				GetCursorPos(&cursorPoint);
-				CheckMenuItem(trayMenu, 0, MF_BYCOMMAND | (editorHandle[0] != 0 && IsWindowVisible(editorHandle[0]) ? MF_CHECKED : MF_UNCHECKED));
-				CheckMenuItem(trayMenu, 1, MF_BYCOMMAND | (editorHandle[1] != 0 && IsWindowVisible(editorHandle[1]) ? MF_CHECKED : MF_UNCHECKED));
-				EnableMenuItem(trayMenu, 0, MF_BYCOMMAND | (isPortActive[0] && hasEditor ? MF_ENABLED : MF_GRAYED));
-				EnableMenuItem(trayMenu, 1, MF_BYCOMMAND | (isPortActive[1] && hasEditor ? MF_ENABLED : MF_GRAYED));
+				CheckMenuItem(trayMenu, PORTMENUOFFSET, MF_BYCOMMAND | (editorHandle[0] != 0 && IsWindowVisible(editorHandle[0]) ? MF_CHECKED : MF_UNCHECKED));
+				CheckMenuItem(trayMenu, PORTMENUOFFSET + 1, MF_BYCOMMAND | (editorHandle[1] != 0 && IsWindowVisible(editorHandle[1]) ? MF_CHECKED : MF_UNCHECKED));
+				EnableMenuItem(trayMenu, PORTMENUOFFSET, MF_BYCOMMAND | (isPortActive[0] && hasEditor ? MF_ENABLED : MF_GRAYED));
+				EnableMenuItem(trayMenu, PORTMENUOFFSET + 1, MF_BYCOMMAND | (isPortActive[1] && hasEditor ? MF_ENABLED : MF_GRAYED));
 
 				SetForegroundWindow(trayWndHandle);
 				TrackPopupMenu(trayMenu, TPM_RIGHTBUTTON | (GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN), cursorPoint.x, cursorPoint.y, 0, hwnd, NULL);
@@ -1184,11 +1289,17 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			wchar_t versionBuff[MAX_PATH] = L"MIDI client: ";
 			MSGBOXPARAMS params = {0};
 
-			switch (wParam)
+			if (wParam >= 0 && wParam < 10)
 			{
-			case 0:
-			case 1:
-				showVstEditor((uint32_t)wParam);
+				setSelectedPluginIndex((int)wParam);
+				return 0;
+			}
+
+			switch (wParam)
+			{			
+			case PORTMENUOFFSET:
+			case PORTMENUOFFSET + 1:
+				showVstEditor((uint32_t)wParam - PORTMENUOFFSET);
 				return 0;
 			case 11:
 				sendSysExEvent((char*)gmReset, sizeof(gmReset));
@@ -1797,7 +1908,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				uint32_t count = get_code();
 				sample_pos += count;
 
-				put_code(Response::NoError);
+				if (!resetRequested)
+					put_code(Response::NoError);
+				else
+					put_code(Response::ResetRequest);
+
 
 				while (count)
 				{
@@ -1983,7 +2098,10 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				uint32_t count = get_code();
 				sample_pos += count;
 
-				put_code(Response::NoError);
+				if (!resetRequested)
+					put_code(Response::NoError);
+				else
+					put_code(Response::ResetRequest);
 
 				while (count)
 				{

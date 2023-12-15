@@ -324,6 +324,11 @@ Function .onInit
   !insertmacro UnSelectSection ${instsect4}   
   SectionSetText ${instsect4} ""
  ${Endif}
+ 
+ ${If} ${IsWinNT4}
+  !insertmacro UnSelectSection ${instsect2}   
+  SectionSetText ${instsect2} ""
+ ${Endif}
 
 !ifdef INNER
   WriteUninstaller "$%TEMP%\vstmididrvuninstall.exe"

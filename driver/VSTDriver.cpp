@@ -169,8 +169,6 @@ namespace Command {
 	};
 };
 
-const uint32_t NoError = 0;
-
 VSTDriver::VSTDriver() {
 	szPluginPath = NULL;
 	bInitialized = false;
@@ -234,16 +232,28 @@ error:
 void VSTDriver::load_settings(TCHAR * szPath) {
 	HKEY hKey;
 	long lResult;
-	DWORD dwType=REG_SZ;
-	DWORD dwSize=0;
+	DWORD dwType = REG_SZ;
+	DWORD dwSize = 0;
+	DWORD selIndex = 0;
 	if ( szPath || RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"),0,KEY_READ,&hKey) == ERROR_SUCCESS )
 	{
-		if ( !szPath ) lResult = RegQueryValueEx(hKey, _T("plugin"), NULL, &dwType, NULL, &dwSize);
+		TCHAR szValueName[20] = L"plugin";
+		if (!szPath)
+		{
+			dwSize = sizeof(selIndex);
+			lResult = RegQueryValueEx(hKey, L"SelectedPlugin", NULL, NULL, (LPBYTE)&selIndex, &dwSize);
+			if (lResult == ERROR_SUCCESS && selIndex)
+			{
+				TCHAR szPostfix[12] = { 0 };
+				lstrcat(szValueName, _itow(selIndex, szPostfix, 10));
+			}
+			lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &dwSize);
+		}
 		if ( szPath || ( lResult == ERROR_SUCCESS && dwType == REG_SZ ) ) {
 			if ( szPath ) dwSize = (DWORD)(_tcslen( szPath ) * sizeof(TCHAR));
 			szPluginPath = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 			if ( szPath ) _tcscpy( szPluginPath, szPath );
-			else RegQueryValueEx(hKey, _T("plugin"), NULL, &dwType, (LPBYTE) szPluginPath, &dwSize);
+			else RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE) szPluginPath, &dwSize);
 
 			uPluginPlatform = test_plugin_platform();
 
@@ -826,16 +836,16 @@ void VSTDriver::ProcessSysEx(DWORD dwPort, const unsigned char *sysexbuffer,int 
 	if ( code != NoError ) process_terminate();
 }
 
-void VSTDriver::RenderFloat(float * samples, int len, float volume, WORD channels) {
+uint32_t VSTDriver::RenderFloat(float * samples, int len, float volume, WORD channels) {
 	uint32_t opCode = channels == 2 ? Command::RenderAudioSamples : Command::RenderAudioSamples4channel; 
 	process_write_code( opCode );
 	process_write_code( len );
 
-	uint32_t code = process_read_code();
+	uint32_t code = process_read_code();	
 	if ( code != NoError ) {
 		process_terminate();
 		memset( samples, 0, sizeof(*samples) * len * uNumOutputs * channels / 2);
-		return;
+		return code;
 	}
 
 	while ( len ) {
@@ -846,15 +856,17 @@ void VSTDriver::RenderFloat(float * samples, int len, float volume, WORD channel
 		samples += len_to_do * uNumOutputs * channels / 2;
 		len -= len_to_do;
 	}
+
+	return 0;
 }
 
-void VSTDriver::Render(short * samples, int len, float volume, WORD channels)
+uint32_t VSTDriver::Render(short * samples, int len, float volume, WORD channels)
 {
 	float * float_out = (float *) _alloca( 512 * uNumOutputs * channels / 2 * sizeof(*float_out) );
 	while ( len > 0 )
 	{
 		int len_todo = len > 512 ? 512 : len;
-		RenderFloat( float_out, len_todo, volume, channels );
+		int result = RenderFloat( float_out, len_todo, volume, channels );		
 		for ( unsigned int i = 0; i < len_todo * uNumOutputs * channels / 2; i++ )
 		{
 			int sample = (int)( float_out[i] * 32768.f );
@@ -863,5 +875,8 @@ void VSTDriver::Render(short * samples, int len, float volume, WORD channels)
 			samples++;
 		}
 		len -= len_todo;
+		if (result == ResetRequest) return result;
 	}
+
+	return 0;
 }
