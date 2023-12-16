@@ -1133,10 +1133,10 @@ bool getPluginMenuItem(int itemIndex, wchar_t* result)
 		}
 
 		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
-		if (lResult == ERROR_SUCCESS && dwType == REG_SZ)
+		if (lResult == ERROR_SUCCESS && dwType == REG_SZ && size > 2)
 		{
 			lResult =  RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
-			if (lResult == ERROR_SUCCESS && size) 
+			if (lResult == ERROR_SUCCESS) 
 			{
 				RegCloseKey(hKey);
 				

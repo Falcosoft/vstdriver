@@ -343,7 +343,7 @@ public:
 					lstrcat(szValueName, _itow(i, szPostfix, 10));
 				}
 				lResult = reg.QueryStringValue(szValueName, NULL, &size);
-				if (lResult == ERROR_SUCCESS && size) {
+				if (lResult == ERROR_SUCCESS && size > 2) {
 					wchar_t pluginPath[MAX_PATH] = { 0 };
 					reg.QueryStringValue(szValueName, pluginPath, &size);
 					vst_info.AddString(pluginPath);
@@ -405,7 +405,7 @@ public:
 			
 			vst_info.SetCurSel(SelectedPluginIndex);
 			vst_info.GetLBText(SelectedPluginIndex, vst_path);				
-			load_vst(vst_path);
+			load_vst(vst_path, false);
 			if(effect) vst_configure.EnableWindow(effect->hasEditor());
 		}
 
@@ -469,6 +469,9 @@ public:
 				
 				reg.Close();				
 				vst_configure.EnableWindow(effect->hasEditor());
+				
+				BOOL dummy;
+				OnCbnSelchangeVSTLoaded(0, 0, 0, dummy);
 			}
 			else
 			{
