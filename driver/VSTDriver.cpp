@@ -518,7 +518,7 @@ bool VSTDriver::process_create()
 	sVendor[ vendor_string_length ] = 0;
 	sProduct[ product_string_length ] = 0;
 
-	if(uUniqueId == (uint32_t)'scva') isSCVA = true;
+	isSCVA = (uUniqueId == (uint32_t)'scva');		
 
 	return true;
 }

@@ -1542,8 +1542,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		vendor_version = (uint32_t)pEffect[0]->dispatcher(pEffect[0], effGetVendorVersion, 0, 0, 0, 0);
 		unique_id = pEffect[0]->uniqueID;
 
-		if (unique_id == (uint32_t)'scva') isSCVA = true;
-
+		isSCVA = (unique_id == (uint32_t)'scva');
+		
 		put_code(Response::NoError);
 		put_code(name_string_length);
 		put_code(vendor_string_length);
