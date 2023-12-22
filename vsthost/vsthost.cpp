@@ -9,7 +9,7 @@
 // #define LOG
 // #define MINIDUMP
 
-#define USER32DEF(f) (WINAPI *f)
+#define WIN32DEF(f) (WINAPI *f)
 #define LOADUSER32FUNCTION(f) *((void**)&f)=GetProcAddress(user32,#f)
 
 #define WM_ICONMSG  WM_APP + 1
@@ -80,6 +80,7 @@ namespace Error {
 	static wchar_t bitnessStr[8] =L" 32-bit"; 
 #endif	
 
+static NOTIFYICONDATA nIconData = { 0 };
 static wchar_t clientBitnessStr[8] = { 0 };
 static wchar_t outputModeStr[8] = { 0 };
 
@@ -88,12 +89,14 @@ bool need_idle = false;
 bool idle_started = false;
 
 static HINSTANCE user32 = NULL;
+static HINSTANCE kernel32 = NULL;
+static BOOL WIN32DEF(DynGetModuleHandleExW)(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE* phModule) = NULL;
 
 #if(_WIN32_WINNT < 0x0500) 
-	static HANDLE USER32DEF(AllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
+	static BOOL WIN32DEF(AllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
 #endif
 
-static HANDLE USER32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
+static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 static HANDLE highDpiMode = NULL;
 
 static HWND editorHandle[2] = { NULL };
@@ -934,7 +937,6 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 /*****************************************************************************/
 
 #include <dbghelp.h>
-#include "vsthost.h"
 typedef BOOL(__stdcall* PMiniDumpWriteDump)(IN HANDLE hProcess, IN DWORD ProcessId, IN HANDLE hFile, IN MINIDUMP_TYPE DumpType, IN CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam, OPTIONAL IN CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, OPTIONAL IN CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam OPTIONAL);
 static PMiniDumpWriteDump pMiniDumpWriteDump = NULL;
 static TCHAR szExeName[_MAX_PATH] = _T("");
@@ -1073,8 +1075,26 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 		Log(_T("Dumping! pMiniDumpWriteDump=%p\nszExeName=%s\n"), pMiniDumpWriteDump, szExeName);
 		MiniDump(param);
 #endif
-		TerminateProcess(GetCurrentProcess(), 0);
-		return 0;// never reached
+		static wchar_t buffer[MAX_PATH] = { 0 };
+		static wchar_t titleBuffer[MAX_PATH / 2] = { 0 };		
+		
+		if (DynGetModuleHandleExW)
+		{			
+			HMODULE hFaultyModule;
+			DynGetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)param->ExceptionRecord->ExceptionAddress, &hFaultyModule);
+			GetModuleFileName(hFaultyModule, buffer, MAX_PATH);
+			GetFileTitle(buffer, titleBuffer, MAX_PATH);
+			wsprintf(buffer, L"An unexpected error 0x%X occured in %ls.\r\nVST host bridge now exits.", param->ExceptionRecord->ExceptionCode, titleBuffer);
+		}
+		else 
+		{
+			wsprintf(buffer, L"An unexpected error 0x%X occured.\r\nVST host bridge now exits.", param->ExceptionRecord->ExceptionCode);
+		}		
+		
+		MessageBox(0, buffer, L"VST Midi Driver", MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
+		Shell_NotifyIcon(NIM_DELETE, &nIconData);
+		TerminateProcess(GetCurrentProcess(), 1);
+		return 1;
 	}
 }
 
@@ -1189,8 +1209,7 @@ void setSelectedPluginIndex(int index)
 }
 
 LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-	static NOTIFYICONDATA nIconData = { 0 };
+{	
 	static HMENU trayMenu = NULL;
 	static HMENU pluginMenu = NULL;
 	wchar_t tmpPath[MAX_PATH] = { 0 };
@@ -1439,7 +1458,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 #if(_WIN32_WINNT < 0x0500) 
 	if (user32)	LOADUSER32FUNCTION(AllowSetForegroundWindow);
-#endif	
+#endif
+	
+
+	kernel32 = GetModuleHandle(L"kernel32.dll");
+	if (kernel32) *((void**)&DynGetModuleHandleExW) = GetProcAddress(kernel32, "GetModuleHandleExW"); //unfortunately in case of newer VS versions GetModuleHandleExW is defined unconditionally in libloaderapi.h despite it is available only from WinXP...
 
 	null_file = CreateFile(_T("NUL"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 

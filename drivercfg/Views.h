@@ -469,7 +469,7 @@ public:
 				
 				reg.Close();				
 				vst_configure.EnableWindow(effect->hasEditor());
-				
+
 				BOOL dummy;
 				OnCbnSelchangeVSTLoaded(0, 0, 0, dummy);
 			}
@@ -693,6 +693,8 @@ public:
 	void ResetDriverSettings() 
 	{			
 		
+		BASS_ASIO_INFO info = { 0 };
+
 		wchar_t bufferText[8] = {0};
 		vst_buffer_size.GetLBText(vst_buffer_size.GetCurSel(), bufferText);
 
@@ -729,14 +731,11 @@ public:
 			CString selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
 			int selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);
-			int selectedOutputDriverInt = _wtoi(selectedOutputDriver.GetString());
-
-			wchar_t tmpBuff[64];
-			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, selectedOutputChannelInt + portBOffsetVal, selectedOutputChannelInt + portBOffsetVal + 1); 
-			vst_4chmode.SetWindowTextW(tmpBuff);
+			int selectedOutputDriverInt = _wtoi(selectedOutputDriver.GetString());						
 
 			if (BASS_ASIO_Init(selectedOutputDriverInt, 0))
-			{
+			{				
+				BASS_ASIO_GetInfo(&info);
 				
 				bool is48K = false;
 				if(BASS_ASIO_CheckRate(22050.0))vst_sample_rate.AddString(L"22050");
@@ -759,6 +758,11 @@ public:
 
 				BASS_ASIO_Free();
 			}
+
+			wchar_t tmpBuff[64];
+			DWORD realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
+			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);			
+			vst_4chmode.SetWindowTextW(tmpBuff);
 
 		}
 		else
@@ -813,6 +817,7 @@ public:
 	{
 		wchar_t fileversionBuff[32] = { 0 };
 		effect = NULL;
+		BASS_ASIO_INFO info = {0};		
 
 		vst_sample_format = GetDlgItem(IDC_SAMPLEFORMAT);
 		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
@@ -878,6 +883,8 @@ public:
 
 			if (BASS_ASIO_Init(selectedOutputDriverInt, 0))	
 			{
+				BASS_ASIO_GetInfo(&info);
+
 				bool is48K = false;
 				if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
 				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
@@ -937,7 +944,8 @@ public:
 		wchar_t tmpBuff[64];
 		if (usingASIO) 
 		{			
-			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, selectedOutputChannelInt + portBOffsetVal, selectedOutputChannelInt + portBOffsetVal + 1); 
+			DWORD realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
+			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
 			vst_4chmode.SetWindowTextW(tmpBuff);				
 		}
 		
