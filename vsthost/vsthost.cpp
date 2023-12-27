@@ -81,6 +81,9 @@ namespace Error {
 #endif	
 
 static NOTIFYICONDATA nIconData = { 0 };
+static HMENU trayMenu = NULL;
+static HMENU pluginMenu = NULL;
+
 static wchar_t clientBitnessStr[8] = { 0 };
 static wchar_t outputModeStr[8] = { 0 };
 
@@ -1075,11 +1078,13 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 		Log(_T("Dumping! pMiniDumpWriteDump=%p\nszExeName=%s\n"), pMiniDumpWriteDump, szExeName);
 		MiniDump(param);
 #endif
-		static wchar_t buffer[MAX_PATH] = { 0 };
-		static wchar_t titleBuffer[MAX_PATH / 2] = { 0 };		
+		if (!trayMenu) return 1; // Do not disturb users with error messages caused by faulty plugins when driver is closing anyway
+
+		static wchar_t buffer[MAX_PATH] = { 0 };			
 		
 		if (DynGetModuleHandleExW)
 		{			
+			static wchar_t titleBuffer[MAX_PATH / 2] = { 0 };	
 			HMODULE hFaultyModule;
 			DynGetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)param->ExceptionRecord->ExceptionAddress, &hFaultyModule);
 			GetModuleFileName(hFaultyModule, buffer, MAX_PATH);
@@ -1093,6 +1098,7 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 		
 		MessageBox(0, buffer, L"VST Midi Driver", MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
 		Shell_NotifyIcon(NIM_DELETE, &nIconData);
+		DestroyMenu(trayMenu);		
 		TerminateProcess(GetCurrentProcess(), 1);
 		return 1;
 	}
@@ -1209,9 +1215,7 @@ void setSelectedPluginIndex(int index)
 }
 
 LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{	
-	static HMENU trayMenu = NULL;
-	static HMENU pluginMenu = NULL;
+{		
 	wchar_t tmpPath[MAX_PATH] = { 0 };
 
 	switch (msg)
@@ -1262,6 +1266,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		{
 			Shell_NotifyIcon(NIM_DELETE, &nIconData);
 			DestroyMenu(trayMenu);
+			trayMenu = NULL;
 			PostQuitMessage(0);
 			return 0;
 		}
