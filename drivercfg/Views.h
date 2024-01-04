@@ -119,10 +119,11 @@ static BOOL IsASIO()
 		{
 			LOADBASSASIOFUNCTION(BASS_ASIO_AddDevice);
 
-			::SetCurrentDirectory(installpath);
+			char asio2WasapiAnsiPath[MAX_PATH] = { 0 };			
+			WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)asio2WasapiPath, -1, (char*)asio2WasapiAnsiPath, MAX_PATH, NULL, NULL);
 
 			static const GUID CLSID_ASIO2WASAPI_DRIVER = { 0x3981c4c8, 0xfe12, 0x4b0f, { 0x98, 0xa0, 0xd1, 0xb6, 0x67, 0xbd, 0xa6, 0x15 } };
-			BASS_ASIO_AddDevice(&CLSID_ASIO2WASAPI_DRIVER, "ASIO2WASAPI.dll", "VSTDriver-ASIO2WASAPI");
+			BASS_ASIO_AddDevice(&CLSID_ASIO2WASAPI_DRIVER, asio2WasapiAnsiPath, "VSTDriver-ASIO2WASAPI");
 		
 		}
 
