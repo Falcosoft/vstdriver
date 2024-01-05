@@ -1,4 +1,4 @@
-VST DirectMusic/WinMM Driver
+﻿VST WinMM Driver
 ********************************
 
 First-time Installation
@@ -18,6 +18,8 @@ License
 -------
 
 Copyright (C) 2011 Chris Moeller, Brad Miller
+Copyright (c) 2021 Hermann Seib
+Copyright (C) 2023 Zoltán Bacskó (Falcosoft)
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public

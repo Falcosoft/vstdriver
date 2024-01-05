@@ -20,7 +20,9 @@ Parts Copyright (c) 2023 Zoltán Bacsko (Falcosoft)
 Currently, the following development environments are supported:  
 Visual Studio 2008, Visual Studio 2017-2022 
 In theory, VS2010-VS2015 should work, too, but I didn't investigate that.
+
 Falcosoft: Visual studio 2005 also works with the vstdriver.08.sln solution file.
+Visual Studio 2005 can be used to build WinNT4 SP6 compatible version of the driver.
 
 ### Additional requirements
 
@@ -34,23 +36,11 @@ After having fetched the plug-in, copy its contents into the NSIS installation d
 
 Then, from the NSIS installation directory, you have to copy the contents of the Examples\Plugin\nsis folder into this project's ummidiplg\nsis subdirectory. Since they may vary between NSIS installer versions, I didn't want to include them directly.
 
-#### Windows Template Library 9.0 or 9.1
-See https://sourceforge.net/projects/wtl/  
-I've put it into the subdirectory wtl in this project; if you want to use it in an unmodified form,
-copy the WTL contents to this directory. If you already got it installed somewhere else, you need to
-modify the project settings of the drivercfg sub-project.
-
-#### The BASS MIDI Library
-Only necessary if you want to use a newer version; the current one (as of 2021-12-25) is already
-available in the external_packages subdirectory. The latest version of BASS can always be found at the BASS website:  
-	www.un4seen.com  
-Both the bass library and the basswasapi library are needed.
-
-## Known Problems
-
-I am not sure whether this is really based on the latest kode54 version; there's an installer available on the Internet that seems to have been built in November 2018. Unfortunately, authoritative sources for that cannot be found.
 
 ## Falcosoft:
+Windows Template Library 9.1 headers have been integrated to the project since they work with all versions of Visual Studio
+and can be used to compile a driver that is compatible with all supported Windows versions (from WinNT4 SP6 to Win11). 
+
 The version forked by Arakula (Hermann Seib) used the Bass/Basswasapi libraries to produce audio.
 There were 2 serious problems with this approach:
 
