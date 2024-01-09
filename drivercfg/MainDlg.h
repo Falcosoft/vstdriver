@@ -46,31 +46,15 @@ BOOL IsWinVistaOrWin7()
 
 BOOL IsCoolSoftMidiMapperInstalled() 
 {
-	CRegKeyEx reg;
-	CString value;
-	BOOL retValue = FALSE;
+	MIDIOUTCAPS Caps;
+	ZeroMemory(&Caps, sizeof(Caps));
+	MMRESULT result = midiOutGetDevCaps(0, &Caps, sizeof(Caps));
+	if (result != MMSYSERR_NOERROR)
+		return FALSE;
+	if (!wcscmp(Caps.szPname, L"CoolSoft MIDIMapper")) 
+		return TRUE;
 
-	long result = reg.Open(HKEY_LOCAL_MACHINE, L"Software\\CoolSoft MIDIMapper", KEY_READ | KEY_WOW64_64KEY);
-	if (result != NO_ERROR)
-	{
-		return retValue;
-	}
-
-	ULONG size;
-
-	result = reg.QueryStringValue(L"path", NULL, &size);
-	if (result == NO_ERROR && size > 0)
-	{
-		reg.QueryStringValue(L"path", value.GetBuffer(size), &size);
-		value.ReleaseBuffer();
-		DWORD dwAttrib = GetFileAttributes(value.GetString());
-		retValue = (dwAttrib != INVALID_FILE_ATTRIBUTES && (dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
-	}
-
-	reg.Close();
-
-	return retValue;
-
+	return FALSE;
 }
 
 class CMainDlg : public CDialogImpl<CMainDlg>, public CUpdateUI<CMainDlg>,
