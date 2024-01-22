@@ -242,17 +242,17 @@ Section "ASIO Output (BassASIO)" instsect2
     ;installer running on 64bit OS
     ;===========================================================================
     SetOutPath "$WINDIR\SysWow64\vstmididrv"   
-    File output\bassasio.dll   
+    File output\bassasio_vstdrv.dll   
         
     SetOutPath "$WINDIR\SysNative\vstmididrv" 
-    File output\64\bassasio.dll   
+    File output\64\bassasio_vstdrv.dll   
        
   ${Else}
     ;===========================================================================
     ;installer running on 32bit OS
     ;===========================================================================
     SetOutPath "$WINDIR\System32\vstmididrv"   
-    File output\bassasio.dll
+    File output\bassasio_vstdrv.dll
         
   ${EndIf} 
   
@@ -267,17 +267,17 @@ Section "ASIO2WASAPI Plugin" instsect3
     ;installer running on 64bit OS
     ;===========================================================================
     SetOutPath "$WINDIR\SysWow64\vstmididrv"   
-   	File output\ASIO2WASAPI.dll 
+   	File output\ASIO2WASAPI_vstdrv.dll 
        
     SetOutPath "$WINDIR\SysNative\vstmididrv" 
-    File output\64\ASIO2WASAPI.dll 
+    File output\64\ASIO2WASAPI_vstdrv.dll 
    
   ${Else}
     ;===========================================================================
     ;installer running on 32bit OS
     ;===========================================================================
     SetOutPath "$WINDIR\System32\vstmididrv"   
-   	File output\ASIO2WASAPI.dll  
+   	File output\ASIO2WASAPI_vstdrv.dll  
     
   ${EndIf}
 
@@ -413,15 +413,15 @@ Section "un.Driver files/settings" uninstsect2
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstbridgeapp32.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstbridgeapp64.exe
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bassasio.dll 
-     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\ASIO2WASAPI.dll 
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bassasio_vstdrv.dll 
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\ASIO2WASAPI_vstdrv.dll 
      RMDir /r /REBOOTOK $WINDIR\SysWow64\vstmididrv 
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv.dll     
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstmididrvcfg.exe 
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstbridgeapp32.exe
      ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\vstbridgeapp64.exe
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\bassasio.dll  
-     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\ASIO2WASAPI.dll 
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\bassasio_vstdrv.dll  
+     ${DeleteOnReboot} $WINDIR\SysNative\vstmididrv\ASIO2WASAPI_vstdrv.dll 
      RMDir /r /REBOOTOK $WINDIR\SysNative\vstmididrv 
    ${Endif}
  ${Else}
@@ -437,8 +437,8 @@ Section "un.Driver files/settings" uninstsect2
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvcfg.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstbridgeapp32.exe
-     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bassasio.dll 
-     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\ASIO2WASAPI.dll 
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bassasio_vstdrv.dll 
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\ASIO2WASAPI_vstdrv.dll 
      RMDir /r /REBOOTOK $WINDIR\System32\vstmididrv
    ${Endif}
  ${EndIf}

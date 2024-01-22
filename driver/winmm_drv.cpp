@@ -24,7 +24,7 @@ extern "C" { bool isSCVA = false; }
 #define MAX_DRIVERS 2
 #define MAX_CLIENTS 8 // Per driver
 
-static VSTMIDIDRV::MidiSynth &midiSynth = VSTMIDIDRV::MidiSynth::getInstance();
+static VSTMIDIDRV::MidiSynth& midiSynth = VSTMIDIDRV::MidiSynth::getInstance();
 static bool synthOpened = false;
 //static HWND hwnd = NULL;
 static int driverCount;
@@ -287,7 +287,7 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 	case MODM_OPEN:
 		if (!synthOpened) {
 			if (midiSynth.Init(uDeviceID) != 0) return MMSYSERR_ERROR;
-			synthOpened = true;
+			synthOpened = true;			
 		}
 		else if (!drivers[uDeviceID].clientCount) {
 			midiSynth.InitDialog(uDeviceID);
@@ -347,7 +347,7 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 		if ((midiHdr->dwFlags & MHDR_PREPARED) == 0) {
 			return MIDIERR_UNPREPARED;
 		}
-		midiSynth.PlaySysex(uDeviceID, (unsigned char*)midiHdr->lpData, midiHdr->dwBufferLength);
+		midiSynth.PlaySysEx(uDeviceID, (unsigned char*)midiHdr->lpData, midiHdr->dwBufferLength);
 		midiHdr->dwFlags |= MHDR_DONE;
 		midiHdr->dwFlags &= ~MHDR_INQUEUE;
 		DoCallback(uDeviceID, dwUser, MOM_DONE, dwParam1, NULL);

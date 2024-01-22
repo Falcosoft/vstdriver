@@ -67,14 +67,14 @@ $(TARGET): vstmididrv.mak \
         output\vstmididrv.dll \
         output\vstbridgeapp32.exe \
         output\vstmididrvcfg.exe \
-        output\bassasio.dll \
-        output\ASIO2WASAPI.dll \
+        output\bassasio_vstdrv.dll \
+        output\ASIO2WASAPI_vstdrv.dll \
         output\cpltasks32.xml \
         output\cpltasks64.xml \
         output\vstmididrvcfg.cpl \
         output\64\vstmididrv.dll \
-        output\64\bassasio.dll \
-        output\64\ASIO2WASAPI.dll \
+        output\64\bassasio_vstdrv.dll \
+        output\64\ASIO2WASAPI_vstdrv.dll \
         output\64\vstbridgeapp64.exe \
         output\64\vstmididrvcfg.exe 
         $(MKNSIS) vstmididrv.nsi
@@ -83,17 +83,17 @@ $(TARGET): vstmididrv.mak \
 # subtargets that need manual copying
 #------------------------------------------------------------------------------
 
-output\bassasio.dll: external_packages\lib\bassasio.dll
-        @copy /y external_packages\lib\bassasio.dll output\bassasio.dll
+output\bassasio_vstdrv.dll: external_packages\lib\bassasio_vstdrv.dll
+        @copy /y external_packages\lib\bassasio_vstdrv.dll output\bassasio_vstdrv.dll
 
-output\ASIO2WASAPI.dll: external_packages\lib\ASIO2WASAPI.dll
-        @copy /y external_packages\lib\ASIO2WASAPI.dll output\ASIO2WASAPI.dll
+output\ASIO2WASAPI_vstdrv.dll: external_packages\lib\ASIO2WASAPI_vstdrv.dll
+        @copy /y external_packages\lib\ASIO2WASAPI_vstdrv.dll output\ASIO2WASAPI_vstdrv.dll
 
-output\64\bassasio.dll: external_packages\lib64\bassasio.dll
-        @copy /y external_packages\lib64\bassasio.dll output\64\bassasio.dll
+output\64\bassasio_vstdrv.dll: external_packages\lib64\bassasio_vstdrv.dll
+        @copy /y external_packages\lib64\bassasio_vstdrv.dll output\64\bassasio_vstdrv.dll
 
-output\64\ASIO2WASAPI.dll: external_packages\lib64\ASIO2WASAPI.dll
-        @copy /y external_packages\lib64\ASIO2WASAPI.dll output\64\ASIO2WASAPI.dll
+output\64\ASIO2WASAPI_vstdrv.dll: external_packages\lib64\ASIO2WASAPI_vstdrv.dll
+        @copy /y external_packages\lib64\ASIO2WASAPI_vstdrv.dll output\64\ASIO2WASAPI_vstdrv.dll
 
 output\cpltasks32.xml: drivercfg\cpltasks32.xml
         @copy /y drivercfg\cpltasks32.xml output\cpltasks32.xml

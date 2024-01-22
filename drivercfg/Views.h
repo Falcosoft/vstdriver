@@ -98,7 +98,7 @@ static BOOL IsASIO()
 
 	// Load Bass Asio
 	lstrcpy(bassasiopath, installpath);
-	lstrcat(bassasiopath, L"\\bassasio.dll");
+	lstrcat(bassasiopath, L"\\bassasio_vstdrv.dll");
 	bassasio = LoadLibrary(bassasiopath);        
 
 	if (bassasio)
@@ -114,7 +114,7 @@ static BOOL IsASIO()
 		LOADBASSASIOFUNCTION(BASS_ASIO_CheckRate);
 				
 		lstrcpy(asio2WasapiPath, installpath);
-		lstrcat(asio2WasapiPath, L"\\ASIO2WASAPI.dll");
+		lstrcat(asio2WasapiPath, L"\\ASIO2WASAPI_vstdrv.dll");
 		if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
 		{
 			LOADBASSASIOFUNCTION(BASS_ASIO_AddDevice);

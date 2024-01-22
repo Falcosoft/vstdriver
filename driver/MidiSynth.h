@@ -63,6 +63,8 @@ private:
 	VSTDriver * vstDriver;
 
 	unsigned int MillisToFrames(unsigned int millis);
+	bool PreprocessMIDI(unsigned int& uDeviceID, DWORD& msg);
+	bool PreprocessSysEx(unsigned int& uDeviceID, unsigned char* bufpos, const DWORD len);
 	void LoadSettings();
 
 	MidiSynth();
@@ -81,9 +83,9 @@ public:
 	void Close();
 	int Reset(unsigned uDeviceID);	
 	void Render(short *bufpos, DWORD totalFrames);
-	void RenderFloat(float *bufpos, DWORD totalFrames);	
+	void RenderFloat(float *bufpos, DWORD totalFrames);		
 	void PushMIDI(unsigned uDeviceID, DWORD msg);
-	void PlaySysex(unsigned uDeviceID, unsigned char *bufpos, DWORD len);
+	void PlaySysEx(unsigned uDeviceID, unsigned char *bufpos, DWORD len);	
 	void SetVolume(unsigned uDeviceID, float volume);
 };
 

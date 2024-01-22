@@ -76,7 +76,7 @@ namespace VSTMIDIDRV{
 			return 0;
 		}
 
-		DWORD PutSysex(DWORD port, unsigned char * sysex, DWORD sysex_len, DWORD timestamp)	{			
+		DWORD PutSysEx(DWORD port, unsigned char * sysex, DWORD sysex_len, DWORD timestamp)	{			
 			unsigned int newEndpos = endpos;
 			void * sysexCopy;
 
@@ -444,8 +444,8 @@ namespace VSTMIDIDRV{
 
 #ifdef _DEBUG
 			std::cout << "VST MIDI Driver: GetPos()" << playPositionSnapshot << "\n";
-#endif
-
+#endif				
+		
 			return playPositionSnapshot;
 		}
 
@@ -485,6 +485,11 @@ namespace VSTMIDIDRV{
 
 	}waveOut;
 
+	static DWORD MyMin(DWORD a, DWORD b) //min macro calls bassAsioOut.GetPos() 2 times...
+	{
+		if (a < b) return a;
+		return b;
+	}
 
 	static class BassAsioOut
 	{
@@ -495,6 +500,7 @@ namespace VSTMIDIDRV{
 		TCHAR* outputDriver;
 
 		bool usingFloat;
+		bool usingQPC;
 		DWORD buflen;
 		WORD channels;
 		unsigned int samplerate;
@@ -519,7 +525,7 @@ namespace VSTMIDIDRV{
 			lstrcat(installPath, _T("\\vstmididrv\\"));
 
 			lstrcpy(bassAsioPath, installPath);
-			lstrcat(bassAsioPath, _T("bassasio.dll"));
+			lstrcat(bassAsioPath, _T("bassasio_vstdrv.dll"));
 		}
 
 		bool LoadBassAsio()
@@ -529,7 +535,7 @@ namespace VSTMIDIDRV{
 			if (!bassAsio) return false;	
 						
 			lstrcpy(asio2WasapiPath, installPath);
-			lstrcat(asio2WasapiPath, _T("ASIO2WASAPI.dll"));
+			lstrcat(asio2WasapiPath, _T("ASIO2WASAPI_vstdrv.dll"));
 			if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
 			{
 				LOADBASSASIOFUNCTION(BASS_ASIO_AddDevice);
@@ -778,15 +784,17 @@ namespace VSTMIDIDRV{
 		{
 			if (bassAsio)
 			{
-				queryPerformanceUnit = 0.0;
+				//queryPerformanceUnit = 0.0;
 				LARGE_INTEGER tmpFreq;
 				if(QueryPerformanceFrequency(&tmpFreq)) 
 				{
+					usingQPC = true;
 					queryPerformanceUnit = 1.0 / (tmpFreq.QuadPart * 0.001);
 					QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&startTimeQp));
 				}
 				else 
 				{
+					usingQPC = false;
 					startTime = timeGetTime();
 				}
 
@@ -811,7 +819,7 @@ namespace VSTMIDIDRV{
 			if (bassAsio)
 			{				
 				BASS_ASIO_ChannelReset(FALSE, -1, BASS_ASIO_RESET_PAUSE);
-				if(queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&startTimeQp));
+				if(usingQPC) QueryPerformanceCounter(const_cast<LARGE_INTEGER *>(&startTimeQp));
 				else startTime = timeGetTime();
 			}
 
@@ -820,16 +828,21 @@ namespace VSTMIDIDRV{
 
 		DWORD GetPos()
 		{
-			DWORD res;
-			if(queryPerformanceUnit != 0.0)
-			{
+			int res;
+			if(usingQPC)
+			{				
+				LONGLONG tmpStartTimeQp = startTimeQp.QuadPart;
 				LARGE_INTEGER tmpCounter;
 				QueryPerformanceCounter(&tmpCounter);
-				res = DWORD((tmpCounter.QuadPart - startTimeQp.QuadPart) * queryPerformanceUnit * (samplerate * 0.001));
+				res = int((tmpCounter.QuadPart - tmpStartTimeQp) * queryPerformanceUnit * (samplerate * 0.001));
 			}
-			else res = DWORD((timeGetTime() - startTime) * (samplerate * 0.001));
-			//std::cout << "VST MIDI Driver: GetPos(): " << res << "\n";
-			return res;
+			else res = int((timeGetTime() - startTime) * (samplerate * 0.001));
+
+#ifdef _DEBUG
+			std::cout << "VST MIDI Driver: GetPos(): " << res << "\n";
+#endif			
+			if (res < 0) res = 0; // negative values can occur with Athlon64 X2 without dual core optimizations...
+			return (DWORD)res;
 		}
 
 		static DWORD CALLBACK AsioProc(BOOL input, DWORD channel, void* buffer, DWORD length, void* user)
@@ -844,7 +857,7 @@ namespace VSTMIDIDRV{
 				midiSynth.Render((short*)buffer, length / (sizeof(short) * _this->channels));				
 			}
 
-			if (_this->queryPerformanceUnit != 0.0) QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&_this->startTimeQp));
+			if (_this->usingQPC) QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&_this->startTimeQp));
 			else _this->startTime = timeGetTime();
 			
 			return length;
@@ -1157,26 +1170,23 @@ namespace VSTMIDIDRV{
 
 		wResult = useAsio ? bassAsioOut.Resume() : waveOut.Resume();
 		return wResult;
-	}
+	}	
 
-	void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg){
-
-		synthMutex.Enter();	
-
+	bool MidiSynth::PreprocessMIDI(unsigned int& uDeviceID, DWORD& msg){
 		//// support for F5 xx port select message (FSMP can send this message)
-		if((unsigned char)(msg) == 0xF5 && enableSinglePort32ChMode) {
+		if ((unsigned char)(msg) == 0xF5 && enableSinglePort32ChMode) {
 			if (!isSinglePort32Ch) {
 
-				vstDriver->setSinglePort32ChMode();				
-				InitDialog((unsigned int)!uDeviceID); 
+				vstDriver->setSinglePort32ChMode();
+				InitDialog((unsigned int)!uDeviceID);
 				isSinglePort32Ch = true;
 			}
 			//F5 xx command uses 1 as first port, but we use 0 and we have only A/B ports. This way 1 -> 0, 2 -> 1, 3 -> 0, 4 -> 1 and so on. 
 			virtualPortNum = !(((unsigned char*)&msg)[1] & 1);
-
-			synthMutex.Leave();
-			return;
+			
+			return false;
 		}
+
 		if (isSinglePort32Ch) uDeviceID = virtualPortNum;
 		////
 
@@ -1184,38 +1194,32 @@ namespace VSTMIDIDRV{
 		if ((unsigned char)msg >= 0x80 && (unsigned char)msg <= 0xEF) {
 			statusBuff[uDeviceID] = (unsigned char)msg; //store status in case of normal Channel/Voice messages.
 		}
-		else if((unsigned char)msg < 0x80 && statusBuff[uDeviceID] >= 0x80 && statusBuff[uDeviceID] <= 0xEF) {
+		else if ((unsigned char)msg < 0x80 && statusBuff[uDeviceID] >= 0x80 && statusBuff[uDeviceID] <= 0xEF) {
 			msg = (msg << 8) | statusBuff[uDeviceID]; //expand messages without status to full messages.								
 		}
-		else if((unsigned char)msg > 0xF0 && (unsigned char)msg < 0xF7) {
+		else if ((unsigned char)msg > 0xF0 && (unsigned char)msg < 0xF7) {
 			statusBuff[uDeviceID] = 0;  //clear running status in case of System Common messages				
-		}		
-		else if ((unsigned char)msg < 0x80) 
-		{			
-			synthMutex.Leave();
-			return; //no valid status always means malformed Midi message 
 		}
-			
+		else if ((unsigned char)msg < 0x80)
+		{			
+			return false; //no valid status always means malformed Midi message 
+		}
+
 
 		////falco: midiOutSetVolume support
 		if (midiVol[uDeviceID] != 1.0f) {
-			if ((msg & 0xF0) == 0x90 ) {				
-				unsigned char velocity = ((unsigned char*)&msg)[2]; 
-				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : max(int(velocity * midiVol[uDeviceID]), 1);		  
-				((unsigned char*)&msg)[2] = velocity;				
+			if ((msg & 0xF0) == 0x90) {
+				unsigned char velocity = ((unsigned char*)&msg)[2];
+				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : max(int(velocity * midiVol[uDeviceID]), 1);
+				((unsigned char*)&msg)[2] = velocity;
 			}
 		}
-		////			
+		////
 
-		if (useAsio) midiStream.PutMessage(uDeviceID, msg, min(bassAsioOut.GetPos() + midiLatency, bufferSize - 1));
-		else midiStream.PutMessage(uDeviceID, msg, (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize));
-
-		synthMutex.Leave();
+		return true;		
 	}
 
-	void MidiSynth::PlaySysex(unsigned uDeviceID, unsigned char *bufpos, DWORD len){
-
-		synthMutex.Enter();
+	bool MidiSynth::PreprocessSysEx(unsigned int& uDeviceID, unsigned char* bufpos, const DWORD len) {
 
 		//// support for F5 xx port select message (FSMP can send this message)
 		if (bufpos[0] == 0xF5 && len > 1 && enableSinglePort32ChMode) {
@@ -1228,19 +1232,50 @@ namespace VSTMIDIDRV{
 			//F5 xx command uses 1 as first port, but we use 0 and we have only A/B ports. This way 1 -> 0, 2 -> 1, 3 -> 0, 4 -> 1 and so on.
 			virtualPortNum = !(bufpos[1] & 1);
 
-			synthMutex.Leave();
-			return;
-		}		
+			return false;
+		}
+
 		if (isSinglePort32Ch) uDeviceID = virtualPortNum;
 		////
 
 		statusBuff[uDeviceID] = 0; //clear running status also in case of SysEx messages
+		
+		return true;
+	}
+	
+	void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg){
 
-		if (useAsio) midiStream.PutSysex(uDeviceID, bufpos, len, min(bassAsioOut.GetPos() + midiLatency, bufferSize - 1));
-		else midiStream.PutSysex(uDeviceID, bufpos, len, (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize));
+		synthMutex.Enter();	
+		
+		if (!PreprocessMIDI(uDeviceID, msg))
+		{
+			synthMutex.Leave();
+			return;
+		}
+		DWORD tmpTimestamp = useAsio ? MyMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
+
+		midiStream.PutMessage(uDeviceID, msg, tmpTimestamp);		
 
 		synthMutex.Leave();
+		
 	}
+
+	void MidiSynth::PlaySysEx(unsigned uDeviceID, unsigned char *bufpos, DWORD len){
+
+		synthMutex.Enter();
+		
+		if(!PreprocessSysEx(uDeviceID, bufpos, len))
+		{
+			synthMutex.Leave();
+			return;
+		}
+
+		DWORD tmpTimestamp = useAsio ? MyMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
+
+		midiStream.PutSysEx(uDeviceID, bufpos, len, tmpTimestamp);
+
+		synthMutex.Leave();
+	}	
 
 	void MidiSynth::SetVolume(unsigned uDeviceID, float volume){
 		midiVol[uDeviceID] = volume;
