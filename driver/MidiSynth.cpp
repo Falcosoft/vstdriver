@@ -36,7 +36,7 @@ extern "C" { extern bool isSCVA; };
 namespace VSTMIDIDRV{
 
 	static MidiSynth &midiSynth = MidiSynth::getInstance();
-
+	
 	static class MidiStream{
 	private:
 		static const unsigned int maxPos = 1024;
@@ -175,7 +175,19 @@ namespace VSTMIDIDRV{
 			LeaveCriticalSection(&cCritSec);
 		}
 	}synthMutex;
-			
+
+	
+	inline static DWORD DwordMin(DWORD a, DWORD b) //min macro calls bassAsioOut.GetPos() 2 times that can cause problems...
+	{
+		if (a < b) return a;
+		return b;
+	}
+
+	inline static DWORD DwordMax(DWORD a, DWORD b)
+	{
+		if (a > b) return a;
+		return b;
+	}
 
 	static DWORD GetDwordData (LPCWSTR valueName, DWORD defaultValue) 
 	{
@@ -198,6 +210,7 @@ namespace VSTMIDIDRV{
 
 		return retResult;
 	}
+
 
 	static class WaveOutWin32{
 	private:
@@ -484,12 +497,7 @@ namespace VSTMIDIDRV{
 		}
 
 	}waveOut;
-
-	static DWORD MyMin(DWORD a, DWORD b) //min macro calls bassAsioOut.GetPos() 2 times...
-	{
-		if (a < b) return a;
-		return b;
-	}
+	
 
 	static class BassAsioOut
 	{
@@ -1210,7 +1218,7 @@ namespace VSTMIDIDRV{
 		if (midiVol[uDeviceID] != 1.0f) {
 			if ((msg & 0xF0) == 0x90) {
 				unsigned char velocity = ((unsigned char*)&msg)[2];
-				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : max(int(velocity * midiVol[uDeviceID]), 1);
+				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : (unsigned char)DwordMax(DWORD(velocity * midiVol[uDeviceID]), 1);
 				((unsigned char*)&msg)[2] = velocity;
 			}
 		}
@@ -1252,7 +1260,7 @@ namespace VSTMIDIDRV{
 			synthMutex.Leave();
 			return;
 		}
-		DWORD tmpTimestamp = useAsio ? MyMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
+		DWORD tmpTimestamp = useAsio ? DwordMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
 
 		midiStream.PutMessage(uDeviceID, msg, tmpTimestamp);		
 
@@ -1270,7 +1278,7 @@ namespace VSTMIDIDRV{
 			return;
 		}
 
-		DWORD tmpTimestamp = useAsio ? MyMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
+		DWORD tmpTimestamp = useAsio ? DwordMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
 
 		midiStream.PutSysEx(uDeviceID, bufpos, len, tmpTimestamp);
 
