@@ -9,6 +9,8 @@
 #define BASSASIODEF(f) (WINAPI *f)
 #define LOADBASSASIOFUNCTION(f) *((void**)&f)=GetProcAddress(bassasio,#f)
 
+#define MAX_PLUGINS 10
+
 #if(_WIN32_WINNT < 0x0500) 
 	#define     GA_PARENT       1
 	#define     GA_ROOT         2
@@ -276,13 +278,14 @@ class CView1 : public CDialogImpl<CView1>
 
 	CComboBox vst_info;
 	CComboBox vst_buffer_size, vst_sample_rate, vst_sample_format;
-	CButton vst_load, vst_configure, vst_showvst, vst_4chmode;
+	CButton vst_load, vst_configure, vst_showvst, vst_4chmode, vst_unload;
 	CStatic vst_vendor, vst_effect, file_info;
 	CTrackBarCtrl volume_slider;
 	TCHAR vst_path[MAX_PATH];
 	HANDLE hbrBkgnd;
 	DWORD highDpiMode;
-	DWORD EnableSinglePort32ChMode;
+	DWORD enableSinglePort32ChMode;
+	int origDropdownWidth;
 	
 	VSTDriver * effect;
 public:
@@ -291,8 +294,10 @@ public:
 		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView1)
 		COMMAND_ID_HANDLER(IDC_VSTLOAD,OnButtonAdd)
 		COMMAND_ID_HANDLER(IDC_VSTCONFIG,OnButtonConfig)
+		COMMAND_ID_HANDLER(IDC_UNLOAD, OnButtonUnload)
 		COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)		
 		COMMAND_HANDLER(IDC_VSTLOADED, CBN_SELCHANGE, OnCbnSelchangeVSTLoaded)
+		COMMAND_HANDLER(IDC_VSTLOADED, CBN_DROPDOWN, OnCbnDropDownVSTLoaded)
 		COMMAND_HANDLER(IDC_SAMPLERATE, CBN_SELCHANGE, OnCbnSelchangeSamplerate)
 		COMMAND_HANDLER(IDC_BUFFERSIZE, CBN_SELCHANGE, OnCbnSelchangeBuffersize)
 		COMMAND_HANDLER(IDC_SAMPLEFORMAT, CBN_SELCHANGE, OnCbnSelchangeSampleformat)
@@ -305,7 +310,7 @@ public:
 		effect = NULL; 
 		hbrBkgnd = NULL;
 		highDpiMode = 0;
-		EnableSinglePort32ChMode = (DWORD)-1;
+		enableSinglePort32ChMode = (DWORD)-1;
 		usePrivateAsioOnly = 0;		
 
 		isWinNT4 = IsWinNT4();
@@ -336,7 +341,7 @@ public:
 		lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver");
 		if (lResult == ERROR_SUCCESS){
 
-			for (int i = 0; i < 10; i++) {
+			for (int i = 0; i < MAX_PLUGINS; i++) {
 				TCHAR szValueName[8] = L"plugin";
 				if (i)
 				{
@@ -395,7 +400,7 @@ public:
 			}
 			lResult = reg.QueryDWORDValue(L"EnableSinglePort32ChMode", reg_value);
 			if (lResult == ERROR_SUCCESS) {
-				EnableSinglePort32ChMode = reg_value;
+				enableSinglePort32ChMode = reg_value;
 			}
 			lResult = reg.QueryDWORDValue(L"UsePrivateAsioOnly", reg_value);
 			if (lResult == ERROR_SUCCESS) {
@@ -407,7 +412,14 @@ public:
 			vst_info.SetCurSel(SelectedPluginIndex);
 			vst_info.GetLBText(SelectedPluginIndex, vst_path);				
 			load_vst(vst_path, false);
-			if(effect) vst_configure.EnableWindow(effect->hasEditor());
+			if (effect)
+			{
+				vst_configure.EnableWindow(effect->hasEditor());
+				vst_unload.EnableWindow(true);
+			}
+			else
+				vst_unload.EnableWindow(false);
+
 		}
 
 		vst_info.SetCurSel(SelectedPluginIndex);
@@ -429,6 +441,38 @@ public:
 			}
 			return (INT_PTR)hbrBkgnd;
 		}
+		return 0;
+	}
+
+	
+
+	LRESULT OnButtonUnload(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/) 
+	{
+		if (effect) free_vst();
+		vst_effect.SetWindowText(L"No VSTi loaded");
+		vst_vendor.SetWindowText(L"No VSTi loaded");
+		int selIndex = vst_info.GetCurSel();
+		vst_info.DeleteString(selIndex);
+		vst_info.InsertString(selIndex, L"No VSTi loaded");
+		vst_info.SetCurSel(selIndex);
+
+		// HKEY hKey, hSubKey;
+		long lResult;
+		CRegKeyEx reg;
+		lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);
+
+		TCHAR szValueName[12] = L"plugin";
+		if (SelectedPluginIndex)
+		{
+			TCHAR szPostfix[4] = { 0 };
+			lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));
+		}
+		reg.SetStringValue(szValueName, L"");
+
+		reg.Close();
+		vst_configure.EnableWindow(false);
+		vst_unload.EnableWindow(false);
+
 		return 0;
 	}
 
@@ -470,6 +514,7 @@ public:
 				
 				reg.Close();				
 				vst_configure.EnableWindow(effect->hasEditor());
+				vst_unload.EnableWindow(true);
 
 				BOOL dummy;
 				OnCbnSelchangeVSTLoaded(0, 0, 0, dummy);
@@ -491,6 +536,7 @@ public:
 
 				reg.Close();
 				vst_configure.EnableWindow(false);
+				vst_unload.EnableWindow(false);
 			}
 		}
 		return 0;
@@ -511,7 +557,35 @@ public:
 		return 0;
 	}
 
-	
+	//calculate proper width of dropdown in order full paths to be visible.
+	LRESULT OnCbnDropDownVSTLoaded(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{	
+		const int PADDING = 8;
+		HDC dc = vst_info.GetDC();
+		HFONT font = (HFONT)vst_info.SendMessage(WM_GETFONT, 0, 0);
+		HFONT oldFont  = (HFONT)SelectObject(dc, font);
+		
+		wchar_t path[MAX_PATH] = { 0 };
+		SIZE size;		
+		int itemsWidth = 0;		
+
+		for (int i = 0; i < MAX_PLUGINS; i++)
+		{
+			int len = vst_info.GetLBText(i, path);
+			GetTextExtentPoint32(dc, path, len, &size);
+			if (size.cx > itemsWidth) itemsWidth = size.cx;
+
+		}		
+
+		itemsWidth += PADDING;
+		int maxWidth = GetSystemMetrics(SM_CXSCREEN) / 2;
+		vst_info.SetDroppedWidth(min(maxWidth, max(origDropdownWidth, itemsWidth)));
+
+		SelectObject(dc, oldFont);
+		vst_info.ReleaseDC(dc);
+
+		return 0;
+	}
 
 	LRESULT OnCbnSelchangeVSTLoaded(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{		
@@ -527,9 +601,13 @@ public:
 			reg.SetDWORDValue(L"SelectedPlugin", selIndex);
 			reg.Close();
 			vst_configure.EnableWindow(effect->hasEditor());
+			vst_unload.EnableWindow(true);
 		}
 		else
+		{
 			vst_configure.EnableWindow(false);
+			vst_unload.EnableWindow(false);
+		}
 
 		SelectedPluginIndex = selIndex;
 		return 0;
@@ -603,7 +681,7 @@ public:
 		{
 			if(!settings_save(effect)) MessageBox(L"Cannot save plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
 			if(!highDpiMode)SaveDwordValue(L"HighDpiMode",(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
-			if(EnableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(L"EnableSinglePort32ChMode", 1);
+			if(enableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(L"EnableSinglePort32ChMode", 1);
 			if(IsVistaOrNewer())SaveDwordValue(L"UsePrivateAsioOnly", usePrivateAsioOnly);
 
 			delete effect;
@@ -814,7 +892,30 @@ public:
 
 	}
 
-	LRESULT OnInitDialogView1(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+	HWND CreateToolTip(int toolID, HWND hDlg, PTSTR pszText)
+	{	
+		HWND hwndTool = GetDlgItem(toolID);
+		
+		HWND hwndTip = CreateWindowEx(NULL, TOOLTIPS_CLASS, NULL, WS_POPUP | TTS_ALWAYSTIP, 
+			CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hDlg, NULL, GetModuleHandle(NULL), NULL);
+
+		if (!hwndTool || !hwndTip)
+		{
+			return (HWND)NULL;
+		}
+	
+		TOOLINFO toolInfo = {0};
+		toolInfo.cbSize = TTTOOLINFOA_V1_SIZE;
+		toolInfo.uFlags = TTF_IDISHWND | TTF_SUBCLASS;
+		toolInfo.hwnd = hDlg;
+		toolInfo.uId = (UINT_PTR)hwndTool;
+		toolInfo.lpszText = pszText;
+		SendMessage(hwndTip, TTM_ADDTOOL, 0, (LPARAM)&toolInfo);
+
+		return hwndTool;
+	}
+
+	LRESULT OnInitDialogView1(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
 		wchar_t fileversionBuff[32] = { 0 };
 		effect = NULL;
@@ -832,6 +933,7 @@ public:
 		vst_vendor = GetDlgItem(IDC_VENDOR);
 		file_info = GetDlgItem(IDC_FILEVERSION);
 		volume_slider = GetDlgItem(IDC_VOLUME);
+		vst_unload = GetDlgItem(IDC_UNLOAD);
 
 		file_info.SetWindowText(GetFileVersion(fileversionBuff));
 		vst_effect.SetWindowText(L"No VSTi loaded");
@@ -951,7 +1053,13 @@ public:
 		}
 		
 		vst_sample_rate.GetWindowTextW(tmpBuff, 8); //list of valid sample rates could change.   
-		SaveDwordValue(L"SampleRate", _wtoi(tmpBuff));		
+		SaveDwordValue(L"SampleRate", _wtoi(tmpBuff));	
+
+		//Unload tooltip
+		HWND hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
+		CreateToolTip(IDC_UNLOAD, hWnd, L"Unload selected VSTi");	
+
+		origDropdownWidth = vst_info.GetDroppedWidth();
 
 		return TRUE;
 	}
@@ -1078,7 +1186,7 @@ public:
 		bool isSelected = false;
 
 		playbackDevices.InitStorage(64, 64 * sizeof(TCHAR));
-		playbackDevices.SendMessageW(WM_SETREDRAW, FALSE, 0); //let's speed up ListBox drawing in case of many ASIO drivers/channels 
+		playbackDevices.SendMessage(WM_SETREDRAW, FALSE, 0); //let's speed up ListBox drawing in case of many ASIO drivers/channels 
 
 		BASS_ASIO_DEVICEINFO asioDeviceInfo;
 
@@ -1113,7 +1221,7 @@ public:
 			BASS_ASIO_Free();
 		}
 
-		playbackDevices.SendMessageW(WM_SETREDRAW, TRUE, 0);
+		playbackDevices.SendMessage(WM_SETREDRAW, TRUE, 0);
 		playbackDevices.RedrawWindow(NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
 
 		DWORD drvId = _wtoi(selectedOutputDriver.Left(2));

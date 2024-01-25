@@ -16,6 +16,8 @@
 
 #define PORTMENUOFFSET  100
 
+#define MAX_PLUGINS 10
+
 #if(_WIN32_WINNT < 0x0500) 
 	#define SM_CXVIRTUALSCREEN  78
 	#define SM_CYVIRTUALSCREEN  79
@@ -1088,7 +1090,7 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 			HMODULE hFaultyModule;
 			DynGetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)param->ExceptionRecord->ExceptionAddress, &hFaultyModule);
 			GetModuleFileName(hFaultyModule, buffer, MAX_PATH);
-			GetFileTitle(buffer, titleBuffer, MAX_PATH);
+			GetFileTitle(buffer, titleBuffer, MAX_PATH / 2);
 			wsprintf(buffer, L"An unexpected error 0x%X occured in %ls.\r\nVST host bridge now exits.", param->ExceptionRecord->ExceptionCode, titleBuffer);
 		}
 		else 
@@ -1224,7 +1226,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		{
 			pluginMenu = CreatePopupMenu();
 
-			for (int i = 0; i < 10; i++)
+			for (int i = 0; i < MAX_PLUGINS; i++)
 				if (getPluginMenuItem(i, tmpPath)) {
 					if (getSelectedPluginIndex() == i)
 						AppendMenu(pluginMenu, MF_STRING | MF_ENABLED | MF_CHECKED, i, tmpPath);
@@ -1313,7 +1315,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			wchar_t versionBuff[MAX_PATH] = L"MIDI client: ";
 			MSGBOXPARAMS params = {0};
 
-			if (wParam >= 0 && wParam < 10)
+			if (wParam >= 0 && wParam < MAX_PLUGINS)
 			{
 				setSelectedPluginIndex((int)wParam);
 				return 0;

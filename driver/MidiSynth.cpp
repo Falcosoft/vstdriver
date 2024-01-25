@@ -1046,9 +1046,9 @@ namespace VSTMIDIDRV{
 	}
 
 	bool GetEnableSinglePort32ChMode() {
-		BOOL EnableSinglePort32ChMode = TRUE;
-		EnableSinglePort32ChMode = GetDwordData(L"EnableSinglePort32ChMode", EnableSinglePort32ChMode);
-		return EnableSinglePort32ChMode != FALSE;
+		BOOL enableSinglePort32ChMode = TRUE;
+		enableSinglePort32ChMode = GetDwordData(L"EnableSinglePort32ChMode", enableSinglePort32ChMode);
+		return enableSinglePort32ChMode != FALSE;
 	}	
 
 	void MidiSynth::LoadSettings(){
