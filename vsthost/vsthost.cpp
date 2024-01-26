@@ -1565,12 +1565,35 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		pEffect[0]->dispatcher(pEffect[0], effGetEffectName, 0, 0, &name_string, 0);
 		pEffect[0]->dispatcher(pEffect[0], effGetVendorString, 0, 0, &vendor_string, 0);
 		pEffect[0]->dispatcher(pEffect[0], effGetProductString, 0, 0, &product_string, 0);
+			
         		
 		name_string_length = (uint32_t)strlen(name_string);
 		vendor_string_length = (uint32_t)strlen(vendor_string);
 		product_string_length = (uint32_t)strlen(product_string);
 		vendor_version = (uint32_t)pEffect[0]->dispatcher(pEffect[0], effGetVendorVersion, 0, 0, 0, 0);
 		unique_id = pEffect[0]->uniqueID;
+
+		if (!vendor_string_length) 
+		{
+			lstrcpyA(vendor_string, "Unknown");
+			vendor_string_length = (uint32_t)strlen(vendor_string);
+		}
+
+		if (!product_string_length)
+		{
+			wchar_t product_wstring[256] = { 0 };
+			GetFileTitle(argv[1], product_wstring, 256);
+			WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)product_wstring, -1, (char*)product_string, 256, NULL, NULL);
+			product_string_length = (uint32_t)strlen(product_string);
+		}
+
+		if (!name_string_length)
+		{
+			wchar_t name_wstring[256] = { 0 };
+			GetFileTitle(argv[1], name_wstring, 256);
+			WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)name_wstring, -1, (char*)name_string, 256, NULL, NULL);
+			name_string_length = (uint32_t)strlen(name_string);
+		}
 
 		isSCVA = (unique_id == (uint32_t)'scva');
 		
