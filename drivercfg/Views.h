@@ -679,7 +679,15 @@ public:
 	{
 		if(effect)
 		{
-			if(!settings_save(effect)) MessageBox(L"Cannot save plugin settings!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
+			if (!settings_save(effect))
+			{				
+				string vstStr;
+				effect->getProductString(vstStr);
+				char msg[MAX_PATH] = "Cannot save plugin settings for ";
+				strncat(msg, vstStr.c_str(), MAX_PATH - 2 - strlen(msg));
+				strcat(msg, "!");
+				MessageBoxA(m_hWnd, msg, "VST MIDI Driver", MB_OK | MB_ICONERROR);
+			}
 			if(!highDpiMode)SaveDwordValue(L"HighDpiMode",(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
 			if(enableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(L"EnableSinglePort32ChMode", 1);
 			if(IsVistaOrNewer())SaveDwordValue(L"UsePrivateAsioOnly", usePrivateAsioOnly);

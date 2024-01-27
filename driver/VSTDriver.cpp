@@ -37,14 +37,18 @@ UINT GetWaveOutDeviceId() {
 			regValue = (TCHAR*)calloc(dwSize + sizeof(TCHAR), 1);
 			RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
 
-			for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId) {
+			for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId)
+			{
 				if (!wcscmp(regValue, caps.szPname))
 				{
+					free(regValue);
 					RegCloseKey(hKey);
 					return deviceId;
 				}
 
 			}
+
+			free(regValue);
 		}
 
 		RegCloseKey(hKey);
@@ -91,8 +95,8 @@ bool UseAsio()
 	if (result == NO_ERROR) 
 	{
 		result = RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, NULL, &dwSize);
-		if (result == NO_ERROR && dwType == REG_SZ && dwSize > 8) {
-
+		if (result == NO_ERROR && dwType == REG_SZ && dwSize > 8)
+		{
 			regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 			RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
 			if (!wcscmp(regValue, L"Bass ASIO"))
@@ -101,6 +105,8 @@ bool UseAsio()
 				RegCloseKey(hKey);
 				return true;
 			}
+
+			free(regValue);
 		}
 
 		RegCloseKey(hKey);
@@ -125,21 +131,22 @@ bool UseWasapi()
 		result = RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, NULL, &dwSize);
 #endif	
 		
-		if (result == NO_ERROR && dwType == REG_SZ && dwSize > 20) {
-
+		if (result == NO_ERROR && dwType == REG_SZ && dwSize > 20)
+		{
 			regValue = (TCHAR*)calloc(dwSize + sizeof(TCHAR), 1);
 #ifdef WIN64
 			RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
 #else
 			RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
-#endif	
-			
+#endif
 			if (wcsstr(regValue, L"VSTDriver-ASIO2WASAPI"))
 			{
 				free(regValue);
 				RegCloseKey(hKey);
 				return true;
 			}
+
+			free(regValue);
 		}
 
 		RegCloseKey(hKey);

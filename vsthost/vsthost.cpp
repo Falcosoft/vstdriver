@@ -1311,7 +1311,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_COMMAND:
 		{
-			wchar_t tempBuff[MAX_PATH] = {0};
+			wchar_t tempBuff[MAX_PATH] = { 0 };
 			wchar_t versionBuff[MAX_PATH] = L"MIDI client: ";
 			MSGBOXPARAMS params = {0};
 
@@ -1348,8 +1348,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				lstrcat(versionBuff, midiClient);
 				lstrcat(versionBuff, L" "); 
 				lstrcat(versionBuff, clientBitnessStr);
-				lstrcat(versionBuff, L"\r\nPlugin: ");
-				mbstowcs(tempBuff, product_string, 64);
+				lstrcat(versionBuff, L"\r\nPlugin: ");				
+				MultiByteToWideChar(CP_ACP, 0, product_string, 64, tempBuff, 64);
 				lstrcat(versionBuff, tempBuff);
 				lstrcat(versionBuff, bitnessStr);
 				lstrcat(versionBuff, L"\r\nDriver mode: ");
@@ -1499,7 +1499,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 	size_t dll_name_len = wcslen(argv[1]);
 	dll_dir = (char*)malloc(dll_name_len + 1);
-	wcstombs(dll_dir, argv[1], dll_name_len);
+	WideCharToMultiByte(CP_ACP, 0, argv[1], -1, dll_dir, dll_name_len + 1, NULL, NULL); //does not depent on C locale (problematic on some VC++ verisons).
 	dll_dir[dll_name_len] = '\0';
 	char* slash = strrchr(dll_dir, '\\');
 	*slash = '\0';
@@ -1575,7 +1575,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		if (!vendor_string_length) 
 		{
-			lstrcpyA(vendor_string, "Unknown");
+			strcpy(vendor_string, "Unknown");
 			vendor_string_length = (uint32_t)strlen(vendor_string);
 		}
 

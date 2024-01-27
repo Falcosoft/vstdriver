@@ -618,6 +618,7 @@ namespace VSTMIDIDRV{
 					regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 					RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
 					wresult = regValue;
+					free(regValue);
 				}
 
 				if (wresult.empty()) 
@@ -628,6 +629,7 @@ namespace VSTMIDIDRV{
 						regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 						RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
 						wresult = regValue;
+						free(regValue);
 					}
 
 				}						
@@ -639,6 +641,7 @@ namespace VSTMIDIDRV{
 					regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 					RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
 					wresult = regValue;
+					free(regValue);
 				}
 
 				if (wresult.empty()) 
@@ -649,6 +652,7 @@ namespace VSTMIDIDRV{
 						regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 						RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
 						wresult = regValue;
+						free(regValue);
 					}
 
 				}
