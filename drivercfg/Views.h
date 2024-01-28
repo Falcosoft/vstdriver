@@ -94,13 +94,13 @@ static BOOL IsASIO()
 
 	GetModuleFileName(hinst_vst_driver, installpath, MAX_PATH);
 	//PathRemoveFileSpec(installpath);
-	wchar_t *chrP = wcsrchr(installpath, '\\'); //removes SHLWAPI dependency for WIN NT4
+	TCHAR *chrP = _tcsrchr(installpath, '\\'); //removes SHLWAPI dependency for WIN NT4
 	if(chrP) chrP[0] = 0;
 
 
 	// Load Bass Asio
-	lstrcpy(bassasiopath, installpath);
-	lstrcat(bassasiopath, L"\\bassasio_vstdrv.dll");
+	_tcscpy_s(bassasiopath, installpath);
+	_tcscat_s(bassasiopath, _T("\\bassasio_vstdrv.dll"));
 	bassasio = LoadLibrary(bassasiopath);        
 
 	if (bassasio)
@@ -115,15 +115,18 @@ static BOOL IsASIO()
 		LOADBASSASIOFUNCTION(BASS_ASIO_ControlPanel);
 		LOADBASSASIOFUNCTION(BASS_ASIO_CheckRate);
 				
-		lstrcpy(asio2WasapiPath, installpath);
-		lstrcat(asio2WasapiPath, L"\\ASIO2WASAPI_vstdrv.dll");
+		_tcscpy_s(asio2WasapiPath, installpath);
+		_tcscat_s(asio2WasapiPath, _T("\\ASIO2WASAPI_vstdrv.dll"));
 		if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
 		{
 			LOADBASSASIOFUNCTION(BASS_ASIO_AddDevice);
 
-			char asio2WasapiAnsiPath[MAX_PATH] = { 0 };			
+			char asio2WasapiAnsiPath[MAX_PATH] = { 0 };
+#ifdef UNICODE  
 			WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)asio2WasapiPath, -1, (char*)asio2WasapiAnsiPath, MAX_PATH, NULL, NULL);
-
+#else
+			strcpy_s(asio2WasapiAnsiPath, asio2WasapiPath);
+#endif	
 			static const GUID CLSID_ASIO2WASAPI_DRIVER = { 0x3981c4c8, 0xfe12, 0x4b0f, { 0x98, 0xa0, 0xd1, 0xb6, 0x67, 0xbd, 0xa6, 0x15 } };
 			BASS_ASIO_AddDevice(&CLSID_ASIO2WASAPI_DRIVER, asio2WasapiAnsiPath, "VSTDriver-ASIO2WASAPI");
 		
@@ -144,20 +147,20 @@ static BOOL settings_load(VSTDriver * effect)
 	ULONG size;
 	CRegKeyEx reg;
 
-	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WRITE);
+	lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_READ | KEY_WRITE);
 	if (lResult == ERROR_SUCCESS){
-		TCHAR szValueName[12] = L"plugin";
+		TCHAR szValueName[12] = _T("plugin");
 		if (SelectedPluginIndex)		
 		{
 			TCHAR szPostfix[4] = { 0 };
-			lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));			
+			_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
 		}
 		lResult = reg.QueryStringValue(szValueName, NULL, &size);
 		if (lResult == ERROR_SUCCESS) {
 			reg.QueryStringValue(szValueName, vst_path, &size);
-			wchar_t *chrP = wcsrchr(vst_path, '.'); // removes extension
+			TCHAR *chrP = _tcsrchr(vst_path, '.'); // removes extension
 			if(chrP) chrP[0] = 0;
-			lstrcat(vst_path, L".set");
+			_tcscat_s(vst_path, _T(".set"));
 			HANDLE fileHandle = CreateFile(vst_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);	
 			if (fileHandle != INVALID_HANDLE_VALUE)
 			{
@@ -197,22 +200,22 @@ static BOOL settings_save(VSTDriver * effect)
 	ULONG size;
 	CRegKeyEx reg;
 
-	lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_READ | KEY_WRITE); // falco fix: otherwise reg.QueryStringValue gets back an ACCESS_DENIED(5) error.
+	lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_READ | KEY_WRITE); // falco fix: otherwise reg.QueryStringValue gets back an ACCESS_DENIED(5) error.
 	if (lResult == ERROR_SUCCESS) {		
 		
-		TCHAR szValueName[12] = L"plugin";
+		TCHAR szValueName[12] = _T("plugin");
 		if (SelectedPluginIndex)
 		{
 			TCHAR szPostfix[4] = { 0 };
-			lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));
+			_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
 		}		
 		lResult = reg.QueryStringValue(szValueName, NULL, &size);
 		
 		if (lResult == ERROR_SUCCESS) {
 			reg.QueryStringValue(szValueName, vst_path, &size);
-			wchar_t *chrP = wcsrchr(vst_path, '.'); // removes extension
+			TCHAR* chrP = _tcsrchr(vst_path, '.'); // removes extension
 			if(chrP) chrP[0] = 0;
-			lstrcat(vst_path, L".set");
+			_tcscat_s(vst_path, _T(".set"));
 			HANDLE fileHandle = CreateFile(vst_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);			
 			if (fileHandle != INVALID_HANDLE_VALUE)
 			{
@@ -240,7 +243,7 @@ static CString LoadOutputDriver(CString valueName)
 	CRegKeyEx reg;
 	CString value;
 
-	long result = reg.Open(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", KEY_READ);
+	long result = reg.Open(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), KEY_READ);
 	if (result != NO_ERROR)
 	{
 		return value;
@@ -263,7 +266,7 @@ static CString LoadOutputDriver(CString valueName)
 static void SaveDwordValue(LPCTSTR key, DWORD value)
 {	   
 	CRegKeyEx reg;	   
-	reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);	   
+	reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
 	reg.SetDWORDValue(key, value);
 	reg.Close();	   
 }
@@ -315,7 +318,7 @@ public:
 
 		isWinNT4 = IsWinNT4();
 		isASIO = IsASIO();
-		usingASIO = isASIO && LoadOutputDriver(L"Driver Mode").CompareNoCase(L"Bass ASIO") == 0;
+		usingASIO = isASIO && LoadOutputDriver(_T("Driver Mode")).CompareNoCase(_T("Bass ASIO")) == 0;
 	}
 
 	~CView1()
@@ -336,73 +339,73 @@ public:
 		vst_path[0] = 0;
 		ULONG size;
 		DWORD reg_value; 
-		wchar_t tmpBuff[34];
+		TCHAR tmpBuff[34];
 		CRegKeyEx reg;
-		lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver");
+		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"));
 		if (lResult == ERROR_SUCCESS){
 
 			for (int i = 0; i < MAX_PLUGINS; i++) {
-				TCHAR szValueName[8] = L"plugin";
+				TCHAR szValueName[8] = _T("plugin");
 				if (i)
 				{
 					TCHAR szPostfix[2] = { 0 };
-					lstrcat(szValueName, _itow(i, szPostfix, 10));
+					_tcscat_s(szValueName, _itot(i, szPostfix, 10));
 				}
 				lResult = reg.QueryStringValue(szValueName, NULL, &size);
 				if (lResult == ERROR_SUCCESS && size > 2) {
-					wchar_t pluginPath[MAX_PATH] = { 0 };
+					TCHAR pluginPath[MAX_PATH] = { 0 };
 					reg.QueryStringValue(szValueName, pluginPath, &size);
 					vst_info.AddString(pluginPath);
 				}
 				else
-					vst_info.AddString(L"No VSTi loaded");
+					vst_info.AddString(_T("No VSTi loaded"));
 			}
 
-			lResult = reg.QueryDWORDValue(L"SelectedPlugin", reg_value);
+			lResult = reg.QueryDWORDValue(_T("SelectedPlugin"), reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				SelectedPluginIndex = (unsigned char)reg_value;				
 			}
-			lResult = reg.QueryDWORDValue(L"ShowVstDialog",reg_value);
+			lResult = reg.QueryDWORDValue(_T("ShowVstDialog"),reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				vst_showvst.SetCheck(reg_value);
 			}
-			lResult = reg.QueryDWORDValue(L"Use4ChannelMode",reg_value);
+			lResult = reg.QueryDWORDValue(_T("Use4ChannelMode"),reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				if (!isWinNT4 || usingASIO) {
 					vst_4chmode.SetCheck(reg_value);
 					if (reg_value) is4chMode = true;
 				}
 			}		   
-			lResult = reg.QueryDWORDValue(L"UseFloat",reg_value);
+			lResult = reg.QueryDWORDValue(_T("UseFloat"),reg_value);
 			if (lResult == ERROR_SUCCESS) {			   
-				if ((!isWinNT4 || usingASIO) && reg_value) vst_sample_format.SelectString(-1, L"32-bit Float");
-				else vst_sample_format.SelectString(-1, L"16-bit Int");
+				if ((!isWinNT4 || usingASIO) && reg_value) vst_sample_format.SelectString(-1, _T("32-bit Float"));
+				else vst_sample_format.SelectString(-1, _T("16-bit Int"));
 			}
-			lResult = reg.QueryDWORDValue(L"SampleRate",reg_value);
+			lResult = reg.QueryDWORDValue(_T("SampleRate"),reg_value);
 			if (lResult == ERROR_SUCCESS) {			   
-				vst_sample_rate.SelectString(-1, _ultow(reg_value, tmpBuff, 10));			   
+				vst_sample_rate.SelectString(-1, _ultot(reg_value, tmpBuff, 10));			   
 			}
-			lResult = reg.QueryDWORDValue(L"BufferSize",reg_value);
+			lResult = reg.QueryDWORDValue(_T("BufferSize"),reg_value);
 			if (lResult == ERROR_SUCCESS) {
-				vst_buffer_size.SelectString(-1, _ultow(reg_value, tmpBuff, 10));
+				vst_buffer_size.SelectString(-1, _ultot(reg_value, tmpBuff, 10));
 			}
-			lResult = reg.QueryDWORDValue(L"Gain",reg_value);
+			lResult = reg.QueryDWORDValue(_T("Gain"),reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				volume_slider.SetPos((int)reg_value);
 			}
-			lResult = reg.QueryDWORDValue(L"PortBOffset",reg_value);
+			lResult = reg.QueryDWORDValue(_T("PortBOffset"),reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				portBOffsetVal = reg_value;
 			}
-			lResult = reg.QueryDWORDValue(L"HighDpiMode", reg_value);
+			lResult = reg.QueryDWORDValue(_T("HighDpiMode"), reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				highDpiMode = reg_value;
 			}
-			lResult = reg.QueryDWORDValue(L"EnableSinglePort32ChMode", reg_value);
+			lResult = reg.QueryDWORDValue(_T("EnableSinglePort32ChMode"), reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				enableSinglePort32ChMode = reg_value;
 			}
-			lResult = reg.QueryDWORDValue(L"UsePrivateAsioOnly", reg_value);
+			lResult = reg.QueryDWORDValue(_T("UsePrivateAsioOnly"), reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				usePrivateAsioOnly = reg_value;
 			}			
@@ -449,25 +452,25 @@ public:
 	LRESULT OnButtonUnload(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/) 
 	{
 		if (effect) free_vst();
-		vst_effect.SetWindowText(L"No VSTi loaded");
-		vst_vendor.SetWindowText(L"No VSTi loaded");
+		vst_effect.SetWindowText(_T("No VSTi loaded"));
+		vst_vendor.SetWindowText(_T("No VSTi loaded"));
 		int selIndex = vst_info.GetCurSel();
 		vst_info.DeleteString(selIndex);
-		vst_info.InsertString(selIndex, L"No VSTi loaded");
+		vst_info.InsertString(selIndex, _T("No VSTi loaded"));
 		vst_info.SetCurSel(selIndex);
 
 		// HKEY hKey, hSubKey;
 		long lResult;
 		CRegKeyEx reg;
-		lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);
+		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
 
-		TCHAR szValueName[12] = L"plugin";
+		TCHAR szValueName[12] = _T("plugin");
 		if (SelectedPluginIndex)
 		{
 			TCHAR szPostfix[4] = { 0 };
-			lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));
+			_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
 		}
-		reg.SetStringValue(szValueName, L"");
+		reg.SetStringValue(szValueName, _T(""));
 
 		reg.Close();
 		vst_configure.EnableWindow(false);
@@ -480,11 +483,11 @@ public:
 	{
 		TCHAR szFileName[MAX_PATH] = {0};
 		LPCTSTR sFiles = 
-			L"VSTi instruments (*.dll)\0*.dll\0"
-			L"All Files (*.*)\0*.*\0\0";
+			_T("VSTi instruments (*.dll)\0*.dll\0")
+			_T("All Files (*.*)\0*.*\0\0");
 				 
 		vst_info.GetLBText(SelectedPluginIndex, szFileName);
-		if (wcscmp(L"No VSTi loaded", szFileName)) {
+		if (_tcscmp(_T("No VSTi loaded"), szFileName)) {
 			vst_path[0] = 0;
 			vst_info.GetLBText(SelectedPluginIndex, vst_path);
 		}
@@ -492,7 +495,7 @@ public:
 		if (dlg.DoModal() == IDOK)
 		{
 			szFileName[0] = 0;
-			lstrcpy(szFileName,dlg.m_szFileName);
+			_tcscpy_s(szFileName,dlg.m_szFileName);
 			if (load_vst(szFileName))
 			{				
 				vst_info.DeleteString(SelectedPluginIndex);
@@ -502,13 +505,13 @@ public:
 				// HKEY hKey, hSubKey;
 				long lResult;
 				CRegKeyEx reg;
-				lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);
+				lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
 
-				TCHAR szValueName[12] = L"plugin";
+				TCHAR szValueName[12] = _T("plugin");
 				if (SelectedPluginIndex)
 				{
 					TCHAR szPostfix[4] = { 0 };
-					lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));
+					_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
 				}							
 				reg.SetStringValue(szValueName, szFileName);
 				
@@ -524,15 +527,15 @@ public:
 				// HKEY hKey, hSubKey;
 				long lResult;
 				CRegKeyEx reg;
-				lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);
+				lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
 
-				TCHAR szValueName[12] = L"plugin";
+				TCHAR szValueName[12] = _T("plugin");
 				if (SelectedPluginIndex)
 				{
 					TCHAR szPostfix[4] = { 0 };
-					lstrcat(szValueName, _itow(SelectedPluginIndex, szPostfix, 10));
+					_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
 				}
-				reg.SetStringValue(szValueName, L"");
+				reg.SetStringValue(szValueName, _T(""));
 
 				reg.Close();
 				vst_configure.EnableWindow(false);
@@ -544,14 +547,14 @@ public:
 
 	LRESULT OnClickedSHOWVST(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{  
-		SaveDwordValue(L"ShowVstDialog", vst_showvst.GetCheck());	
+		SaveDwordValue(_T("ShowVstDialog"), vst_showvst.GetCheck());
 
 		return 0;
 	}
 
 	LRESULT OnBnClickedUse4ch(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{   
-		SaveDwordValue(L"Use4ChannelMode", vst_4chmode.GetCheck());
+		SaveDwordValue(_T("Use4ChannelMode"), vst_4chmode.GetCheck());
 		is4chMode = vst_4chmode.GetCheck() !=  BST_UNCHECKED;
 
 		return 0;
@@ -565,7 +568,7 @@ public:
 		HFONT font = (HFONT)vst_info.SendMessage(WM_GETFONT, 0, 0);
 		HFONT oldFont  = (HFONT)SelectObject(dc, font);
 		
-		wchar_t path[MAX_PATH] = { 0 };
+		TCHAR path[MAX_PATH] = { 0 };
 		SIZE size;		
 		int itemsWidth = 0;		
 
@@ -589,7 +592,7 @@ public:
 
 	LRESULT OnCbnSelchangeVSTLoaded(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{		
-		wchar_t pluginPath[MAX_PATH] = { 0 };
+		TCHAR pluginPath[MAX_PATH] = { 0 };
 		int selIndex = vst_info.GetCurSel();
 		vst_info.GetLBText(selIndex, pluginPath);
 		if (load_vst(pluginPath, false))
@@ -597,8 +600,8 @@ public:
 			// HKEY hKey, hSubKey;
 			long lResult;
 			CRegKeyEx reg;
-			lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, 0, KEY_WRITE);
-			reg.SetDWORDValue(L"SelectedPlugin", selIndex);
+			lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
+			reg.SetDWORDValue(_T("SelectedPlugin"), selIndex);
 			reg.Close();
 			vst_configure.EnableWindow(effect->hasEditor());
 			vst_unload.EnableWindow(true);
@@ -615,9 +618,9 @@ public:
 
 	LRESULT OnCbnSelchangeSamplerate(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{	   
-		wchar_t tmpBuff[8];
-		vst_sample_rate.GetWindowTextW(tmpBuff, 8);
-		SaveDwordValue(L"SampleRate", _wtoi(tmpBuff));
+		TCHAR tmpBuff[8];
+		vst_sample_rate.GetWindowText(tmpBuff, 8);
+		SaveDwordValue(_T("SampleRate"), _ttoi(tmpBuff));
 
 		return 0;
 	} 
@@ -625,20 +628,20 @@ public:
 	LRESULT OnCbnSelchangeSampleformat(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
 		DWORD value;
-		wchar_t tmpBuff[14];
-		vst_sample_format.GetWindowTextW(tmpBuff, 14);	   
-		if(!wcscmp(tmpBuff, L"32-bit Float")) value = 1;
+		TCHAR tmpBuff[14];
+		vst_sample_format.GetWindowText(tmpBuff, 14);	   
+		if(!_tcscmp(tmpBuff, _T("32-bit Float"))) value = 1;
 		else value  = 0;	  
-		SaveDwordValue(L"UseFloat", value);
+		SaveDwordValue(_T("UseFloat"), value);
 
 		return 0;
 	} 
 
 	LRESULT OnCbnSelchangeBuffersize(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{	  
-		wchar_t tmpBuff[8];
-		vst_buffer_size.GetWindowTextW(tmpBuff, 8);
-		SaveDwordValue(L"BufferSize", _wtoi(tmpBuff));
+		TCHAR tmpBuff[8];
+		vst_buffer_size.GetWindowText(tmpBuff, 8);
+		SaveDwordValue(_T("BufferSize"), _ttoi(tmpBuff));
 
 		return 0;
 	} 
@@ -647,7 +650,7 @@ public:
 	{	   
 		if ((HWND)lParam == volume_slider.m_hWnd && LOWORD(wParam) == SB_ENDSCROLL)
 		{		          
-			SaveDwordValue(L"Gain", (DWORD)volume_slider.GetPos());
+			SaveDwordValue(_T("Gain"), (DWORD)volume_slider.GetPos());
 		}
 		return 0;
 	}
@@ -660,9 +663,9 @@ public:
 			::EnableWindow(hWnd, FALSE);
 			effect->setHighDpiMode(highDpiMode);
 
-			wchar_t tmpBuff[8];
-			vst_sample_rate.GetWindowTextW(tmpBuff, 8);	      
-			effect->setSampleRate(_wtoi(tmpBuff));
+			TCHAR tmpBuff[8];
+			vst_sample_rate.GetWindowText(tmpBuff, 8);	      
+			effect->setSampleRate(_ttoi(tmpBuff));
 			
 			effect->displayEditorModal();
 			::EnableWindow(hWnd, TRUE);
@@ -684,13 +687,13 @@ public:
 				string vstStr;
 				effect->getProductString(vstStr);
 				char msg[MAX_PATH] = "Cannot save plugin settings for ";
-				strncat(msg, vstStr.c_str(), MAX_PATH - 2 - strlen(msg));
-				strcat(msg, "!");
-				MessageBoxA(m_hWnd, msg, "VST MIDI Driver", MB_OK | MB_ICONERROR);
+				strncat_s(msg, vstStr.c_str(), MAX_PATH - 2 - strlen(msg));
+				strcat_s(msg, "!");
+				::MessageBoxA(m_hWnd, msg, "VST MIDI Driver", MB_OK | MB_ICONERROR);
 			}
-			if(!highDpiMode)SaveDwordValue(L"HighDpiMode",(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
-			if(enableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(L"EnableSinglePort32ChMode", 1);
-			if(IsVistaOrNewer())SaveDwordValue(L"UsePrivateAsioOnly", usePrivateAsioOnly);
+			if(!highDpiMode)SaveDwordValue(_T("HighDpiMode"),(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
+			if(enableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(_T("EnableSinglePort32ChMode"), 1);
+			if(IsVistaOrNewer())SaveDwordValue(_T("UsePrivateAsioOnly"), usePrivateAsioOnly);
 
 			delete effect;
 			effect = NULL;
@@ -706,21 +709,21 @@ public:
 			delete effect;
 			effect = NULL;
 			if (checkValidity && szPluginPath && *szPluginPath)
-				MessageBox(L"This is NOT a VSTi synth!", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
-			vst_effect.SetWindowText(L"No VSTi loaded");
-			vst_vendor.SetWindowText(L"No VSTi loaded");		   
+				MessageBox(_T("This is NOT a VSTi synth!"), _T("VST MIDI Driver"), MB_OK | MB_ICONERROR);
+			vst_effect.SetWindowText(_T("No VSTi loaded"));
+			vst_vendor.SetWindowText(_T("No VSTi loaded"));
 			int selIndex = vst_info.GetCurSel();
 			vst_info.DeleteString(selIndex);
-			vst_info.InsertString(selIndex, L"No VSTi loaded");
+			vst_info.InsertString(selIndex, _T("No VSTi loaded"));
 			vst_info.SetCurSel(selIndex);
 			return FALSE;
 		}
 
 		string vstStr;
 		effect->getEffectName(vstStr);	   
-		SetWindowTextA(vst_effect.m_hWnd, vstStr.c_str());
+		::SetWindowTextA(vst_effect.m_hWnd, vstStr.c_str());
 		effect->getVendorString(vstStr);	  
-		SetWindowTextA(vst_vendor.m_hWnd, vstStr.c_str());
+		::SetWindowTextA(vst_vendor.m_hWnd, vstStr.c_str());
 
 		effect->ProcessMIDIMessage(0, 0x90); //force some plugins to enable save/load functions.
 		float sample[2];
@@ -732,13 +735,13 @@ public:
 	}
 
 #pragma comment(lib,"Version.lib") 
-	wchar_t* GetFileVersion(wchar_t* result)
+	TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
 	{
 		DWORD               dwSize = 0;
 		BYTE* pVersionInfo = NULL;
 		VS_FIXEDFILEINFO* pFileInfo = NULL;
 		UINT                pLenFileInfo = 0;
-		wchar_t tmpBuff[MAX_PATH];
+		TCHAR tmpBuff[MAX_PATH];
 
 		GetModuleFileName(NULL, tmpBuff, MAX_PATH);
 
@@ -762,17 +765,17 @@ public:
 			return NULL;
 		}      
 
-		lstrcat(result, L"version: ");
-		_ultow_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-		lstrcat(result, tmpBuff);
-		lstrcat(result, L".");
-		_ultow_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
-		lstrcat(result, tmpBuff);	
-		lstrcat(result, L".");
-		_ultow_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-		lstrcat(result, tmpBuff);
-		//lstrcat(result, L".");
-		//lstrcat(result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+		_tcscat_s(result, buffSize, _T("version: "));
+		_ultot_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+		_tcscat_s(result, buffSize, tmpBuff);
+		_tcscat_s(result, buffSize, _T("."));
+		_ultot_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
+		_tcscat_s(result, buffSize, tmpBuff);
+		_tcscat_s(result, buffSize, _T("."));
+		_ultot_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+		_tcscat_s(result, buffSize, tmpBuff);
+		//_tcscat_s(result, buffSize, _T("."));
+		//_tcscat_s(result, buffSize, _ultot((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
 
 		return result;
 	}
@@ -782,10 +785,10 @@ public:
 		
 		BASS_ASIO_INFO info = { 0 };
 
-		wchar_t bufferText[8] = {0};
+		TCHAR bufferText[8] = {0};
 		vst_buffer_size.GetLBText(vst_buffer_size.GetCurSel(), bufferText);
 
-		wchar_t sampleRateText[8] = {0};
+		TCHAR sampleRateText[8] = {0};
 		vst_sample_rate.GetLBText(vst_sample_rate.GetCurSel(), sampleRateText);
 		
 		vst_buffer_size.ResetContent();
@@ -795,103 +798,103 @@ public:
 		{
 			
 #ifdef WIN64
-			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
+			CString selectedOutputDriver = LoadOutputDriver(_T("Bass ASIO x64"));
 #else
-			CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+			CString selectedOutputDriver = LoadOutputDriver(_T("Bass ASIO"));
 #endif
-			vst_buffer_size.AddString(L"Default");	
-			vst_buffer_size.AddString(L"2 ");
-			vst_buffer_size.AddString(L"5");
-			vst_buffer_size.AddString(L"10 ");
-			vst_buffer_size.AddString(L"15");
-			vst_buffer_size.AddString(L"20 ");
-			vst_buffer_size.AddString(L"30");
-			vst_buffer_size.AddString(L"50");
+			vst_buffer_size.AddString(_T("Default"));	
+			vst_buffer_size.AddString(_T("2 "));
+			vst_buffer_size.AddString(_T("5"));
+			vst_buffer_size.AddString(_T("10 "));
+			vst_buffer_size.AddString(_T("15"));
+			vst_buffer_size.AddString(_T("20 "));
+			vst_buffer_size.AddString(_T("30"));
+			vst_buffer_size.AddString(_T("50"));
 			
 
 			if(vst_buffer_size.SelectString(-1, bufferText) == CB_ERR) 
-				vst_buffer_size.SelectString(-1, L"Default");
+				vst_buffer_size.SelectString(-1, _T("Default"));
 
 			vst_sample_format.EnableWindow(TRUE);
 			vst_4chmode.EnableWindow(TRUE);
 
 			CString selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
-			int selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
+			int selectedOutputChannelInt = _ttoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);
-			int selectedOutputDriverInt = _wtoi(selectedOutputDriver.GetString());						
+			int selectedOutputDriverInt = _ttoi(selectedOutputDriver.GetString());						
 
 			if (BASS_ASIO_Init(selectedOutputDriverInt, 0))
 			{				
 				BASS_ASIO_GetInfo(&info);
 				
 				bool is48K = false;
-				if(BASS_ASIO_CheckRate(22050.0))vst_sample_rate.AddString(L"22050");
-				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
-				if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(L"44100");
+				if(BASS_ASIO_CheckRate(22050.0))vst_sample_rate.AddString(_T("22050"));
+				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(_T("32000"));
+				if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(_T("44100"));
 				if(BASS_ASIO_CheckRate(48000.0))
 				{
-					vst_sample_rate.AddString(L"48000");
+					vst_sample_rate.AddString(_T("48000"));
 					is48K = true;
 				}
-				if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(L"49716");
-				if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(L"96000");
-				if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(L"192000");
+				if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(_T("49716"));
+				if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(_T("96000"));
+				if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(_T("192000"));
 				
 				if(vst_sample_rate.SelectString(-1, sampleRateText) == CB_ERR) 
 				{
-					if(is48K)vst_sample_rate.SelectString(-1, L"48000");
+					if(is48K)vst_sample_rate.SelectString(-1, _T("48000"));
 					else vst_sample_rate.SetCurSel(vst_sample_rate.GetCount() - 1);
 				}
 
 				BASS_ASIO_Free();
 			}
 
-			wchar_t tmpBuff[64];
+			TCHAR tmpBuff[64];
 			DWORD realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
-			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);			
-			vst_4chmode.SetWindowTextW(tmpBuff);
+			_stprintf_s(tmpBuff, 64, _T("4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)"), selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
+			vst_4chmode.SetWindowText(tmpBuff);
 
 		}
 		else
 		{
-			vst_buffer_size.AddString(L"40");
-			vst_buffer_size.AddString(L"60");
-			vst_buffer_size.AddString(L"80");
-			vst_buffer_size.AddString(L"100");
-			vst_buffer_size.AddString(L"120");
-			vst_buffer_size.AddString(L"140");
-			vst_buffer_size.AddString(L"160");
-			//vst_buffer_size.AddString(L"180");
-			vst_buffer_size.AddString(L"200");
+			vst_buffer_size.AddString(_T("40"));
+			vst_buffer_size.AddString(_T("60"));
+			vst_buffer_size.AddString(_T("80"));
+			vst_buffer_size.AddString(_T("100"));
+			vst_buffer_size.AddString(_T("120"));
+			vst_buffer_size.AddString(_T("140"));
+			vst_buffer_size.AddString(_T("160"));
+			//vst_buffer_size.AddString(_T("180"));
+			vst_buffer_size.AddString(_T("200"));
 
 			if(vst_buffer_size.SelectString(-1, bufferText) == CB_ERR) 
-				vst_buffer_size.SelectString(-1, L"80");
+				vst_buffer_size.SelectString(-1, _T("80"));
 			
-			vst_4chmode.SetWindowTextW(L"4 channel mode (port A: Front speakers; port B: Rear speakers)");
+			vst_4chmode.SetWindowText(_T("4 channel mode (port A: Front speakers; port B: Rear speakers)"));
 
 			bool is48K = false;
 			UINT deviceId = GetWaveOutDeviceId();
-			if (IsWaveFormatSupported(22050, deviceId))vst_sample_rate.AddString(L"22050");
-			if (IsWaveFormatSupported(32000, deviceId))vst_sample_rate.AddString(L"32000");
-			if (IsWaveFormatSupported(44100, deviceId))vst_sample_rate.AddString(L"44100");
+			if (IsWaveFormatSupported(22050, deviceId))vst_sample_rate.AddString(_T("22050"));
+			if (IsWaveFormatSupported(32000, deviceId))vst_sample_rate.AddString(_T("32000"));
+			if (IsWaveFormatSupported(44100, deviceId))vst_sample_rate.AddString(_T("44100"));
 			if (IsWaveFormatSupported(48000, deviceId))
 			{
-				vst_sample_rate.AddString(L"48000");
+				vst_sample_rate.AddString(_T("48000"));
 				is48K = true;
 			}
-			if (IsWaveFormatSupported(49716, deviceId))vst_sample_rate.AddString(L"49716");
-			if (IsWaveFormatSupported(96000, deviceId))vst_sample_rate.AddString(L"96000");
-			if (IsWaveFormatSupported(192000, deviceId))vst_sample_rate.AddString(L"192000");
+			if (IsWaveFormatSupported(49716, deviceId))vst_sample_rate.AddString(_T("49716"));
+			if (IsWaveFormatSupported(96000, deviceId))vst_sample_rate.AddString(_T("96000"));
+			if (IsWaveFormatSupported(192000, deviceId))vst_sample_rate.AddString(_T("192000"));
 
 			if(vst_sample_rate.SelectString(-1, sampleRateText) == CB_ERR) 
 			{
-				if (is48K)vst_sample_rate.SelectString(-1, L"48000");
+				if (is48K)vst_sample_rate.SelectString(-1, _T("48000"));
 				else vst_sample_rate.SetCurSel(vst_sample_rate.GetCount() - 1);
 			}
 
 			if(isWinNT4) {
 				vst_4chmode.SetCheck(0);
-				vst_sample_format.SelectString(-1, L"16-bit Int");
+				vst_sample_format.SelectString(-1, _T("16-bit Int"));
 				vst_sample_format.EnableWindow(FALSE);
 				vst_4chmode.EnableWindow(FALSE);
 
@@ -925,7 +928,7 @@ public:
 
 	LRESULT OnInitDialogView1(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
-		wchar_t fileversionBuff[32] = { 0 };
+		TCHAR fileversionBuff[32] = { 0 };
 		effect = NULL;
 		BASS_ASIO_INFO info = {0};		
 
@@ -943,9 +946,9 @@ public:
 		volume_slider = GetDlgItem(IDC_VOLUME);
 		vst_unload = GetDlgItem(IDC_UNLOAD);
 
-		file_info.SetWindowText(GetFileVersion(fileversionBuff));
-		vst_effect.SetWindowText(L"No VSTi loaded");
-		vst_vendor.SetWindowText(L"No VSTi loaded");	
+		file_info.SetWindowText(GetFileVersion(fileversionBuff, _countof(fileversionBuff)));
+		vst_effect.SetWindowText(_T("No VSTi loaded"));
+		vst_vendor.SetWindowText(_T("No VSTi loaded"));
 		
 		vst_sample_rate.ResetContent();
 		vst_buffer_size.ResetContent();
@@ -955,14 +958,14 @@ public:
 		int selectedOutputChannelInt;
 		int selectedOutputDriverInt;
 
-		vst_sample_format.AddString(L"16-bit Int");
-		vst_sample_format.AddString(L"32-bit Float");
+		vst_sample_format.AddString(_T("16-bit Int"));
+		vst_sample_format.AddString(_T("32-bit Float"));
 
 		if (!isWinNT4 || usingASIO) {			
-			vst_sample_format.SelectString(-1, L"32-bit Float");
+			vst_sample_format.SelectString(-1, _T("32-bit Float"));
 		}
 		else {
-			vst_sample_format.SelectString(-1, L"16-bit Int");
+			vst_sample_format.SelectString(-1, _T("16-bit Int"));
 			vst_sample_format.EnableWindow(FALSE);
 			vst_4chmode.EnableWindow(FALSE);
 		}	
@@ -971,45 +974,45 @@ public:
 		{
 
 #ifdef WIN64
-			selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
+			selectedOutputDriver = LoadOutputDriver(_T("Bass ASIO x64"));
 #else
-			selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+			selectedOutputDriver = LoadOutputDriver(_T("Bass ASIO"));
 #endif
-			vst_buffer_size.AddString(L"Default");
+			vst_buffer_size.AddString(_T("Default"));
 					
-			vst_buffer_size.AddString(L"2 ");
-			vst_buffer_size.AddString(L"5");
-			vst_buffer_size.AddString(L"10 ");
-			vst_buffer_size.AddString(L"15");
-			vst_buffer_size.AddString(L"20 ");
-			vst_buffer_size.AddString(L"30");
-			vst_buffer_size.AddString(L"50");
+			vst_buffer_size.AddString(_T("2 "));
+			vst_buffer_size.AddString(_T("5"));
+			vst_buffer_size.AddString(_T("10 "));
+			vst_buffer_size.AddString(_T("15"));
+			vst_buffer_size.AddString(_T("20 "));
+			vst_buffer_size.AddString(_T("30"));
+			vst_buffer_size.AddString(_T("50"));
 			
-			vst_buffer_size.SelectString(-1, L"Default");
+			vst_buffer_size.SelectString(-1, _T("Default"));
 
 			selectedOutputChannel = selectedOutputDriver.Mid(3, 2);
-			selectedOutputChannelInt = _wtoi(selectedOutputChannel.GetString());
+			selectedOutputChannelInt = _ttoi(selectedOutputChannel.GetString());
 			selectedOutputDriver = selectedOutputDriver.Left(2);
-			selectedOutputDriverInt = _wtoi(selectedOutputDriver.GetString());
+			selectedOutputDriverInt = _ttoi(selectedOutputDriver.GetString());
 
 			if (BASS_ASIO_Init(selectedOutputDriverInt, 0))	
 			{
 				BASS_ASIO_GetInfo(&info);
 
 				bool is48K = false;
-				if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(L"22050");
-				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(L"32000");
-				if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(L"44100");
+				if(BASS_ASIO_CheckRate(22050.0)) vst_sample_rate.AddString(_T("22050"));
+				if(BASS_ASIO_CheckRate(32000.0))vst_sample_rate.AddString(_T("32000"));
+				if(BASS_ASIO_CheckRate(44100.0))vst_sample_rate.AddString(_T("44100"));
 				if(BASS_ASIO_CheckRate(48000.0))
 				{
-					vst_sample_rate.AddString(L"48000");
+					vst_sample_rate.AddString(_T("48000"));
 					is48K = true;
 				}
-				if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(L"49716");
-				if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(L"96000");
-				if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(L"192000");
+				if(BASS_ASIO_CheckRate(49716.0))vst_sample_rate.AddString(_T("49716"));
+				if(BASS_ASIO_CheckRate(96000.0))vst_sample_rate.AddString(_T("96000"));
+				if(BASS_ASIO_CheckRate(192000.0))vst_sample_rate.AddString(_T("192000"));
 				
-				if(is48K)vst_sample_rate.SelectString(-1, L"48000");
+				if(is48K)vst_sample_rate.SelectString(-1, _T("48000"));
 				else vst_sample_rate.SetCurSel(vst_sample_rate.GetCount() - 1);
 
 				BASS_ASIO_Free();
@@ -1017,33 +1020,33 @@ public:
 		}
 		else
 		{
-			vst_buffer_size.AddString(L"40");
-			vst_buffer_size.AddString(L"60");
-			vst_buffer_size.AddString(L"80");
-			vst_buffer_size.AddString(L"100");
-			vst_buffer_size.AddString(L"120");
-			vst_buffer_size.AddString(L"140");
-			vst_buffer_size.AddString(L"160");
-			//vst_buffer_size.AddString(L"180");
-			vst_buffer_size.AddString(L"200");
-			vst_buffer_size.SelectString(-1, L"80");
-			vst_4chmode.SetWindowTextW(L"4 channel mode (port A: Front speakers; port B: Rear speakers)");
+			vst_buffer_size.AddString(_T("40"));
+			vst_buffer_size.AddString(_T("60"));
+			vst_buffer_size.AddString(_T("80"));
+			vst_buffer_size.AddString(_T("100"));
+			vst_buffer_size.AddString(_T("120"));
+			vst_buffer_size.AddString(_T("140"));
+			vst_buffer_size.AddString(_T("160"));
+			//vst_buffer_size.AddString(_T("180"));
+			vst_buffer_size.AddString(_T("200"));
+			vst_buffer_size.SelectString(-1, _T("80"));
+			vst_4chmode.SetWindowText(_T("4 channel mode (port A: Front speakers; port B: Rear speakers)"));
 
 			bool is48K = false;
 			UINT deviceId = GetWaveOutDeviceId();
-			if (IsWaveFormatSupported(22050, deviceId))vst_sample_rate.AddString(L"22050");
-			if (IsWaveFormatSupported(32000, deviceId))vst_sample_rate.AddString(L"32000");
-			if (IsWaveFormatSupported(44100, deviceId))vst_sample_rate.AddString(L"44100");
+			if (IsWaveFormatSupported(22050, deviceId))vst_sample_rate.AddString(_T("22050"));
+			if (IsWaveFormatSupported(32000, deviceId))vst_sample_rate.AddString(_T("32000"));
+			if (IsWaveFormatSupported(44100, deviceId))vst_sample_rate.AddString(_T("44100"));
 			if (IsWaveFormatSupported(48000, deviceId))
 			{
-				vst_sample_rate.AddString(L"48000");
+				vst_sample_rate.AddString(_T("48000"));
 				is48K = true;
 			}
-			if (IsWaveFormatSupported(49716, deviceId))vst_sample_rate.AddString(L"49716");
-			if (IsWaveFormatSupported(96000, deviceId))vst_sample_rate.AddString(L"96000");
-			if (IsWaveFormatSupported(192000, deviceId))vst_sample_rate.AddString(L"192000");
+			if (IsWaveFormatSupported(49716, deviceId))vst_sample_rate.AddString(_T("49716"));
+			if (IsWaveFormatSupported(96000, deviceId))vst_sample_rate.AddString(_T("96000"));
+			if (IsWaveFormatSupported(192000, deviceId))vst_sample_rate.AddString(_T("192000"));
 			
-			if (is48K)vst_sample_rate.SelectString(-1, L"48000");
+			if (is48K)vst_sample_rate.SelectString(-1, _T("48000"));
 			else vst_sample_rate.SetCurSel(vst_sample_rate.GetCount() - 1);
 		}
 
@@ -1052,20 +1055,20 @@ public:
 
 		load_settings();
 
-		wchar_t tmpBuff[64];
+		TCHAR tmpBuff[64];
 		if (usingASIO) 
 		{			
 			DWORD realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
-			swprintf(tmpBuff, 64, L"4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)", selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
-			vst_4chmode.SetWindowTextW(tmpBuff);				
+			_stprintf_s(tmpBuff, 64, _T("4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)"), selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
+			vst_4chmode.SetWindowText(tmpBuff);				
 		}
 		
-		vst_sample_rate.GetWindowTextW(tmpBuff, 8); //list of valid sample rates could change.   
-		SaveDwordValue(L"SampleRate", _wtoi(tmpBuff));	
+		vst_sample_rate.GetWindowText(tmpBuff, 8); //list of valid sample rates could change.   
+		SaveDwordValue(_T("SampleRate"), _ttoi(tmpBuff));
 
 		//Unload tooltip
 		HWND hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
-		CreateToolTip(IDC_UNLOAD, hWnd, L"Unload selected VSTi");	
+		CreateToolTip(IDC_UNLOAD, hWnd, _T("Unload selected VSTi"));
 
 		origDropdownWidth = vst_info.GetDroppedWidth();
 
@@ -1140,7 +1143,7 @@ public:
 		CRegKeyEx reg;
 
 		/// Create the Output Driver registry subkey
-		long result = reg.Create(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, 0, KEY_WRITE);
+		long result = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), 0, 0, KEY_WRITE);
 
 		if (result != NO_ERROR)
 		{
@@ -1159,8 +1162,8 @@ public:
 	{
 		CString deviceItem;
 		CString deviceName;
-		WAVEOUTCAPSW caps;
-		CString selectedOutputDriver = LoadOutputDriver(L"WinMM WaveOut");
+		WAVEOUTCAPS caps;
+		CString selectedOutputDriver = LoadOutputDriver(_T("WinMM WaveOut"));
 
 		for (size_t deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId) {
 
@@ -1178,9 +1181,9 @@ public:
 		CString deviceItem;
 		CString deviceName;
 #ifdef WIN64
-		CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO x64");
+		CString selectedOutputDriver = LoadOutputDriver(_T("Bass ASIO x64"));
 #else
-		CString selectedOutputDriver = LoadOutputDriver(L"Bass ASIO");
+		CString selectedOutputDriver = LoadOutputDriver(_T("Bass ASIO"));
 #endif       
 
 		/* not needed for a vector
@@ -1213,7 +1216,7 @@ public:
 
 			for (DWORD channel = 0; BASS_ASIO_ChannelGetInfo(FALSE, channel, &channelInfo); ++channel)
 			{
-				deviceItem.Format(L"%02d.%02d - %s %s", deviceId, channel, deviceName, CString(channelInfo.name));
+				deviceItem.Format(_T("%02d.%02d - %s %s"), deviceId, channel, deviceName, CString(channelInfo.name));
 
 				//if (playbackDevices.FindStringExact(0, deviceItem) == LB_ERR)
 				{
@@ -1232,19 +1235,19 @@ public:
 		playbackDevices.SendMessage(WM_SETREDRAW, TRUE, 0);
 		playbackDevices.RedrawWindow(NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
 
-		DWORD drvId = _wtoi(selectedOutputDriver.Left(2));
+		DWORD drvId = _ttoi(selectedOutputDriver.Left(2));
 
 		if (drvId >= drvChArr.size()) return;
 
 		unsigned int portCount = drvChArr[drvId];
 		portbOffset.ResetContent();
-		wchar_t tmpBuff[8];
+		TCHAR tmpBuff[8];
 		for (unsigned int i = 1; i < portCount / 2; i++)
 		{
-			portbOffset.AddString(_ultow(i * 2, tmpBuff, 10));						
+			portbOffset.AddString(_ultot(i * 2, tmpBuff, 10));						
 		}
-		if (portbOffset.SelectString(-1,_ultow(portBOffsetVal, tmpBuff, 10)) ==  CB_ERR)
-			portbOffset.SelectString(-1, L"2");
+		if (portbOffset.SelectString(-1,_ultot(portBOffsetVal, tmpBuff, 10)) ==  CB_ERR)
+			portbOffset.SelectString(-1, _T("2"));
 
 	}	
 
@@ -1256,15 +1259,15 @@ public:
 		portbOffsetText = GetDlgItem(IDC_STATIC_PORTB);
 		asio_openctlp = GetDlgItem(IDC_ASIOCTRLP);
 
-		driverMode.AddString(L"WinMM WaveOut"); 
+		driverMode.AddString(_T("WinMM WaveOut"));
 
-		if (isASIO)	driverMode.AddString(L"Bass ASIO");
+		if (isASIO)	driverMode.AddString(_T("Bass ASIO"));
 
 		CString selectedDriverMode;
 
 		if (usingASIO) {
-			selectedDriverMode = L"Bass ASIO";
-			driverMode.SelectString(0, L"Bass ASIO");
+			selectedDriverMode = _T("Bass ASIO");
+			driverMode.SelectString(0, _T("Bass ASIO"));
 			LoadAsioDrivers();
 			asio_openctlp.ShowWindow(SW_SHOW);
 			if (is4chMode) {
@@ -1275,13 +1278,13 @@ public:
 
 		}
 		else {
-			selectedDriverMode = L"WinMM WaveOut";
-			driverMode.SelectString(0, L"WinMM WaveOut");			
+			selectedDriverMode = _T("WinMM WaveOut");
+			driverMode.SelectString(0, _T("WinMM WaveOut"));
 			LoadWaveOutDrivers();
 			asio_openctlp.ShowWindow(SW_HIDE);
 		}     
 		
-		SaveOutputDriver(L"Driver Mode", selectedDriverMode);
+		SaveOutputDriver(_T("Driver Mode"), selectedDriverMode);
 
 		return 0;
 	}
@@ -1304,16 +1307,16 @@ public:
 		playbackDevices.GetText(index, selectedOutputDriver.GetBuffer(max(length, 2)));
 		selectedOutputDriver.ReleaseBuffer();		
 
-		int selectedOutputDriverInt = _wtoi(selectedOutputDriver.Left(2));	
+		int selectedOutputDriverInt = _ttoi(selectedOutputDriver.Left(2));	
 
 		CRegKeyEx reg;
 		DWORD value = 0;
 		DWORD newValue = 0;
-		bool isAsio2Wasapi = selectedOutputDriver.Find(L"VSTDriver-ASIO2WASAPI", 0) != -1;
+		bool isAsio2Wasapi = selectedOutputDriver.Find(_T("VSTDriver-ASIO2WASAPI"), 0) != -1;
 		if (isAsio2Wasapi)
 		{
-			reg.Open(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver\\ASIO2WASAPI", KEY_READ);
-			reg.QueryDWORDValue(L"Channels", value);
+			reg.Open(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver\\ASIO2WASAPI"), KEY_READ);
+			reg.QueryDWORDValue(_T("Channels"), value);
 		}
 
 		BASS_ASIO_SetWindow(m_hWnd);
@@ -1325,7 +1328,7 @@ public:
 
 		if (isAsio2Wasapi)
 		{				
-			reg.QueryDWORDValue(L"Channels", newValue);
+			reg.QueryDWORDValue(_T("Channels"), newValue);
 			reg.Close();			
 			
 			if (value != newValue)
@@ -1342,13 +1345,13 @@ public:
 
 				drvChArr[0] = info.outputs;
 				portbOffset.ResetContent();
-				wchar_t tmpBuff[8];
+				TCHAR tmpBuff[8];
 				for (unsigned int i = 1; i < info.outputs / 2; i++)
 				{
-					portbOffset.AddString(_ultow(i * 2, tmpBuff, 10));
+					portbOffset.AddString(_ultot(i * 2, tmpBuff, 10));
 				}
-				if (portbOffset.SelectString(-1, _ultow(portBOffsetVal, tmpBuff, 10)) == CB_ERR)
-					portbOffset.SelectString(-1, L"2");
+				if (portbOffset.SelectString(-1, _ultot(portBOffsetVal, tmpBuff, 10)) == CB_ERR)
+					portbOffset.SelectString(-1, _T("2"));
 			}
 		}
 
@@ -1368,7 +1371,7 @@ public:
 		{
 			newDriverMode.ReleaseBuffer();
 
-			selectedDriverMode = LoadOutputDriver(L"Driver Mode");
+			selectedDriverMode = LoadOutputDriver(_T("Driver Mode"));
 
 			if (resetList || selectedDriverMode.CompareNoCase(newDriverMode) != 0)
 			{				
@@ -1376,7 +1379,7 @@ public:
 
 				driverChanged = true;
 
-				if (newDriverMode.CompareNoCase(L"Bass ASIO") == 0)
+				if (newDriverMode.CompareNoCase(_T("Bass ASIO")) == 0)
 				{
 					usingASIO = true;
 					LoadAsioDrivers();
@@ -1391,7 +1394,7 @@ public:
 					ShowPortBControls(false);
 				}
 
-				SaveOutputDriver(L"Driver Mode", newDriverMode);
+				SaveOutputDriver(_T("Driver Mode"), newDriverMode);
 			}
 		}        
 
@@ -1417,28 +1420,28 @@ public:
 			{
 				selectedDriverMode.ReleaseBuffer();
 
-				if (selectedDriverMode.CompareNoCase(L"Bass ASIO") == 0)
+				if (selectedDriverMode.CompareNoCase(_T("Bass ASIO")) == 0)
 				{
 
 #ifdef WIN64
-					SaveOutputDriver(L"Bass ASIO x64", selectedOutputDriver);
+					SaveOutputDriver(_T("Bass ASIO x64"), selectedOutputDriver);
 #else
-					SaveOutputDriver(L"Bass ASIO", selectedOutputDriver);
+					SaveOutputDriver(_T("Bass ASIO"), selectedOutputDriver);
 #endif
 					driverChanged = true;									
 
-					DWORD drvId = _wtoi(selectedOutputDriver.Left(2));
+					DWORD drvId = _ttoi(selectedOutputDriver.Left(2));
 					if (drvId >= drvChArr.size()) return 0;
 					unsigned int portCount = drvChArr[drvId];
 					portbOffset.ResetContent();
-					wchar_t tmpBuff[8];
+					TCHAR tmpBuff[8];
 					for (unsigned int i = 1; i < portCount / 2; i++)
 					{
-						portbOffset.AddString(_ultow(i * 2, tmpBuff, 10));						
+						portbOffset.AddString(_ultot(i * 2, tmpBuff, 10));						
 					}
-					if (portbOffset.SelectString(-1,_ultow(portBOffsetVal, tmpBuff, 10)) ==  CB_ERR)
+					if (portbOffset.SelectString(-1,_ultot(portBOffsetVal, tmpBuff, 10)) ==  CB_ERR)
 					{
-						portbOffset.SelectString(-1, L"2");
+						portbOffset.SelectString(-1, _T("2"));
 						BOOL dummy;
 						OnCbnSelchangeComboPortb(0, 0, 0, dummy);
 					}
@@ -1446,7 +1449,7 @@ public:
 				}
 				else
 				{
-					SaveOutputDriver(L"WinMM WaveOut", selectedOutputDriver);
+					SaveOutputDriver(_T("WinMM WaveOut"), selectedOutputDriver);
 					driverChanged = true;
 				}
 			}
@@ -1464,10 +1467,10 @@ public:
 
 	LRESULT CView3::OnCbnSelchangeComboPortb(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
 	{	   
-		wchar_t tmpBuff[8];	   
-		portbOffset.GetWindowTextW(tmpBuff, 8);
-		portBOffsetVal = _wtoi(tmpBuff);
-		SaveDwordValue(L"PortBOffset", portBOffsetVal);	  
+		TCHAR tmpBuff[8];	   
+		portbOffset.GetWindowText(tmpBuff, 8);
+		portBOffsetVal = _ttoi(tmpBuff);
+		SaveDwordValue(_T("PortBOffset"), portBOffsetVal);
 		driverChanged = true;	   
 
 		return 0;
@@ -1492,9 +1495,9 @@ public:
 		COMMAND_ID_HANDLER(IDC_SNAPPLY, OnButtonApply)
 	END_MSG_MAP()
 
-	void SetGroupBoxCaption(wchar_t* caption) 
+	void SetGroupBoxCaption(TCHAR* caption) 
 	{
-		groupBox.SetWindowTextW(caption);
+		groupBox.SetWindowText(caption);
 	}
 
 	LRESULT OnInitDialogView2(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
@@ -1524,17 +1527,17 @@ public:
 		int n = synthlist.GetLBTextLen(selection);
 		synthlist.GetLBText(selection, device_name.GetBuffer(max(n, 1)));
 		device_name.ReleaseBuffer(n);
-		lRet = reg.Create(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
-		lRet = reg.DeleteSubKey(L"MIDIMap");
-		lRet = subkey.Create(reg, L"MIDIMap", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
-		lRet = subkey.SetStringValue(L"szPname", device_name);
+		lRet = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
+		lRet = reg.DeleteSubKey(_T("MIDIMap"));
+		lRet = subkey.Create(reg, _T("MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
+		lRet = subkey.SetStringValue(_T("szPname"), device_name);
 		if (lRet == ERROR_SUCCESS)
 		{
-			MessageBox(L"MIDI synth set!", L"VST MIDI Driver", MB_ICONINFORMATION);
+			MessageBox(_T("MIDI synth set!"), _T("VST MIDI Driver"), MB_ICONINFORMATION);
 		}
 		else
 		{
-			MessageBox(L"Can't set MIDI registry key!", L"VST MIDI Driver", MB_ICONSTOP);
+			MessageBox(_T("Can't set MIDI registry key!"), _T("VST MIDI Driver"), MB_ICONSTOP);
 		}
 		subkey.Close();
 		reg.Close();
@@ -1546,8 +1549,8 @@ public:
 		CRegKeyEx reg;
 		CString device_name;
 		ULONG size = 128;
-		lResult = reg.Create(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia\\MIDIMap", REG_NONE, REG_OPTION_NON_VOLATILE, KEY_READ);
-		reg.QueryStringValue(L"szPname", device_name.GetBuffer(size), &size);
+		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia\\MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_READ);
+		reg.QueryStringValue(_T("szPname"), device_name.GetBuffer(size), &size);
 		reg.Close();
 		device_name.ReleaseBuffer(size);
 		int device_count = midiOutGetNumDevs();
@@ -1557,7 +1560,7 @@ public:
 			MMRESULT Error = midiOutGetDevCaps(i, &Caps, sizeof(Caps));
 			if (Error != MMSYSERR_NOERROR)
 				continue;
-			if(wcscmp(Caps.szPname,L"CoolSoft MIDIMapper"))	synthlist.AddString(Caps.szPname);
+			if(_tcscmp(Caps.szPname, _T("CoolSoft MIDIMapper"))) synthlist.AddString(Caps.szPname);
 		}
 		int index = 0;
 		index = synthlist.FindStringExact(-1, device_name);

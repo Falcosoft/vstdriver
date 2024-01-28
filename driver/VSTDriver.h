@@ -31,6 +31,12 @@
 #include <string>
 #include <vector>
 
+#ifndef UNICODE  
+typedef std::string tstring;
+#else
+typedef std::wstring tstring;
+#endif
+
 UINT GetWaveOutDeviceId();
 bool IsWinNT4();
 bool IsVistaOrNewer();
@@ -66,7 +72,7 @@ private:
 
 	unsigned test_plugin_platform();
 	bool connect_pipe( HANDLE hPipe );
-	std::wstring GetVsthostPath();
+	tstring GetVsthostPath();
 	bool process_create();
 	void process_terminate();
 	bool process_running();

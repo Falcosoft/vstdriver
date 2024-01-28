@@ -28,8 +28,6 @@
 #include <string>
 #include <math.h>
 
-using std::wstring;
-
 extern "C"{ extern HINSTANCE hinst_vst_driver; }
 extern "C" { extern bool isSCVA; };
 
@@ -189,12 +187,12 @@ namespace VSTMIDIDRV{
 		return b;
 	}
 
-	static DWORD GetDwordData (LPCWSTR valueName, DWORD defaultValue) 
+	static DWORD GetDwordData (LPCTSTR valueName, DWORD defaultValue) 
 	{
 		HKEY hKey;
 		DWORD retResult = defaultValue;		
 
-		long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
+		long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
 		if (result == NO_ERROR)
 		{
 			DWORD size = sizeof(retResult);
@@ -278,7 +276,7 @@ namespace VSTMIDIDRV{
 			int wResult = waveOutOpen(&hWaveOut, GetWaveOutDeviceId(), isWinNT4 ? (LPWAVEFORMATEX)&wFormatLegacy : &wFormat.Format, callback, (DWORD_PTR)&midiSynth, callbackType);
 			if (wResult != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToOpen]) {
-					MessageBox(NULL, L"Failed to open waveform output device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					MessageBox(NULL, _T("Failed to open waveform output device"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[VSTMIDIDRV::FailedToOpen] = true;
 				}
 				return 2;
@@ -301,7 +299,7 @@ namespace VSTMIDIDRV{
 				wResult = waveOutPrepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
 				if (wResult != MMSYSERR_NOERROR) {
 					if (!errorShown[VSTMIDIDRV::FailedToPrepare]) {
-						MessageBox(NULL, L"Failed to Prepare Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						MessageBox(NULL, _T("Failed to Prepare Header"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 						errorShown[VSTMIDIDRV::FailedToPrepare] = true;
 					}
 
@@ -323,7 +321,7 @@ namespace VSTMIDIDRV{
 			int wResult = waveOutReset(hWaveOut);
 			if (wResult != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToReset]) {
-					MessageBox(NULL, L"Failed to Reset WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					MessageBox(NULL, _T("Failed to Reset WaveOut"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[VSTMIDIDRV::FailedToReset] = true;
 				}
 
@@ -334,7 +332,7 @@ namespace VSTMIDIDRV{
 				wResult = waveOutUnprepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
 				if (wResult != MMSYSERR_NOERROR) {
 					if (!errorShown[VSTMIDIDRV::FailedToUnprepare]) {
-						MessageBox(NULL, L"Failed to Unprepare Wave Header", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						MessageBox(NULL, _T("Failed to Unprepare Wave Header"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 						errorShown[VSTMIDIDRV::FailedToUnprepare] = true;
 					}
 
@@ -347,7 +345,7 @@ namespace VSTMIDIDRV{
 			wResult = waveOutClose(hWaveOut);
 			if (wResult != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToClose]) {
-					MessageBox(NULL, L"Failed to Close WaveOut", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					MessageBox(NULL, _T("Failed to Close WaveOut"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[VSTMIDIDRV::FailedToClose] = true;
 				}
 
@@ -366,7 +364,7 @@ namespace VSTMIDIDRV{
 			for (UINT i = 0; i < chunks; i++) {
 				if (waveOutWrite(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
 					if (!errorShown[VSTMIDIDRV::FailedToWrite]) {
-						MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+						MessageBox(NULL, _T("Failed to write block to device"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 						errorShown[VSTMIDIDRV::FailedToWrite] = true;
 					}
 
@@ -380,7 +378,7 @@ namespace VSTMIDIDRV{
 		int Pause(){
 			if (waveOutPause(hWaveOut) != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToPause]) {
-					MessageBox(NULL, L"Failed to Pause wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					MessageBox(NULL, _T("Failed to Pause wave playback"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[VSTMIDIDRV::FailedToPause] = true;
 				}
 
@@ -392,7 +390,7 @@ namespace VSTMIDIDRV{
 		int Resume(){
 			if (waveOutRestart(hWaveOut) != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToResume]) {
-					MessageBox(NULL, L"Failed to Resume wave playback", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					MessageBox(NULL, _T("Failed to Resume wave playback"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[VSTMIDIDRV::FailedToResume] = true;
 				}
 
@@ -420,7 +418,7 @@ namespace VSTMIDIDRV{
 
 			if (waveOutGetPosition(hWaveOut, &mmTime, sizeof(MMTIME)) != MMSYSERR_NOERROR) {
 				if (!errorShown[VSTMIDIDRV::FailedToGetPosition]) {
-					MessageBox(NULL, L"Failed to get current playback position", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					MessageBox(NULL, _T("Failed to get current playback position"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[VSTMIDIDRV::FailedToGetPosition] = true;
 				}
 
@@ -428,7 +426,7 @@ namespace VSTMIDIDRV{
 			}
 			if (mmTime.wType != TIME_SAMPLES) {
 				if (!errorShown[VSTMIDIDRV::FailedToGetSamples]) {
-					MessageBox(NULL, L"Failed to get # of samples played", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+					MessageBox(NULL, _T("Failed to get # of samples played"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[VSTMIDIDRV::FailedToGetSamples] = true;
 				}
 
@@ -479,7 +477,7 @@ namespace VSTMIDIDRV{
 							midiSynth.Render((short*)waveOut.WaveHdr[i].lpData, waveOut.WaveHdr[i].dwBufferLength / (sizeof(short) * _this->channels));
 						if (waveOutWrite(waveOut.hWaveOut, &waveOut.WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
 							if (!_this->errorShown[VSTMIDIDRV::FailedToWrite]) {
-								MessageBox(NULL, L"Failed to write block to device", L"VST MIDI Driver", MB_OK | MB_ICONEXCLAMATION);
+								MessageBox(NULL, _T("Failed to write block to device"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 								_this->errorShown[VSTMIDIDRV::FailedToWrite] = true;
 							}
 
@@ -527,13 +525,13 @@ namespace VSTMIDIDRV{
 		{
 			GetModuleFileName(hinst_vst_driver, installPath, MAX_PATH);
 			//PathRemoveFileSpec(installPath);
-			wchar_t *chrP = wcsrchr(installPath, '\\'); //removes SHLWAPI dependency for WIN NT4
+			TCHAR *chrP = _tcsrchr(installPath, '\\'); //removes SHLWAPI dependency for WIN NT4
 			if(chrP) chrP[0] = 0;
 
-			lstrcat(installPath, _T("\\vstmididrv\\"));
+			_tcscat_s(installPath, _T("\\vstmididrv\\"));
 
-			lstrcpy(bassAsioPath, installPath);
-			lstrcat(bassAsioPath, _T("bassasio_vstdrv.dll"));
+			_tcscpy_s(bassAsioPath, installPath);
+			_tcscat_s(bassAsioPath, _T("bassasio_vstdrv.dll"));
 		}
 
 		bool LoadBassAsio()
@@ -542,15 +540,18 @@ namespace VSTMIDIDRV{
 			bassAsio = LoadLibrary(bassAsioPath);
 			if (!bassAsio) return false;	
 						
-			lstrcpy(asio2WasapiPath, installPath);
-			lstrcat(asio2WasapiPath, _T("ASIO2WASAPI_vstdrv.dll"));
+			_tcscpy_s(asio2WasapiPath, installPath);
+			_tcscat_s(asio2WasapiPath, _T("ASIO2WASAPI_vstdrv.dll"));
 			if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
 			{
 				LOADBASSASIOFUNCTION(BASS_ASIO_AddDevice);
 				
 				char asio2WasapiAnsiPath[MAX_PATH] = { 0 };				
+#ifdef UNICODE  
 				WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)asio2WasapiPath, -1, (char*)asio2WasapiAnsiPath, MAX_PATH, NULL, NULL);
-				
+#else
+				strcpy_s(asio2WasapiAnsiPath, asio2WasapiPath);
+#endif		
 				static const GUID CLSID_ASIO2WASAPI_DRIVER = { 0x3981c4c8, 0xfe12, 0x4b0f, { 0x98, 0xa0, 0xd1, 0xb6, 0x67, 0xbd, 0xa6, 0x15 } };
 				BASS_ASIO_AddDevice(&CLSID_ASIO2WASAPI_DRIVER, asio2WasapiAnsiPath, "VSTDriver-ASIO2WASAPI");
 								
@@ -600,15 +601,15 @@ namespace VSTMIDIDRV{
 			return false;
 		}
 
-		wstring GetAsioDriverName()
+		tstring GetAsioDriverName()
 		{
 			HKEY hKey;
 			DWORD dwType = REG_SZ;
 			DWORD dwSize = 0;
-			wchar_t* regValue;
-			wstring wresult;
+			TCHAR* regValue;
+			tstring wresult;
 
-			long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
+			long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), 0, KEY_READ, &hKey);
 			if (result == NO_ERROR)
 			{
 #ifdef WIN64
@@ -668,22 +669,22 @@ namespace VSTMIDIDRV{
 		{
 			selectedDeviceId = 0;
 			selectedChannelId = 0;
-			wstring selectedOutputDriver = GetAsioDriverName();
+			tstring selectedOutputDriver = GetAsioDriverName();
 			if(selectedOutputDriver.empty()) return;
 
 			size_t period = selectedOutputDriver.find(L'.');
-			wstring sdeviceId = selectedOutputDriver.substr(0, period);
-			selectedDeviceId = _wtoi(sdeviceId.c_str());
+			tstring sdeviceId = selectedOutputDriver.substr(0, period);
+			selectedDeviceId = _ttoi(sdeviceId.c_str());
 
 			size_t space = selectedOutputDriver.find(L' ');
-			wstring schannelid = selectedOutputDriver.substr(period + 1, space - period - 1);
-			selectedChannelId = _wtoi(schannelid.c_str());
+			tstring schannelid = selectedOutputDriver.substr(period + 1, space - period - 1);
+			selectedChannelId = _ttoi(schannelid.c_str());
 		}
 
 		DWORD GetPortBOffset()
 		{
 			DWORD portbOffset = 2;
-			portbOffset = GetDwordData(L"PortBOffset", portbOffset);			
+			portbOffset = GetDwordData(_T("PortBOffset"), portbOffset);
 			return portbOffset;
 		}
 
@@ -734,8 +735,8 @@ namespace VSTMIDIDRV{
 				samplerate = sampleRate;
 
 				buflen = bufferSizeMS == 0 ? 0 : DWORD(bufferSizeMS * (sampleRate / 1000.0f));				
-				wstring selectedOutputDriver = GetAsioDriverName();
-				if (selectedOutputDriver.find(L"VSTDriver-ASIO2WASAPI") != wstring::npos)
+				tstring selectedOutputDriver = GetAsioDriverName();
+				if (selectedOutputDriver.find(_T("VSTDriver-ASIO2WASAPI")) != tstring::npos)
 				{
 					buflen = 0;
 					isASIO2WASAPI = true;
@@ -1009,49 +1010,49 @@ namespace VSTMIDIDRV{
 
 	DWORD GetSampleRate(){
 		DWORD sampleRate = 48000;		
-		sampleRate = GetDwordData(L"SampleRate", sampleRate);		
+		sampleRate = GetDwordData(_T("SampleRate"), sampleRate);
 		return sampleRate;
 	}
 
 	DWORD GetBufferSize(){
 		DWORD bufferSize = 80;	    
-		bufferSize = GetDwordData(L"BufferSize", bufferSize);		
+		bufferSize = GetDwordData(_T("BufferSize"), bufferSize);
 		return bufferSize;
 	}
 
 	int GetGain(){
 		int gain = 0;		
-		gain = GetDwordData(L"Gain", gain);
+		gain = GetDwordData(_T("Gain"), gain);
 		return gain;
 	}
 
 	WORD GetChannelCount(){		
 		BOOL enabled = FALSE;		
-		enabled = GetDwordData(L"Use4ChannelMode", enabled);		
+		enabled = GetDwordData(_T("Use4ChannelMode"), enabled);
 		return enabled ? 4 : 2;
 	}
 
 	bool IsShowVSTDialog(){
 		BOOL showVstDialog = FALSE;
-		showVstDialog = GetDwordData(L"ShowVstDialog",showVstDialog);
+		showVstDialog = GetDwordData(_T("ShowVstDialog"),showVstDialog);
 		return showVstDialog != FALSE;		
 	}
 
 	bool GetUsingFloat(){
 		BOOL usingFloat = TRUE;
-		usingFloat = GetDwordData(L"UseFloat", usingFloat);		
+		usingFloat = GetDwordData(_T("UseFloat"), usingFloat);
 		return usingFloat != FALSE;
 	}
 
 	DWORD GetHighDpiMode() {
 		DWORD highDpiMode = 0;
-		highDpiMode = GetDwordData(L"HighDpiMode", highDpiMode);
+		highDpiMode = GetDwordData(_T("HighDpiMode"), highDpiMode);
 		return highDpiMode;
 	}
 
 	bool GetEnableSinglePort32ChMode() {
 		BOOL enableSinglePort32ChMode = TRUE;
-		enableSinglePort32ChMode = GetDwordData(L"EnableSinglePort32ChMode", enableSinglePort32ChMode);
+		enableSinglePort32ChMode = GetDwordData(_T("EnableSinglePort32ChMode"), enableSinglePort32ChMode);
 		return enableSinglePort32ChMode != FALSE;
 	}	
 

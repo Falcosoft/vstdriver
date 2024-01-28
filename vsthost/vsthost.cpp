@@ -77,17 +77,17 @@ namespace Error {
 };
 
 #ifdef WIN64
-	static wchar_t bitnessStr[8] =L" 64-bit"; 
+	static TCHAR bitnessStr[8] =_T(" 64-bit"); 
 #else
-	static wchar_t bitnessStr[8] =L" 32-bit"; 
+	static TCHAR bitnessStr[8] = _T(" 32-bit");
 #endif	
 
 static NOTIFYICONDATA nIconData = { 0 };
 static HMENU trayMenu = NULL;
 static HMENU pluginMenu = NULL;
 
-static wchar_t clientBitnessStr[8] = { 0 };
-static wchar_t outputModeStr[8] = { 0 };
+static TCHAR clientBitnessStr[8] = { 0 };
+static TCHAR outputModeStr[8] = { 0 };
 
 bool resetRequested = false;
 bool need_idle = false;
@@ -95,7 +95,7 @@ bool idle_started = false;
 
 static HINSTANCE user32 = NULL;
 static HINSTANCE kernel32 = NULL;
-static BOOL WIN32DEF(DynGetModuleHandleExW)(DWORD dwFlags, LPCWSTR lpModuleName, HMODULE* phModule) = NULL;
+static BOOL WIN32DEF(DynGetModuleHandleEx)(DWORD dwFlags, LPCTSTR lpModuleName, HMODULE* phModule) = NULL;
 
 #if(_WIN32_WINNT < 0x0500) 
 	static BOOL WIN32DEF(AllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
@@ -119,8 +119,8 @@ static DWORD MainThreadId;
 static char* dll_dir = NULL;
 
 static char product_string[256] = { 0 };
-static wchar_t midiClient[64] = { 0 };
-static wchar_t trayTip[MAX_PATH] = { 0 };
+static TCHAR midiClient[64] = { 0 };
+static TCHAR trayTip[MAX_PATH] = { 0 };
 
 static HANDLE null_file = NULL;
 static HANDLE pipe_in = NULL;
@@ -161,7 +161,7 @@ void Log(LPCTSTR szFormat, ...)
 	{
 		TCHAR logfile[MAX_PATH];
 		GetEnvironmentVariable(_T("TEMP"), logfile, _countof(logfile));
-		lstrcat(logfile, _T("\\vsthost.log"));
+		_tcscat_s(logfile, _T("\\vsthost.log"));
 		fpLog = _tfopen(logfile, _T("a"));
 	}
 	if (fpLog)
@@ -177,18 +177,18 @@ void NoLog(LPCTSTR szFormat, ...) {}
 #endif
 
 #pragma comment(lib,"Version.lib") 
-static wchar_t* GetFileVersion(wchar_t* filePath, wchar_t* result)
+static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned int buffSize)
 {
 	DWORD               dwSize = 0;
 	BYTE* pVersionInfo = NULL;
 	VS_FIXEDFILEINFO* pFileInfo = NULL;
 	UINT                pLenFileInfo = 0;
-	wchar_t tmpBuff[MAX_PATH];
+	TCHAR tmpBuff[MAX_PATH];
 
 	if(!filePath)
 		GetModuleFileName(NULL, tmpBuff, MAX_PATH);
 	else
-		lstrcpy(tmpBuff, filePath);
+		_tcscpy_s(tmpBuff, filePath);
 
 	dwSize = GetFileVersionInfoSize(tmpBuff, NULL);
 	if (dwSize == 0)
@@ -210,17 +210,17 @@ static wchar_t* GetFileVersion(wchar_t* filePath, wchar_t* result)
 		return NULL;
 	}      
 
-	lstrcat(result, L"version: ");
-	_ultow_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-	lstrcat(result, tmpBuff);
-	lstrcat(result, L".");
-	_ultow_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
-	lstrcat(result, tmpBuff);	
-	lstrcat(result, L".");
-	_ultow_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-	lstrcat(result, tmpBuff);
-	//lstrcat(result, L".");
-	//lstrcat(result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+	_tcscat_s(result, buffSize, _T("version: "));
+	_ultot_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+	_tcscat_s(result, buffSize, _T("."));
+	_ultot_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+	_tcscat_s(result, buffSize, _T("."));
+	_ultot_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+	//_tcscat_s(result, buffSize, _T("."));
+	//_tcscat_s(result, buffSize, _ultot((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
 
 	return result;
 }
@@ -415,29 +415,29 @@ static BOOL settings_save(AEffect* pEffect)
 	long lResult;
 	DWORD dwType = REG_SZ;
 	HKEY hKey;
-	wchar_t vst_path[MAX_PATH] = { 0 };
+	TCHAR vst_path[MAX_PATH] = { 0 };
 	ULONG size;
 	
-	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
+	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
 	if (lResult == ERROR_SUCCESS)
 	{
-		TCHAR szValueName[20] = L"plugin";
+		TCHAR szValueName[20] = _T("plugin");
 		DWORD selIndex = 0;
 		size = sizeof(selIndex);
 		lResult = RegQueryValueEx(hKey, _T("SelectedPlugin"), NULL, &dwType, (LPBYTE)&selIndex, &size);
 		if (lResult == ERROR_SUCCESS && selIndex)
 		{
 			TCHAR szPostfix[12] = { 0 };
-			lstrcat(szValueName, _itow(selIndex, szPostfix, 10));
+			_tcscat_s(szValueName, _itot(selIndex, szPostfix, 10));
 		}
 
 		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
 		if (lResult == ERROR_SUCCESS && dwType == REG_SZ)
 		{
 			RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
-			wchar_t* chrP = wcsrchr(vst_path, '.'); // removes extension
+			TCHAR* chrP = _tcsrchr(vst_path, '.'); // removes extension
 			if (chrP) chrP[0] = 0;
-			lstrcat(vst_path, L".set");
+			_tcscat_s(vst_path, _T(".set"));
 
 			HANDLE fileHandle = CreateFile(vst_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
@@ -467,19 +467,19 @@ static void getEditorPosition(int port, int& x, int& y)
 {
 	HKEY hKey;
 
-	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
 	if (result == NO_ERROR)
 	{
 		DWORD size = 4;
 		if (!port)
 		{
-			RegQueryValueEx(hKey, L"PortAWinPosX", NULL, NULL, (LPBYTE)&x, &size);
-			RegQueryValueEx(hKey, L"PortAWinPosY", NULL, NULL, (LPBYTE)&y, &size);
+			RegQueryValueEx(hKey, _T("PortAWinPosX"), NULL, NULL, (LPBYTE)&x, &size);
+			RegQueryValueEx(hKey, _T("PortAWinPosY"), NULL, NULL, (LPBYTE)&y, &size);
 		}
 		else
 		{
-			RegQueryValueEx(hKey, L"PortBWinPosX", NULL, NULL, (LPBYTE)&x, &size);
-			RegQueryValueEx(hKey, L"PortBWinPosY", NULL, NULL, (LPBYTE)&y, &size);
+			RegQueryValueEx(hKey, _T("PortBWinPosX"), NULL, NULL, (LPBYTE)&x, &size);
+			RegQueryValueEx(hKey, _T("PortBWinPosY"), NULL, NULL, (LPBYTE)&y, &size);
 
 		}
 
@@ -514,19 +514,19 @@ static void setEditorPosition(int port, int x, int y)
 {
 	HKEY hKey;
 
-	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WRITE, &hKey);
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ | KEY_WRITE, &hKey);
 	if (result == NO_ERROR)
 	{
 		DWORD size = 4;
 		if (!port)
 		{
-			RegSetValueEx(hKey, L"PortAWinPosX", NULL, REG_DWORD, (LPBYTE)&x, size);
-			RegSetValueEx(hKey, L"PortAWinPosY", NULL, REG_DWORD, (LPBYTE)&y, size);
+			RegSetValueEx(hKey, _T("PortAWinPosX"), NULL, REG_DWORD, (LPBYTE)&x, size);
+			RegSetValueEx(hKey, _T("PortAWinPosY"), NULL, REG_DWORD, (LPBYTE)&y, size);
 		}
 		else
 		{
-			RegSetValueEx(hKey, L"PortBWinPosX", NULL, REG_DWORD, (LPBYTE)&x, size);
-			RegSetValueEx(hKey, L"PortBWinPosY", NULL, REG_DWORD, (LPBYTE)&y, size);
+			RegSetValueEx(hKey, _T("PortBWinPosX"), NULL, REG_DWORD, (LPBYTE)&x, size);
+			RegSetValueEx(hKey, _T("PortBWinPosY"), NULL, REG_DWORD, (LPBYTE)&y, size);
 
 		}
 
@@ -653,9 +653,9 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
 
-				wchar_t wText[18] = L"VST Editor port ";
-				wchar_t intCnst[] = { 'A' + portNum };
-				wcsncat(wText, intCnst, 1);
+				TCHAR wText[18] = _T("VST Editor port ");
+				TCHAR intCnst[] = { 'A' + portNum };
+				_tcsncat(wText, intCnst, 1);
 
 				SetWindowText(hwnd, wText);
 
@@ -699,10 +699,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					{
 						LOGFONT lf = { 0 };
 
-						checkBoxWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Always on Top", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+						checkBoxWnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Always on Top"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 						SendMessage(checkBoxWnd[portNum], BM_SETCHECK, BST_CHECKED, 0);
 
-						buttonWnd[portNum] = CreateWindowEx(NULL, L"BUTTON", L"Save Settings", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+						buttonWnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Save Settings"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 
 						GetObject(GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf);
 						hFont[portNum] = CreateFontIndirect(&lf);
@@ -801,8 +801,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 		else if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)buttonWnd[portNum])
 		{
-			if (!settings_save(effect)) MessageBox(hwnd, L"Cannot save plugin settings!\r\nMaybe you do not have permission to write plugin's folder \r\nor the plugin has nothing to save.", L"VST MIDI Driver", MB_OK | MB_ICONERROR);
-			else MessageBox(hwnd, L"Plugin settings have been saved successfully!", L"VST MIDI Driver", MB_OK | MB_ICONINFORMATION);
+			if (!settings_save(effect)) MessageBox(hwnd, _T("Cannot save plugin settings!\r\nMaybe you do not have permission to write plugin's folder \r\nor the plugin has nothing to save."), _T("VST MIDI Driver"), MB_OK | MB_ICONERROR);
+			else MessageBox(hwnd, _T("Plugin settings have been saved successfully!"), _T("VST MIDI Driver"), MB_OK | MB_ICONINFORMATION);
 
 			return 0;
 		}
@@ -895,13 +895,11 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 		break;
 
 	case audioMasterGetVendorString:
-		strcpy((char*)ptr, "VST MIDI Driver"); //full 64 char freezes some plugins. E.g. Kondor. 
-		//strncpy((char *)ptr, "YAMAHA", 64);
+		strcpy_s((char*)ptr, 16, "VST MIDI Driver"); //full 64 char freezes some plugins. E.g. Kondor. 		
 		break;
 
 	case audioMasterGetProductString:
-		strcpy((char*)ptr, "VST Host Bridge"); //full 64 char freezes some plugins. E.g. Kondor. 
-		//strncpy((char *)ptr, "SOL/SQ01", 64);
+		strcpy_s((char*)ptr, 16, "VST Host Bridge"); //full 64 char freezes some plugins. E.g. Kondor.		
 		break;
 
 	case audioMasterGetVendorVersion:
@@ -959,21 +957,21 @@ bool LoadMiniDump()
 		if (*szBuf && !hmodDbgHelp)
 		{
 #ifdef _M_IX86
-			lstrcpy(p, _T("\\Debugging Tools for Windows (x86)\\dbghelp.dll"));
+			_tcscpy(p, _T("\\Debugging Tools for Windows (x86)\\dbghelp.dll"));
 #elif defined(_M_X64)
-			lstrcpy(p, _T("\\Debugging Tools for Windows (x64)\\dbghelp.dll"));
+			_tcscpy(p, _T("\\Debugging Tools for Windows (x64)\\dbghelp.dll"));
 #endif
 			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
 		}
 		if (*szBuf && !hmodDbgHelp)
 		{
-			lstrcpy(p, _T("\\Debugging Tools for Windows\\dbghelp.dll"));
+			_tcscpy(p, _T("\\Debugging Tools for Windows\\dbghelp.dll"));
 			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
 		}
 #if defined _M_X64
 		if (*szBuf && !hmodDbgHelp)       /* still not found?                  */
 		{                               /* try 64-bit version                */
-			lstrcpy(p, _T("\\Debugging Tools for Windows 64-Bit\\dbghelp.dll"));
+			_tcscpy(p, _T("\\Debugging Tools for Windows 64-Bit\\dbghelp.dll"));
 			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
 		}
 #endif
@@ -993,7 +991,7 @@ bool LoadMiniDump()
 	{
 		TCHAR szPath[_MAX_PATH];
 		TCHAR* lbsl = NULL, * ldot = NULL;
-		lstrcpy(szExeName, _T("vsthost"));
+		_tcscpy_s(szExeName, _T("vsthost"));
 		GetModuleFileName(NULL, szPath, _MAX_PATH);
 		for (TCHAR* p = szPath; *p; p++)
 			if (*p == _T('\\'))
@@ -1037,7 +1035,7 @@ void MiniDump(EXCEPTION_POINTERS* ExceptionInfo)
 	}
 	static SYSTEMTIME st;
 	GetLocalTime(&st);
-	lstrcpy(szPath + dwExeLen, szExeName);
+	_tcscpy(szPath + dwExeLen, szExeName);
 	dwExeLen += (DWORD)lstrlen(szExeName);
 	wsprintf(szPath + dwExeLen, _T(".%04d%02d%02d-%02d%02d%02d.mdmp"),
 		szExeName,
@@ -1082,23 +1080,23 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 #endif
 		if (!trayMenu) return 1; // Do not disturb users with error messages caused by faulty plugins when driver is closing anyway
 
-		static wchar_t buffer[MAX_PATH] = { 0 };			
+		static TCHAR buffer[MAX_PATH] = { 0 };			
 		
-		if (DynGetModuleHandleExW)
+		if (DynGetModuleHandleEx)
 		{			
-			static wchar_t titleBuffer[MAX_PATH / 2] = { 0 };	
+			static TCHAR titleBuffer[MAX_PATH / 2] = { 0 };	
 			HMODULE hFaultyModule;
-			DynGetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)param->ExceptionRecord->ExceptionAddress, &hFaultyModule);
+			DynGetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCTSTR)param->ExceptionRecord->ExceptionAddress, &hFaultyModule);
 			GetModuleFileName(hFaultyModule, buffer, MAX_PATH);
 			GetFileTitle(buffer, titleBuffer, MAX_PATH / 2);
-			wsprintf(buffer, L"An unexpected error 0x%X occured in %ls.\r\nVST host bridge now exits.", param->ExceptionRecord->ExceptionCode, titleBuffer);
+			wsprintf(buffer, _T("An unexpected error 0x%X occured in %ls.\r\nVST host bridge now exits."), param->ExceptionRecord->ExceptionCode, titleBuffer);
 		}
 		else 
 		{
-			wsprintf(buffer, L"An unexpected error 0x%X occured.\r\nVST host bridge now exits.", param->ExceptionRecord->ExceptionCode);
+			wsprintf(buffer, _T("An unexpected error 0x%X occured.\r\nVST host bridge now exits."), param->ExceptionRecord->ExceptionCode);
 		}		
 		
-		MessageBox(0, buffer, L"VST Midi Driver", MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
+		MessageBox(0, buffer, _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
 		Shell_NotifyIcon(NIM_DELETE, &nIconData);
 		DestroyMenu(trayMenu);		
 		TerminateProcess(GetCurrentProcess(), 1);
@@ -1140,24 +1138,24 @@ void showVstEditor(uint32_t portnum)
 	}
 }
 
-bool getPluginMenuItem(int itemIndex, wchar_t* result)
+bool getPluginMenuItem(int itemIndex, TCHAR* result, unsigned int buffSize)
 {
 	long lResult;
 	DWORD dwType = REG_SZ;
 	HKEY hKey;
-	wchar_t vst_path[MAX_PATH] = { 0 };
-	wchar_t vst_title[MAX_PATH - 4] = { 0 };
+	TCHAR vst_path[MAX_PATH] = { 0 };
+	TCHAR vst_title[MAX_PATH - 4] = { 0 };
 	ULONG size;
 
-	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ, &hKey);
+	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
 	if (lResult == ERROR_SUCCESS)
 	{
-		TCHAR szValueName[8] = L"plugin";
+		TCHAR szValueName[8] = _T("plugin");
 		TCHAR szPluginNum[2] = { 0 };
 		
 		if (itemIndex)
 		{			
-			lstrcat(szValueName, _itow(itemIndex, szPluginNum, 10));
+			_tcscat_s(szValueName, _itot(itemIndex, szPluginNum, 10));
 		}
 
 		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
@@ -1169,9 +1167,9 @@ bool getPluginMenuItem(int itemIndex, wchar_t* result)
 				RegCloseKey(hKey);
 				
 				GetFileTitle(vst_path, vst_title, MAX_PATH - 4);				
-				lstrcpy(result, _itow(itemIndex, szPluginNum, 10));
-				lstrcat(result, L". ");
-				lstrcat(result, vst_title);
+				_tcscpy_s(result, buffSize, _itot(itemIndex, szPluginNum, 10));
+				_tcscat_s(result, buffSize, _T(". "));
+				_tcscat_s(result, buffSize, vst_title);
 				return true;
 			}
 
@@ -1188,11 +1186,11 @@ int getSelectedPluginIndex()
 	HKEY hKey;
 	int retRes = 0;
 
-	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WRITE, &hKey);
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ | KEY_WRITE, &hKey);
 	if (result == NO_ERROR)
 	{
 		DWORD size = sizeof(DWORD);
-		RegQueryValueEx(hKey, L"SelectedPlugin", NULL, NULL, (LPBYTE)&retRes, &size);		
+		RegQueryValueEx(hKey, _T("SelectedPlugin"), NULL, NULL, (LPBYTE)&retRes, &size);
 
 		RegCloseKey(hKey);
 	}
@@ -1204,11 +1202,11 @@ void setSelectedPluginIndex(int index)
 {
 	HKEY hKey;
 
-	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver", 0, KEY_READ | KEY_WRITE, &hKey);
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ | KEY_WRITE, &hKey);
 	if (result == NO_ERROR)
 	{
 		DWORD size = sizeof(DWORD);
-		RegSetValueEx(hKey, L"SelectedPlugin", NULL, REG_DWORD, (LPBYTE)&index, size);		
+		RegSetValueEx(hKey, _T("SelectedPlugin"), NULL, REG_DWORD, (LPBYTE)&index, size);
 
 		RegCloseKey(hKey);
 	}
@@ -1218,7 +1216,7 @@ void setSelectedPluginIndex(int index)
 
 LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {		
-	wchar_t tmpPath[MAX_PATH] = { 0 };
+	TCHAR tmpPath[MAX_PATH] = { 0 };
 
 	switch (msg)
 	{
@@ -1227,7 +1225,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			pluginMenu = CreatePopupMenu();
 
 			for (int i = 0; i < MAX_PLUGINS; i++)
-				if (getPluginMenuItem(i, tmpPath)) {
+				if (getPluginMenuItem(i, tmpPath, MAX_PATH)) {
 					if (getSelectedPluginIndex() == i)
 						AppendMenu(pluginMenu, MF_STRING | MF_ENABLED | MF_CHECKED, i, tmpPath);
 					else
@@ -1235,18 +1233,18 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 			
 			trayMenu = CreatePopupMenu();
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORTMENUOFFSET, L"Port A VST Dialog");
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORTMENUOFFSET + 1, L"Port B VST Dialog");
-			AppendMenu(trayMenu, MF_SEPARATOR, 0, L"");
-			AppendMenu(trayMenu, MF_POPUP, (UINT)pluginMenu, L"Switch Plugin");
-			AppendMenu(trayMenu, MF_SEPARATOR, 0, L"");
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 11, L"Send GM Reset");
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 12, L"Send GS Reset");
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 13, L"Send XG Reset");
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 14, L"Send GM2 Reset");
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 15, L"All Notes/CC Off");
-			AppendMenu(trayMenu, MF_SEPARATOR, 0, L"");
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 21, L"Info...");
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORTMENUOFFSET, _T("Port A VST Dialog"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORTMENUOFFSET + 1, _T("Port B VST Dialog"));
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+			AppendMenu(trayMenu, MF_POPUP, (UINT)pluginMenu, _T("Switch Plugin"));
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 11, _T("Send GM Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 12, _T("Send GS Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 13, _T("Send XG Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 14, _T("Send GM2 Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 15, _T("All Notes/CC Off"));
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 21, _T("Info..."));
 
 
 			nIconData.cbSize = sizeof(NOTIFYICONDATA);
@@ -1255,7 +1253,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			nIconData.uID = WM_ICONMSG;
 			nIconData.uCallbackMessage = WM_ICONMSG;
 			nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
-			lstrcpyn(nIconData.szTip, trayTip, _countof(nIconData.szTip));
+			_tcsncpy_s(nIconData.szTip, trayTip, _countof(nIconData.szTip));
 			Shell_NotifyIcon(NIM_ADD, &nIconData);
 
 			InitSimpleResetEvents();
@@ -1296,14 +1294,14 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_HELP:
 		{
-			wchar_t tmpPath[MAX_PATH] = { 0 };			
+			TCHAR tmpPath[MAX_PATH] = { 0 };			
 
 			GetWindowsDirectory(tmpPath, MAX_PATH);
-			lstrcat(tmpPath, L"\\SysWOW64\\vstmididrv\\Help\\Readme.html");
+			_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\Readme.html"));
 			if(GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
 			{
 				GetWindowsDirectory(tmpPath, MAX_PATH);
-				lstrcat(tmpPath, L"\\System32\\vstmididrv\\Help\\Readme.html");
+				_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\Readme.html"));
 			}	
 						
 			ShellExecute(hwnd, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
@@ -1311,8 +1309,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_COMMAND:
 		{
-			wchar_t tempBuff[MAX_PATH] = { 0 };
-			wchar_t versionBuff[MAX_PATH] = L"MIDI client: ";
+			TCHAR tempBuff[MAX_PATH] = { 0 };
+			TCHAR versionBuff[MAX_PATH] = _T("MIDI client: ");
 			MSGBOXPARAMS params = {0};
 
 			if (wParam >= 0 && wParam < MAX_PLUGINS)
@@ -1345,31 +1343,35 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			case 21:
 				if (aboutBoxResult == 255) return 0;
 
-				lstrcat(versionBuff, midiClient);
-				lstrcat(versionBuff, L" "); 
-				lstrcat(versionBuff, clientBitnessStr);
-				lstrcat(versionBuff, L"\r\nPlugin: ");				
+				_tcscat_s(versionBuff, midiClient);
+				_tcscat_s(versionBuff, _T(" "));
+				_tcscat_s(versionBuff, clientBitnessStr);
+				_tcscat_s(versionBuff, _T("\r\nPlugin: "));
+#ifdef UNICODE  
 				MultiByteToWideChar(CP_ACP, 0, product_string, 64, tempBuff, 64);
-				lstrcat(versionBuff, tempBuff);
-				lstrcat(versionBuff, bitnessStr);
-				lstrcat(versionBuff, L"\r\nDriver mode: ");
-				lstrcat(versionBuff, outputModeStr);
+				_tcscat_s(versionBuff, tempBuff);
+#else
+				strncat_s(versionBuff, product_string, 64);
+#endif			
+				_tcscat_s(versionBuff, bitnessStr);
+				_tcscat_s(versionBuff, _T("\r\nDriver mode: "));
+				_tcscat_s(versionBuff, outputModeStr);
 				
-				lstrcat(versionBuff, L"\r\n \r\n");
+				_tcscat_s(versionBuff, _T("\r\n \r\n"));
 				
-				lstrcat(versionBuff, L"Synth driver ");				
+				_tcscat_s(versionBuff, _T("Synth driver "));
 				GetSystemDirectory(tempBuff, MAX_PATH);
-				lstrcat(tempBuff, L"\\vstmididrv.dll");
-				GetFileVersion(tempBuff, versionBuff);
+				_tcscat_s(tempBuff, _T("\\vstmididrv.dll"));
+				GetFileVersion(tempBuff, versionBuff, _countof(versionBuff));
 				
-				lstrcat(versionBuff, L"\r\nHost bridge ");
-				GetFileVersion(NULL, versionBuff);
+				_tcscat_s(versionBuff, _T("\r\nHost bridge "));
+				GetFileVersion(NULL, versionBuff, _countof(versionBuff));
                 
 				params.cbSize = sizeof(params);
 				params.dwStyle = MB_OK | MB_USERICON | MB_TOPMOST | MB_HELP;
 				params.hInstance = GetModuleHandle(NULL);
 				params.hwndOwner = hwnd;
-				params.lpszCaption = L"VST MIDI Synth (Falcomod)";
+				params.lpszCaption = _T("VST MIDI Synth (Falcomod)");
 				params.lpszText = versionBuff;
 				params.lpszIcon = MAKEINTRESOURCE(32512);
 
@@ -1394,12 +1396,12 @@ static unsigned __stdcall TrayThread(void* threadparam)
 	WNDCLASS windowClass = { 0 };
 	windowClass.hInstance = GetModuleHandle(NULL);
 	windowClass.lpfnWndProc = TrayWndProc;
-	windowClass.lpszClassName = L"VSTHostUtilWindow";
+	windowClass.lpszClassName = _T("VSTHostUtilWindow");
 	
 	if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext((HANDLE) -2); //System aware
 
 	RegisterClass(&windowClass);
-	trayWndHandle = CreateWindowEx(WS_EX_TOOLWINDOW, windowClass.lpszClassName, L"VSTTray", WS_POPUP, 0, 0, 0, 0, 0, 0, GetModuleHandle(NULL), NULL);
+	trayWndHandle = CreateWindowEx(WS_EX_TOOLWINDOW, windowClass.lpszClassName, _T("VSTTray"), WS_POPUP, 0, 0, 0, 0, 0, 0, GetModuleHandle(NULL), NULL);
 
 	//ShowWindow(trayWndHandle, SW_SHOWNORMAL);
 
@@ -1414,13 +1416,19 @@ static unsigned __stdcall TrayThread(void* threadparam)
 
 int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
-	int argc = 0;
-	LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	int argc = __argc;
+
+#ifdef UNICODE 
+	//LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	LPTSTR* argv = __wargv;
+#else
+	LPTSTR* argv = __argv;
+#endif		
 
 	if (argv == NULL || argc != 6) return Error::InvalidCommandLineArguments;
 
-	wchar_t* end_char = 0;
-	unsigned in_sum = wcstoul(argv[2], &end_char, 16);
+	TCHAR* end_char = 0;
+	unsigned in_sum = _tcstoul(argv[2], &end_char, 16);
 	if (end_char == argv[2] || *end_char) return Error::MalformedChecksum;
 
 	unsigned test_sum = 0;
@@ -1437,15 +1445,15 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	unsigned code = Response::NoError;
 
 	if (IsWinNT4())
-		lstrcpy(trayTip, L"VST Midi Synth - ");
+		_tcscpy_s(trayTip, _T("VST Midi Synth - "));
 	else
-		lstrcpy(trayTip, L"VST Midi Synth \r\n");
+		_tcscpy_s(trayTip, _T("VST Midi Synth \r\n"));
 
-	wcsncat(trayTip, argv[3], _countof(trayTip) - wcslen(trayTip));
-	wcsncpy(midiClient, argv[3], _countof(midiClient));    
-	wcsncpy(clientBitnessStr, argv[4], _countof(clientBitnessStr)); 
+	_tcsncat(trayTip, argv[3], _countof(trayTip) - _tcslen(trayTip));
+	_tcsncpy(midiClient, argv[3], _countof(midiClient));    
+	_tcsncpy(clientBitnessStr, argv[4], _countof(clientBitnessStr)); 
 	
-	wcsncpy(outputModeStr, !wcscmp(argv[5], L"S") ? L"WASAPI" : !wcscmp(argv[5], L"A") ? L"ASIO" : L"WaveOut", _countof(outputModeStr));
+	_tcsncpy(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _countof(outputModeStr));
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
@@ -1460,7 +1468,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 	MainThreadId = GetCurrentThreadId();
 
-	user32 = GetModuleHandle(L"user32.dll");
+	user32 = GetModuleHandle(_T("user32.dll"));
 	if (user32)	LOADUSER32FUNCTION(SetThreadDpiAwarenessContext);
 
 #if(_WIN32_WINNT < 0x0500) 
@@ -1468,8 +1476,12 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 #endif
 	
 
-	kernel32 = GetModuleHandle(L"kernel32.dll");
-	if (kernel32) *((void**)&DynGetModuleHandleExW) = GetProcAddress(kernel32, "GetModuleHandleExW"); //unfortunately in case of newer VS versions GetModuleHandleExW is defined unconditionally in libloaderapi.h despite it is available only from WinXP...
+	kernel32 = GetModuleHandle(_T("kernel32.dll"));
+#ifdef UNICODE  
+	if (kernel32) *((void**)&DynGetModuleHandleEx) = GetProcAddress(kernel32, "GetModuleHandleExW"); //unfortunately in case of newer VS versions GetModuleHandleExW is defined unconditionally in libloaderapi.h despite it is available only from WinXP...
+#else
+	if (kernel32) *((void**)&DynGetModuleHandleEx) = GetProcAddress(kernel32, "GetModuleHandleExA"); //unfortunately in case of newer VS versions GetModuleHandleExW is defined unconditionally in libloaderapi.h despite it is available only from WinXP...
+#endif
 
 	null_file = CreateFile(_T("NUL"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
@@ -1497,14 +1509,20 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	SetUnhandledExceptionFilter(myExceptFilterProc);
 #endif
 
-	size_t dll_name_len = wcslen(argv[1]);
+	size_t dll_name_len = _tcslen(argv[1]);
 	dll_dir = (char*)malloc(dll_name_len + 1);
-	WideCharToMultiByte(CP_ACP, 0, argv[1], -1, dll_dir, dll_name_len + 1, NULL, NULL); //does not depent on C locale (problematic on some VC++ verisons).
+
+#ifdef UNICODE  
+	WideCharToMultiByte(CP_ACP, 0, argv[1], -1, dll_dir, (int)dll_name_len + 1, NULL, NULL); //does not depent on C locale (problematic on some VC++ verisons).
+#else
+	strncpy(dll_dir, argv[1], dll_name_len);
+#endif
+	
 	dll_dir[dll_name_len] = '\0';
 	char* slash = strrchr(dll_dir, '\\');
 	*slash = '\0';
 
-	hDll = LoadLibraryW(argv[1]);
+	hDll = LoadLibrary(argv[1]);
 	if (!hDll)
 	{
 		code = Response::CannotLoadVstiDll;
@@ -1575,23 +1593,34 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		if (!vendor_string_length) 
 		{
-			strcpy(vendor_string, "Unknown");
+			strcpy_s(vendor_string, "Unknown");
 			vendor_string_length = (uint32_t)strlen(vendor_string);
 		}
 
 		if (!product_string_length)
 		{
-			wchar_t product_wstring[256] = { 0 };
+			
+#ifdef UNICODE 
+			TCHAR product_wstring[256] = { 0 };
 			GetFileTitle(argv[1], product_wstring, 256);
 			WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)product_wstring, -1, (char*)product_string, 256, NULL, NULL);
+#else
+			GetFileTitle(argv[1], product_string, 256);
+#endif
+			
 			product_string_length = (uint32_t)strlen(product_string);
 		}
 
 		if (!name_string_length)
 		{
-			wchar_t name_wstring[256] = { 0 };
+#ifdef UNICODE 
+			TCHAR name_wstring[256] = { 0 };
 			GetFileTitle(argv[1], name_wstring, 256);
 			WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)name_wstring, -1, (char*)name_string, 256, NULL, NULL);
+#else
+			GetFileTitle(argv[1], name_string, 256);
+#endif
+			
 			name_string_length = (uint32_t)strlen(name_string);
 		}
 
@@ -2251,7 +2280,8 @@ exit:
 	if (hDll) FreeLibrary(hDll);
 	CoUninitialize();
 	if (dll_dir) free(dll_dir);
-	if (argv) LocalFree(argv);
+	
+	//if (argv) LocalFree(argv); only needed when CommandLineToArgvW() was called.
 
 	put_code(code);
 

@@ -24,10 +24,10 @@ UINT GetWaveOutDeviceId() {
 	HKEY hKey;
 	DWORD dwType = REG_SZ;
 	DWORD dwSize = 0;
-	WAVEOUTCAPSW caps;
-	wchar_t* regValue;
+	WAVEOUTCAPS caps;
+	TCHAR* regValue;
 
-	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), 0, KEY_READ, &hKey);
 	if (result == NO_ERROR)
 	{
 
@@ -39,7 +39,7 @@ UINT GetWaveOutDeviceId() {
 
 			for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId)
 			{
-				if (!wcscmp(regValue, caps.szPname))
+				if (!_tcscmp(regValue, caps.szPname))
 				{
 					free(regValue);
 					RegCloseKey(hKey);
@@ -89,9 +89,9 @@ bool UseAsio()
 	HKEY hKey;
 	DWORD dwType = REG_SZ;
 	DWORD dwSize = 0;
-	wchar_t* regValue;
+	TCHAR* regValue;
 
-	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), 0, KEY_READ, &hKey);
 	if (result == NO_ERROR) 
 	{
 		result = RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, NULL, &dwSize);
@@ -99,7 +99,7 @@ bool UseAsio()
 		{
 			regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
 			RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
-			if (!wcscmp(regValue, L"Bass ASIO"))
+			if (!_tcscmp(regValue, _T("Bass ASIO")))
 			{
 				free(regValue);
 				RegCloseKey(hKey);
@@ -120,9 +120,9 @@ bool UseWasapi()
 	HKEY hKey;
 	DWORD dwType = REG_SZ;
 	DWORD dwSize = 0;
-	wchar_t* regValue;
+	TCHAR* regValue;
 
-	long result = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\VSTi Driver\\Output Driver", 0, KEY_READ, &hKey);
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), 0, KEY_READ, &hKey);
 	if (result == NO_ERROR)
 	{
 #ifdef WIN64
@@ -139,7 +139,7 @@ bool UseWasapi()
 #else
 			RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
 #endif
-			if (wcsstr(regValue, L"VSTDriver-ASIO2WASAPI"))
+			if (_tcsstr(regValue, _T("VSTDriver-ASIO2WASAPI")))
 			{
 				free(regValue);
 				RegCloseKey(hKey);
@@ -244,15 +244,15 @@ void VSTDriver::load_settings(TCHAR * szPath) {
 	DWORD selIndex = 0;
 	if ( szPath || RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"),0,KEY_READ,&hKey) == ERROR_SUCCESS )
 	{
-		TCHAR szValueName[20] = L"plugin";
+		TCHAR szValueName[20] = _T("plugin");
 		if (!szPath)
 		{
 			dwSize = sizeof(selIndex);
-			lResult = RegQueryValueEx(hKey, L"SelectedPlugin", NULL, NULL, (LPBYTE)&selIndex, &dwSize);
+			lResult = RegQueryValueEx(hKey, _T("SelectedPlugin"), NULL, NULL, (LPBYTE)&selIndex, &dwSize);
 			if (lResult == ERROR_SUCCESS && selIndex)
 			{
 				TCHAR szPostfix[12] = { 0 };
-				lstrcat(szValueName, _itow(selIndex, szPostfix, 10));
+				_tcscat_s(szValueName, _itot(selIndex, szPostfix, 10));
 			}
 			lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &dwSize);
 		}
@@ -299,7 +299,7 @@ static inline char print_hex_digit(unsigned val)
 	return table[val];
 }
 
-static void print_hex(unsigned val,std::wstring &out,unsigned bytes)
+static void print_hex(unsigned val,tstring &out,unsigned bytes)
 {
 	unsigned n;
 	for(n=0;n<bytes;n++)
@@ -310,7 +310,7 @@ static void print_hex(unsigned val,std::wstring &out,unsigned bytes)
 	}
 }
 
-static void print_guid(const GUID & p_guid, std::wstring &out)
+static void print_guid(const GUID & p_guid, tstring &out)
 {
 	print_hex(p_guid.Data1,out,4);
 	out += '-';
@@ -329,12 +329,12 @@ static void print_guid(const GUID & p_guid, std::wstring &out)
 	print_hex(p_guid.Data4[7],out,1);
 }
 
-static bool create_pipe_name( std::wstring & out )
+static bool create_pipe_name( tstring & out )
 {
 	GUID guid;
 	if ( FAILED( CoCreateGuid( &guid ) ) ) return false;
 
-	out = L"\\\\.\\pipe\\";
+	out = _T("\\\\.\\pipe\\");
 	print_guid( guid, out );
 
 	return true;
@@ -359,24 +359,24 @@ bool VSTDriver::connect_pipe( HANDLE hPipe )
 extern "C" { extern HINSTANCE hinst_vst_driver; };
 extern "C" { extern bool isSCVA; };
 
-std::wstring VSTDriver::GetVsthostPath()
+tstring VSTDriver::GetVsthostPath()
 {
 	TCHAR my_path[MAX_PATH];
 	GetModuleFileName( hinst_vst_driver, my_path, _countof(my_path) );
 
-	std::wstring sDir(my_path);
+	tstring sDir(my_path);
 	size_t idx = sDir.find_last_of( L'\\' ) + 1;
-	if (idx != std::wstring::npos)
+	if (idx != tstring::npos)
 		sDir.resize( idx );
-	std::wstring sSubdir(my_path + idx);
+	tstring sSubdir(my_path + idx);
 	idx = sSubdir.find_last_of( L'.' );
-	if (idx != std::wstring::npos)
+	if (idx != tstring::npos)
 		sSubdir.resize(idx);
 	sSubdir += L'\\';
-	std::wstring sFile((uPluginPlatform == 64) ? L"vstbridgeapp64.exe" : L"vstbridgeapp32.exe");
+	tstring sFile((uPluginPlatform == 64) ? _T("vstbridgeapp64.exe") : _T("vstbridgeapp32.exe"));
 
-	std::wstring sHostPath = sDir + sFile;
-	if (::GetFileAttributesW(sHostPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+	tstring sHostPath = sDir + sFile;
+	if (::GetFileAttributes(sHostPath.c_str()) == INVALID_FILE_ATTRIBUTES)
 		sHostPath = sDir + sSubdir + sFile;
 
 	return sHostPath;
@@ -402,7 +402,7 @@ bool VSTDriver::process_create()
 
 	hReadEvent = CreateEvent( NULL, TRUE, FALSE, NULL );
 
-	std::wstring pipe_name_in, pipe_name_out;
+	tstring pipe_name_in, pipe_name_out;
 	if ( !create_pipe_name( pipe_name_in ) || !create_pipe_name( pipe_name_out ) )
 	{
 		process_terminate();
@@ -429,11 +429,11 @@ bool VSTDriver::process_create()
 	DuplicateHandle( GetCurrentProcess(), hPipe, GetCurrentProcess(), &hChildStd_OUT_Rd, 0, FALSE, DUPLICATE_SAME_ACCESS );
 	CloseHandle( hPipe );
 
-	std::wstring szCmdLine = L"\"";
+	tstring szCmdLine = _T("\"");
 	szCmdLine += GetVsthostPath();
-	szCmdLine += L"\" \"";
+	szCmdLine += _T("\" \"");
 	szCmdLine += szPluginPath;
-	szCmdLine += L"\" ";
+	szCmdLine += _T("\" ");
 
 	unsigned sum = 0;
 
@@ -460,18 +460,18 @@ bool VSTDriver::process_create()
 	TCHAR exe_path[MAX_PATH];
 	TCHAR exe_title[MAX_PATH];
 #ifdef WIN64
-	TCHAR bitnessStr[8] =L" 64-bit"; 
+	TCHAR bitnessStr[8] = _T(" 64-bit");
 #else
-	TCHAR bitnessStr[8] =L" 32-bit"; 
+	TCHAR bitnessStr[8] = _T(" 32-bit");
 #endif	
 
 	GetModuleFileName(NULL, exe_path, _countof(exe_path));
 	GetFileTitle(exe_path, exe_title, MAX_PATH - 1);
-    _tcscat(CmdLine, L" \"");
-	_tcscat(CmdLine, exe_title);
-	_tcscat(CmdLine, L"\"");
-	_tcscat(CmdLine, bitnessStr);	
-	_tcscat(CmdLine, UseAsio() ? (UseWasapi() ? L" S" : L" A") : L" W");
+    _tcscat_s(CmdLine, _T(" \""));
+	_tcscat_s(CmdLine, exe_title);
+	_tcscat_s(CmdLine, _T("\""));
+	_tcscat_s(CmdLine, bitnessStr);	
+	_tcscat_s(CmdLine, UseAsio() ? (UseWasapi() ? _T(" S") : _T(" A")) : _T(" W"));
 
 	if ( !CreateProcess( NULL, CmdLine, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo ) )
 	{

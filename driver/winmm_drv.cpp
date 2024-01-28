@@ -56,13 +56,13 @@ struct Driver {
 } drivers[MAX_DRIVERS];
 
 #pragma comment(lib,"Version.lib") 
-static wchar_t* GetFileVersion(wchar_t* result)
+static TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
 {
 	DWORD               dwSize = 0;
 	BYTE* pVersionInfo = NULL;
 	VS_FIXEDFILEINFO* pFileInfo = NULL;
 	UINT                pLenFileInfo = 0;
-	wchar_t tmpBuff[MAX_PATH];
+	TCHAR tmpBuff[MAX_PATH];
 
 	GetModuleFileName(hinst_vst_driver, tmpBuff, MAX_PATH);
 
@@ -86,17 +86,17 @@ static wchar_t* GetFileVersion(wchar_t* result)
 		return NULL;
 	}      
 
-	lstrcat(result, L"version: ");
-	_ultow_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-	lstrcat(result, tmpBuff);
-	lstrcat(result, L".");
-	_ultow_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
-	lstrcat(result, tmpBuff);	
-	lstrcat(result, L".");
-	_ultow_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-	lstrcat(result, tmpBuff);
-	//lstrcat(result, L".");
-	//lstrcat(result, _ultow((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+	_tcscat_s(result, buffSize, _T("version: "));
+	_ultot_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+	_tcscat_s(result, buffSize, _T("."));
+	_ultot_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+	_tcscat_s(result, buffSize, _T("."));
+	_ultot_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+	//_tcscat_s(result, buffSize, _T("."));
+	//_tcscat_s(result, buffSize, _ultot((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
 
 	return result;
 }
@@ -104,7 +104,7 @@ static wchar_t* GetFileVersion(wchar_t* result)
 
 STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwParam1, DWORD dwParam2) {
 
-	wchar_t fileversionBuff[32] = L"Driver ";
+	TCHAR fileversionBuff[32] = _T("Driver ");
 
 	switch(wMessage) {
 	case DRV_LOAD:
@@ -135,7 +135,7 @@ STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwP
 	case DRV_QUERYCONFIGURE:
 		return DRVCNF_OK;
 	case DRV_CONFIGURE:	
-		MessageBox((HWND)dwParam1, GetFileVersion(fileversionBuff), L"VST MIDI Driver (Falcomod)", MB_OK | MB_ICONINFORMATION);
+		MessageBox((HWND)dwParam1, GetFileVersion(fileversionBuff, _countof(fileversionBuff)), _T("VST MIDI Driver (Falcomod)"), MB_OK | MB_ICONINFORMATION);
 		return DRVCNF_OK;
 	case DRV_CLOSE:
 		for (int i = 0; i < MAX_DRIVERS; i++) {

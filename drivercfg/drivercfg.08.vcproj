@@ -455,11 +455,7 @@
 			<File
 				RelativePath=".\targetver.h"
 				>
-			</File>
-			<File
-				RelativePath=".\utf8conv.h"
-				>
-			</File>
+			</File>			
 			<File
 				RelativePath=".\Views.h"
 				>

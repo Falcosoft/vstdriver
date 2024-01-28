@@ -51,7 +51,7 @@ BOOL IsCoolSoftMidiMapperInstalled()
 	MMRESULT result = midiOutGetDevCaps(0, &Caps, sizeof(Caps));
 	if (result != MMSYSERR_NOERROR)
 		return FALSE;
-	if (!wcscmp(Caps.szPname, L"CoolSoft MIDIMapper")) 
+	if (!_tcscmp(Caps.szPname, _T("CoolSoft MIDIMapper"))) 
 		return TRUE;
 
 	return FALSE;
@@ -100,20 +100,19 @@ public:
 	{
 		//only 1 instance of a kind		
 #ifdef WIN64
-		wchar_t windowName[32] = L"VSTi Driver Configuration (x64)";
+		TCHAR windowName[32] = _T("VSTi Driver Configuration (x64)");
 		SetWindowText(windowName);
-		CreateMutex(NULL, true, L"vstmididrvcfg64");
+		CreateMutex(NULL, true, _T("vstmididrvcfg64"));
 		
 #else	
-		wchar_t windowName[32] = L"VSTi Driver Configuration";
-		CreateMutex(NULL, true, L"vstmididrvcfg32");
+		TCHAR windowName[32] = _T("VSTi Driver Configuration");
+		CreateMutex(NULL, true, _T("vstmididrvcfg32"));
 #endif	
 				
 		if(GetLastError() == ERROR_ALREADY_EXISTS) 
 		{
 			
-			SetWindowText(L"Closing");
-			//MessageBox(L"An instance is already running!", windowName, MB_OK | MB_ICONWARNING);
+			SetWindowText(_T("Closing"));			
 			HWND winHandle = ::FindWindow(NULL, windowName);			
 			if (winHandle) 
 			{
@@ -156,7 +155,7 @@ public:
 		{
 			tci.pszText = _T("Windows MIDI");
 			m_ctrlTab.InsertItem(2, &tci, m_view2);
-			if (!IsWinVistaOrWin7()) m_view2.SetGroupBoxCaption(L"Default MIDI Synth (through Coolsoft MIDI Mapper)");
+			if (!IsWinVistaOrWin7()) m_view2.SetGroupBoxCaption(_T("Default MIDI Synth (through Coolsoft MIDI Mapper)"));
 		}
 
 

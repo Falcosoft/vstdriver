@@ -6,6 +6,7 @@
 #include "cplwrapper.h"
 #include <cpl.h>
 #include <shellapi.h>
+#include <tchar.h>
 
 BOOL APIENTRY DllMain( HMODULE hModule,
                        DWORD  ul_reason_for_call,
@@ -53,10 +54,10 @@ extern "C" LONG APIENTRY CPlApplet(
 
 	case CPL_DBLCLK:            // application icon double-clicked
 	{
-		wchar_t spath [MAX_PATH] = {0};
+		TCHAR spath [MAX_PATH] = {0};
 		GetSystemDirectory(spath, MAX_PATH);
-		lstrcat(spath, L"\\vstmididrv\\vstmididrvcfg.exe");
-		ShellExecute(hwndCPL, L"open", spath, NULL, NULL, SW_SHOWNORMAL);	
+		lstrcat(spath, _T("\\vstmididrv\\vstmididrvcfg.exe"));
+		ShellExecute(hwndCPL, _T("open"), spath, NULL, NULL, SW_SHOWNORMAL);
 		
 	}
 	break;
