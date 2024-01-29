@@ -454,11 +454,11 @@ bool VSTDriver::process_create()
 	siStartInfo.hStdError = GetStdHandle( STD_ERROR_HANDLE );
 	siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 
-	TCHAR CmdLine[MAX_PATH];
+	TCHAR CmdLine[MAX_PATH * 2];
 	_tcscpy_s(CmdLine, _countof(CmdLine), szCmdLine.c_str());
     
 	TCHAR exe_path[MAX_PATH];
-	TCHAR exe_title[MAX_PATH];
+	TCHAR exe_title[MAX_PATH / 2];
 #ifdef WIN64
 	TCHAR bitnessStr[8] = _T(" 64-bit");
 #else
@@ -466,7 +466,8 @@ bool VSTDriver::process_create()
 #endif	
 
 	GetModuleFileName(NULL, exe_path, _countof(exe_path));
-	GetFileTitle(exe_path, exe_title, MAX_PATH - 1);
+	GetFileTitle(exe_path, exe_title, _countof(exe_title));
+
     _tcscat_s(CmdLine, _T(" \""));
 	_tcscat_s(CmdLine, exe_title);
 	_tcscat_s(CmdLine, _T("\""));

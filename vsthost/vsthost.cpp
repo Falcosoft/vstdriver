@@ -176,6 +176,12 @@ void NoLog(LPCTSTR szFormat, ...) {}
 #define Log while(0) NoLog
 #endif
 
+static void InvalidParamHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t pReserved)
+{
+	if (MessageBox(0, _T("An unexpected invalid parameter error occured.\r\nDo you want to try to continue?"), _T("VST Host Bridge Error"), MB_YESNO | MB_ICONERROR | MB_SYSTEMMODAL) == IDNO)
+		TerminateProcess(GetCurrentProcess(), 1);
+}
+
 #pragma comment(lib,"Version.lib") 
 static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned int buffSize)
 {
@@ -655,7 +661,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				TCHAR wText[18] = _T("VST Editor port ");
 				TCHAR intCnst[] = { 'A' + portNum };
-				_tcsncat(wText, intCnst, 1);
+				_tcsncat_s(wText, intCnst, 1);
 
 				SetWindowText(hwnd, wText);
 
@@ -1416,6 +1422,7 @@ static unsigned __stdcall TrayThread(void* threadparam)
 
 int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
+	_set_invalid_parameter_handler(InvalidParamHandler);
 	int argc = __argc;
 
 #ifdef UNICODE 
@@ -1449,11 +1456,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	else
 		_tcscpy_s(trayTip, _T("VST Midi Synth \r\n"));
 
-	_tcsncat(trayTip, argv[3], _countof(trayTip) - _tcslen(trayTip));
-	_tcsncpy(midiClient, argv[3], _countof(midiClient));    
-	_tcsncpy(clientBitnessStr, argv[4], _countof(clientBitnessStr)); 
+	_tcsncat_s(trayTip, argv[3], _countof(trayTip) - _tcslen(trayTip));
+	_tcsncpy_s(midiClient, argv[3], _countof(midiClient));    
+	_tcsncpy_s(clientBitnessStr, argv[4], _countof(clientBitnessStr)); 
 	
-	_tcsncpy(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _countof(outputModeStr));
+	_tcsncpy_s(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _countof(outputModeStr));
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;

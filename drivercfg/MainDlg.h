@@ -12,6 +12,11 @@
 
 #pragma once
 
+static void InvalidParamHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t pReserved)
+{
+	if (MessageBox(0, _T("An unexpected invalid parameter error occured.\r\nDo you want to try to continue?"), _T("VSTi Driver Configuration Error"), MB_YESNO | MB_ICONERROR | MB_SYSTEMMODAL) == IDNO)
+		TerminateProcess(GetCurrentProcess(), 1);
+}
 
 BOOL IsWin8OrNewer()
 {
@@ -95,9 +100,12 @@ public:
 		//	LRESULT MessageHandler(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 		//	LRESULT CommandHandler(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 		//	LRESULT NotifyHandler(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOOL& /*bHandled*/)
+		
 
 	LRESULT OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
+		_set_invalid_parameter_handler(InvalidParamHandler);
+
 		//only 1 instance of a kind		
 #ifdef WIN64
 		TCHAR windowName[32] = _T("VSTi Driver Configuration (x64)");
