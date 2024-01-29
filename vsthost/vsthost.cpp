@@ -1899,7 +1899,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					memset(float_null, 0, sizeof(float) * BUFFER_SIZE);
 
-					sample_buffer.resize((4096 + BUFFER_SIZE) * num_outputs_per_port);
+					sample_buffer.resize(BUFFER_SIZE * num_outputs_per_port);
 				}
 
 				if (need_idle)
@@ -1995,8 +1995,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				}
 
 				uint32_t count = get_code();
-				sample_pos += count;
-
+				sample_pos += count;			
+				
 				if (!resetRequested)
 					put_code(Response::NoError);
 				else
@@ -2089,7 +2089,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					memset(float_null, 0, sizeof(float) * BUFFER_SIZE);
 
-					sample_buffer.resize((4096 + BUFFER_SIZE) * num_outputs_per_port * 2);
+					sample_buffer.resize(BUFFER_SIZE * num_outputs_per_port * 2);
 				}
 
 				if (need_idle)
@@ -2185,8 +2185,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				}
 
 				uint32_t count = get_code();
-				sample_pos += count;
-
+				sample_pos += count;			
+					
 				if (!resetRequested)
 					put_code(Response::NoError);
 				else

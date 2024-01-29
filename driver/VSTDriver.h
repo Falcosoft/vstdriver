@@ -81,6 +81,7 @@ private:
 	uint32_t process_read_bytes_pass( void * buffer, uint32_t size );
 	void process_write_code( uint32_t code );
 	void process_write_bytes( const void * buffer, uint32_t size );
+	uint32_t RenderFloatInternal(float* samples, int len, float volume, WORD channels);
 
 	void load_settings(TCHAR * szPath);
 

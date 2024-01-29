@@ -19,6 +19,11 @@
 
 #include <assert.h>
 
+enum
+{
+	BUFFER_SIZE = 3840  
+};
+
 UINT GetWaveOutDeviceId() {
 
 	HKEY hKey;
@@ -844,10 +849,10 @@ void VSTDriver::ProcessSysEx(DWORD dwPort, const unsigned char *sysexbuffer,int 
 	if ( code != NoError ) process_terminate();
 }
 
-uint32_t VSTDriver::RenderFloat(float * samples, int len, float volume, WORD channels) {
+uint32_t VSTDriver::RenderFloatInternal(float * samples, int len, float volume, WORD channels) {
 	uint32_t opCode = channels == 2 ? Command::RenderAudioSamples : Command::RenderAudioSamples4channel; 
 	process_write_code( opCode );
-	process_write_code( len );
+	process_write_code( len );	
 
 	uint32_t code = process_read_code();	
 	if ( code != NoError ) {
@@ -855,26 +860,34 @@ uint32_t VSTDriver::RenderFloat(float * samples, int len, float volume, WORD cha
 		memset( samples, 0, sizeof(*samples) * len * uNumOutputs * channels / 2);
 		return code;
 	}
+	
+	process_read_bytes( samples, sizeof(*samples) * len * uNumOutputs * channels / 2);
+	for ( unsigned i = 0; i < len * uNumOutputs * channels / 2; i++ ) samples[ i ] *= volume;
+		
+	return 0;
+}
 
-	while ( len ) {
-		unsigned len_to_do = len;
-		if ( len_to_do > 4096 ) len_to_do = 4096;
-		process_read_bytes( samples, sizeof(*samples) * len_to_do * uNumOutputs * channels / 2);
-		for ( unsigned i = 0; i < len_to_do * uNumOutputs * channels / 2; i++ ) samples[ i ] *= volume;
-		samples += len_to_do * uNumOutputs * channels / 2;
-		len -= len_to_do;
-	}
+uint32_t VSTDriver::RenderFloat(float* samples, int len, float volume, WORD channels) 
+{	
+	while (len > 0)
+	{
+		int len_todo = len > BUFFER_SIZE ? BUFFER_SIZE : len;
+		int result = RenderFloatInternal(samples, len_todo, volume, channels);
+		samples += len_todo * uNumOutputs * channels / 2;
+		len -= len_todo;
+		if (result == ResetRequest) return result;
+	}    
 
 	return 0;
 }
 
 uint32_t VSTDriver::Render(short * samples, int len, float volume, WORD channels)
 {
-	float * float_out = (float *) _alloca( 512 * uNumOutputs * channels / 2 * sizeof(*float_out) );
+	float * float_out = (float *) _alloca((BUFFER_SIZE / 8) * uNumOutputs * channels / 2 * sizeof(*float_out) );
 	while ( len > 0 )
 	{
-		int len_todo = len > 512 ? 512 : len;
-		int result = RenderFloat( float_out, len_todo, volume, channels );		
+		int len_todo = len > (BUFFER_SIZE / 8) ? (BUFFER_SIZE / 8) : len;
+		int result = RenderFloatInternal( float_out, len_todo, volume, channels );
 		for ( unsigned int i = 0; i < len_todo * uNumOutputs * channels / 2; i++ )
 		{
 			int sample = (int)( float_out[i] * 32768.f );
