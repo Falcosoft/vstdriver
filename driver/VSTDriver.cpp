@@ -862,7 +862,13 @@ uint32_t VSTDriver::RenderFloatInternal(float * samples, int len, float volume, 
 	}
 	
 	process_read_bytes( samples, sizeof(*samples) * len * uNumOutputs * channels / 2);
-	for ( unsigned i = 0; i < len * uNumOutputs * channels / 2; i++ ) samples[ i ] *= volume;
+	
+	if (volume != 1.0f)
+	{
+		unsigned int tmp = len * uNumOutputs * channels / 2;
+		for ( unsigned int i = 0; i < tmp; i++ )
+			samples[ i ] *= volume;
+	}
 		
 	return 0;
 }
@@ -888,7 +894,8 @@ uint32_t VSTDriver::Render(short * samples, int len, float volume, WORD channels
 	{
 		int len_todo = len > (BUFFER_SIZE / 8) ? (BUFFER_SIZE / 8) : len;
 		int result = RenderFloatInternal( float_out, len_todo, volume, channels );
-		for ( unsigned int i = 0; i < len_todo * uNumOutputs * channels / 2; i++ )
+		unsigned int tmp = len_todo * uNumOutputs * channels / 2;
+		for ( unsigned int i = 0; i < tmp; i++ )
 		{
 			int sample = (int)( float_out[i] * 32768.f );
 			if ( ( sample + 0x8000 ) & 0xFFFF0000 ) sample = 0x7FFF ^ (sample >> 31);
