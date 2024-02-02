@@ -20,6 +20,13 @@
 	extern "C" {
 		WINUSERAPI HWND WINAPI GetAncestor( __in HWND hwnd, __in UINT gaFlags);
 	}
+#endif
+
+#ifdef WIN64
+	TCHAR windowName[32] = _T("VSTi Driver Configuration (x64)");
+#else	
+	#include <intrin.h>
+	TCHAR windowName[32] = _T("VSTi Driver Configuration");	
 #endif	
 
 #include "../external_packages/bassasio.h"
@@ -31,7 +38,7 @@ static INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
 // for VSTDriver
 extern "C" HINSTANCE hinst_vst_driver = NULL;
-extern "C" bool isSCVA = false; 
+extern "C" bool keepLoaded = false; 
 
 static HINSTANCE bassasio = NULL;       // bassasio handle  
 
@@ -43,14 +50,6 @@ static DWORD portBOffsetVal = 2;
 static DWORD usePrivateAsioOnly = 0;
 static unsigned char SelectedPluginIndex = 0;
 
-/*
-struct MyDLGTEMPLATE: DLGTEMPLATE
-{
-WORD ext[3];
-MyDLGTEMPLATE ()
-{ memset (this, 0, sizeof(*this)); };
-};
-*/
 
 static bool IsWaveFormatSupported(UINT sampleRate, UINT deviceId)
 {
@@ -87,7 +86,7 @@ static bool IsWaveFormatSupported(UINT sampleRate, UINT deviceId)
 }
 
 static BOOL IsASIO() 
-{		
+{
 	TCHAR installpath[MAX_PATH];        
 	TCHAR bassasiopath[MAX_PATH];
 	TCHAR asio2WasapiPath[MAX_PATH];
@@ -104,7 +103,24 @@ static BOOL IsASIO()
 	bassasio = LoadLibrary(bassasiopath);        
 
 	if (bassasio)
-	{         
+	{
+
+//BassAsio requires SSE support. SSE is guaranteed on x64 but not on x86.
+#ifndef WIN64
+
+		int cpuInfo[4] = { 0 };
+		__cpuid(cpuInfo, 1);
+		
+		if (!(cpuInfo[3] & 0x2000000)) //Test SSE bit 25 in register EDX
+		{			
+			MessageBox(FindWindow(NULL, windowName),
+			_T("BassAsio requires a CPU with SSE support!\r\nSince SSE is not detected ASIO output is not available.\r\n\r\nYou should reinstall this driver without BassAsio\r\nor delete bassasio_vstdrv.dll to stop this warning."),
+			_T("VST MIDI Driver"), MB_OK | MB_ICONWARNING | MB_SYSTEMMODAL);
+			
+			return FALSE;
+		}
+#endif	
+
 		LOADBASSASIOFUNCTION(BASS_ASIO_ErrorGetCode);
 		LOADBASSASIOFUNCTION(BASS_ASIO_SetWindow);
 		LOADBASSASIOFUNCTION(BASS_ASIO_Init);
@@ -223,9 +239,9 @@ static BOOL settings_save(VSTDriver * effect)
 				if (effect) effect->getChunk( chunk );
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 
-				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL); 
+				if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL); 
 #else
-				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
+				if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
 
 #endif
 				CloseHandle(fileHandle);
@@ -288,6 +304,7 @@ class CView1 : public CDialogImpl<CView1>
 	HANDLE hbrBkgnd;
 	DWORD highDpiMode;
 	DWORD enableSinglePort32ChMode;
+	DWORD keepDriverLoaded;
 	int origDropdownWidth;
 	
 	VSTDriver * effect;
@@ -314,6 +331,7 @@ public:
 		hbrBkgnd = NULL;
 		highDpiMode = 0;
 		enableSinglePort32ChMode = (DWORD)-1;
+		keepDriverLoaded = (DWORD)-1;
 		usePrivateAsioOnly = 0;		
 
 		isWinNT4 = IsWinNT4();
@@ -405,10 +423,16 @@ public:
 			if (lResult == ERROR_SUCCESS) {
 				enableSinglePort32ChMode = reg_value;
 			}
+			lResult = reg.QueryDWORDValue(_T("KeepDriverLoaded"), reg_value);
+			if (lResult == ERROR_SUCCESS) {
+				keepDriverLoaded = reg_value;
+			}
 			lResult = reg.QueryDWORDValue(_T("UsePrivateAsioOnly"), reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				usePrivateAsioOnly = reg_value;
-			}			
+			}	
+
+
 
 			reg.Close();
 			
@@ -450,7 +474,7 @@ public:
 	
 
 	LRESULT OnButtonUnload(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/) 
-	{
+	{	
 		if (effect) free_vst();
 		vst_effect.SetWindowText(_T("No VSTi loaded"));
 		vst_vendor.SetWindowText(_T("No VSTi loaded"));
@@ -693,8 +717,9 @@ public:
 			}
 			if(!highDpiMode)SaveDwordValue(_T("HighDpiMode"),(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
 			if(enableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(_T("EnableSinglePort32ChMode"), 1);
+			if(keepDriverLoaded == (DWORD)-1)SaveDwordValue(_T("KeepDriverLoaded"), 1);
 			if(IsVistaOrNewer())SaveDwordValue(_T("UsePrivateAsioOnly"), usePrivateAsioOnly);
-
+			
 			delete effect;
 			effect = NULL;
 		}

@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include <process.h>
+#include <intrin.h>
 #include "../version.h"
 
 // #define LOG_EXCHANGE
@@ -80,7 +81,7 @@ namespace Error {
 	static TCHAR bitnessStr[8] =_T(" 64-bit"); 
 #else
 	static TCHAR bitnessStr[8] = _T(" 32-bit");
-#endif	
+#endif
 
 static NOTIFYICONDATA nIconData = { 0 };
 static HMENU trayMenu = NULL;
@@ -89,9 +90,10 @@ static HMENU pluginMenu = NULL;
 static TCHAR clientBitnessStr[8] = { 0 };
 static TCHAR outputModeStr[8] = { 0 };
 
-bool resetRequested = false;
-bool need_idle = false;
-bool idle_started = false;
+static int lastUsedSysEx = 15;
+static bool resetRequested = false;
+static bool need_idle = false;
+static bool idle_started = false;
 
 static HINSTANCE user32 = NULL;
 static HINSTANCE kernel32 = NULL;
@@ -132,7 +134,6 @@ static VstTimeInfo vstTimeInfo = { 0 };
 
 static HWND trayWndHandle = NULL;
 static volatile int aboutBoxResult = 0;
-static bool isSCVA = false;
 
 static const unsigned char gmReset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7 };
 static const unsigned char gsReset[] = { 0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7 };
@@ -243,6 +244,25 @@ static bool IsWinNT4()
 		return true;
 	return false;
 }
+
+static class FastLock
+{
+private:
+	volatile long lockCount;
+
+public:
+	void Lock() {
+		while (_InterlockedExchange(&lockCount, 1)) {
+			YieldProcessor();
+			SwitchToThread();
+		}		
+	}
+
+	void UnLock() {
+		lockCount = 0;
+	}
+
+}fastLock;
 
 static class MutexWin32
 {
@@ -453,10 +473,10 @@ static BOOL settings_save(AEffect* pEffect)
 				if (pEffect) getChunk(pEffect, chunk);
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 
-				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);
+				if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);
 #else
 
-				if (chunk.size() > (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
+				if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
 #endif
 
 				CloseHandle(fileHandle);
@@ -542,6 +562,8 @@ static void setEditorPosition(int port, int x, int y)
 
 static void sendSysExEvent(char* sysExBytes, int size)
 {
+	fastLock.Lock();
+
 	static VstMidiSysexEvent syxEvent = { 0 };
 	static VstEvents events = { 0 };
 
@@ -553,8 +575,11 @@ static void sendSysExEvent(char* sysExBytes, int size)
 	events.events[0] = (VstEvent*)&syxEvent;
 	events.numEvents = 1;
 
+	
 	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &events, 0);
 	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &events, 0);
+	
+	fastLock.UnLock();
 
 }
 
@@ -604,8 +629,12 @@ static void InitSimpleResetEvents()
 
 static void sendSimpleResetEvents()
 {
+	fastLock.Lock();
+
 	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &resetEvents, 0);
-	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &resetEvents, 0);		
+	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &resetEvents, 0);
+
+	fastLock.UnLock();
 }
 
 struct MyDLGTEMPLATE : DLGTEMPLATE
@@ -1220,6 +1249,39 @@ void setSelectedPluginIndex(int index)
 	resetRequested = true;
 }
 
+int getSelectedSysExIndex()
+{
+	HKEY hKey;
+	int retRes = 15;
+
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ | KEY_WRITE, &hKey);
+	if (result == NO_ERROR)
+	{
+		DWORD size = sizeof(DWORD);
+		RegQueryValueEx(hKey, _T("SelectedSysEx"), NULL, NULL, (LPBYTE)&retRes, &size);
+
+		RegCloseKey(hKey);
+	}
+
+	return retRes;
+}
+
+void setSelectedSysExIndex(int index)
+{
+	HKEY hKey;
+
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ | KEY_WRITE, &hKey);
+	if (result == NO_ERROR)
+	{
+		DWORD size = sizeof(DWORD);
+		RegSetValueEx(hKey, _T("SelectedSysEx"), NULL, REG_DWORD, (LPBYTE)&index, size);
+
+		RegCloseKey(hKey);
+	}
+
+}
+
+
 LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {		
 	TCHAR tmpPath[MAX_PATH] = { 0 };
@@ -1227,7 +1289,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch (msg)
 	{
 	case WM_CREATE:
-		{
+		{			
 			pluginMenu = CreatePopupMenu();
 
 			for (int i = 0; i < MAX_PLUGINS; i++)
@@ -1262,7 +1324,9 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			_tcsncpy_s(nIconData.szTip, trayTip, _countof(nIconData.szTip));
 			Shell_NotifyIcon(NIM_ADD, &nIconData);
 
-			InitSimpleResetEvents();
+			InitSimpleResetEvents();			
+			lastUsedSysEx = getSelectedSysExIndex();
+			if (lastUsedSysEx != 15) PostMessage(hwnd, WM_COMMAND, lastUsedSysEx, 0);
 
 			return 0;
 		}
@@ -1270,6 +1334,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 	case WM_DESTROY:
 		{
+			setSelectedSysExIndex(lastUsedSysEx);
+
 			Shell_NotifyIcon(NIM_DELETE, &nIconData);
 			DestroyMenu(trayMenu);
 			trayMenu = NULL;
@@ -1285,10 +1351,16 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				POINT cursorPoint;
 				bool hasEditor = pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor;
 				GetCursorPos(&cursorPoint);
-				CheckMenuItem(trayMenu, PORTMENUOFFSET, MF_BYCOMMAND | (editorHandle[0] != 0 && IsWindowVisible(editorHandle[0]) ? MF_CHECKED : MF_UNCHECKED));
-				CheckMenuItem(trayMenu, PORTMENUOFFSET + 1, MF_BYCOMMAND | (editorHandle[1] != 0 && IsWindowVisible(editorHandle[1]) ? MF_CHECKED : MF_UNCHECKED));
-				EnableMenuItem(trayMenu, PORTMENUOFFSET, MF_BYCOMMAND | (isPortActive[0] && hasEditor ? MF_ENABLED : MF_GRAYED));
-				EnableMenuItem(trayMenu, PORTMENUOFFSET + 1, MF_BYCOMMAND | (isPortActive[1] && hasEditor ? MF_ENABLED : MF_GRAYED));
+				CheckMenuItem(trayMenu, PORTMENUOFFSET, editorHandle[0] != 0 && IsWindowVisible(editorHandle[0]) ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, PORTMENUOFFSET + 1, editorHandle[1] != 0 && IsWindowVisible(editorHandle[1]) ? MF_CHECKED : MF_UNCHECKED);
+				EnableMenuItem(trayMenu, PORTMENUOFFSET,  isPortActive[0] && hasEditor ? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, PORTMENUOFFSET + 1, isPortActive[1] && hasEditor ? MF_ENABLED : MF_GRAYED);
+
+				CheckMenuItem(trayMenu, 11, lastUsedSysEx == 11 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, 12, lastUsedSysEx == 12 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, 13, lastUsedSysEx == 13 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, 14, lastUsedSysEx == 14 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, 15, lastUsedSysEx == 15 ? MF_CHECKED : MF_UNCHECKED);
 
 				SetForegroundWindow(trayWndHandle);
 				TrackPopupMenu(trayMenu, TPM_RIGHTBUTTON | (GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN), cursorPoint.x, cursorPoint.y, 0, hwnd, NULL);
@@ -1333,18 +1405,23 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				return 0;
 			case 11:
 				sendSysExEvent((char*)gmReset, sizeof(gmReset));
+				lastUsedSysEx = (int)wParam;
 				return 0;
 			case 12:
 				sendSysExEvent((char*)gsReset, sizeof(gsReset));
+				lastUsedSysEx = (int)wParam;
 				return 0;
 			case 13:
 				sendSysExEvent((char*)xgReset, sizeof(xgReset));
+				lastUsedSysEx = (int)wParam;
 				return 0;
 			case 14:
 				sendSysExEvent((char*)gm2Reset, sizeof(gm2Reset));
+				lastUsedSysEx = (int)wParam;
 				return 0;
 			case 15:
 				sendSimpleResetEvents();
+				lastUsedSysEx = (int)wParam;
 				return 0;
 			case 21:
 				if (aboutBoxResult == 255) return 0;
@@ -1629,9 +1706,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 #endif
 			
 			name_string_length = (uint32_t)strlen(name_string);
-		}
-
-		isSCVA = (unique_id == (uint32_t)'scva');
+		}		
 		
 		put_code(Response::NoError);
 		put_code(name_string_length);
@@ -1650,7 +1725,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	float* float_null;
 	float* float_out;
 
-	dialogMutex.Init();
+	dialogMutex.Init();	
+	fastLock.UnLock();
 	
 	for (;;)
 	{
@@ -1731,7 +1807,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			{
 				uint32_t port_num = get_code();
 
-				showVstEditor(port_num);
+				//showVstEditor(port_num);
+				PostMessage(trayWndHandle, WM_COMMAND, PORTMENUOFFSET + port_num, 0);
 
 				put_code(Response::NoError);
 			}
@@ -1777,7 +1854,10 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		case Command::Reset: // Reset 
 			{				
-				if (isSCVA) sendSysExEvent((char*)gsReset, sizeof(gsReset));
+				if (lastUsedSysEx == 15)
+					sendSimpleResetEvents();
+				else
+					SendMessage(trayWndHandle, WM_COMMAND, lastUsedSysEx, 0);
 
 				uint32_t port_num = get_code();
 
@@ -1867,6 +1947,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		case Command::RenderAudioSamples: // Render Samples
 			{
+				fastLock.Lock();
+
 				if (!blState.size())
 				{
 					pEffect[0]->dispatcher(pEffect[0], effSetSampleRate, 0, 0, 0, float(sample_rate));
@@ -2052,11 +2134,15 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				if (events[1]) free(events[1]);
 
 				freeChain();
+
+				fastLock.UnLock();
 			}
 			break;
 
 		case Command::RenderAudioSamples4channel: // Render Samples for 4 channel mode
 			{
+				fastLock.Lock();
+
 				if (!blState.size())
 				{
 					pEffect[0]->dispatcher(pEffect[0], effSetSampleRate, 0, 0, 0, float(sample_rate));
@@ -2252,6 +2338,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				if (events[1]) free(events[1]);
 
 				freeChain();
+
+				fastLock.UnLock();
 			}
 			break;
 

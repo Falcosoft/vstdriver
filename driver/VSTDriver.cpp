@@ -362,7 +362,7 @@ bool VSTDriver::connect_pipe( HANDLE hPipe )
 }
 
 extern "C" { extern HINSTANCE hinst_vst_driver; };
-extern "C" { extern bool isSCVA; };
+extern "C" { extern bool keepLoaded; };
 
 tstring VSTDriver::GetVsthostPath()
 {
@@ -531,7 +531,8 @@ bool VSTDriver::process_create()
 	sVendor[ vendor_string_length ] = 0;
 	sProduct[ product_string_length ] = 0;
 
-	isSCVA = (uUniqueId == (uint32_t)'scva');		
+	//Always keep SC-VA loaded even when ports are closed because of huge loading times. For other plugins this setting is optional.
+	keepLoaded = (uUniqueId == (uint32_t)'scva') || keepLoaded;
 
 	return true;
 }

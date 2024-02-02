@@ -14,7 +14,7 @@
 
 static void InvalidParamHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t pReserved)
 {
-	if (MessageBox(0, _T("An unexpected invalid parameter error occured.\r\nDo you want to try to continue?"), _T("VSTi Driver Configuration Error"), MB_YESNO | MB_ICONERROR | MB_SYSTEMMODAL) == IDNO)
+	if (MessageBox(FindWindow(NULL, windowName), _T("An unexpected invalid parameter error occured.\r\nDo you want to try to continue?"), _T("VST MIDI Driver"), MB_YESNO | MB_ICONERROR | MB_SYSTEMMODAL) == IDNO)
 		TerminateProcess(GetCurrentProcess(), 1);
 }
 
@@ -107,13 +107,11 @@ public:
 		_set_invalid_parameter_handler(InvalidParamHandler);
 
 		//only 1 instance of a kind		
-#ifdef WIN64
-		TCHAR windowName[32] = _T("VSTi Driver Configuration (x64)");
+#ifdef WIN64		
 		SetWindowText(windowName);
-		CreateMutex(NULL, true, _T("vstmididrvcfg64"));
-		
+		CreateMutex(NULL, true, _T("vstmididrvcfg64"));		
 #else	
-		TCHAR windowName[32] = _T("VSTi Driver Configuration");
+		
 		CreateMutex(NULL, true, _T("vstmididrvcfg32"));
 #endif	
 				

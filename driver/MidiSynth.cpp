@@ -29,7 +29,7 @@
 #include <math.h>
 
 extern "C"{ extern HINSTANCE hinst_vst_driver; }
-extern "C" { extern bool isSCVA; };
+extern "C" { extern bool keepLoaded; };
 
 namespace VSTMIDIDRV{
 
@@ -1054,7 +1054,13 @@ namespace VSTMIDIDRV{
 		BOOL enableSinglePort32ChMode = TRUE;
 		enableSinglePort32ChMode = GetDwordData(_T("EnableSinglePort32ChMode"), enableSinglePort32ChMode);
 		return enableSinglePort32ChMode != FALSE;
-	}	
+	}
+
+	bool GetKeepDriverLoaded() {
+		BOOL keepDriverLoaded = TRUE;
+		keepDriverLoaded = GetDwordData(_T("KeepDriverLoaded"), keepDriverLoaded);
+		return keepDriverLoaded != FALSE;
+	}
 
 	void MidiSynth::LoadSettings(){
 		channels = GetChannelCount();
@@ -1070,6 +1076,7 @@ namespace VSTMIDIDRV{
 		usingFloat = GetUsingFloat();
 		useAsio = UseAsio();
 		enableSinglePort32ChMode = GetEnableSinglePort32ChMode();
+		keepLoaded = GetKeepDriverLoaded();		
 
 		if (chunkSize) {
 			// Number of chunks should be ceil(bufferSize / chunkSize)
@@ -1147,7 +1154,7 @@ namespace VSTMIDIDRV{
 		}
 		
 		vstDriver->setHighDpiMode(GetHighDpiMode());
-		vstDriver->initSysTray();
+		vstDriver->initSysTray();		
 		InitDialog(uDeviceID);
 
 		framesRendered = 0;
