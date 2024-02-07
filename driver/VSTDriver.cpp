@@ -735,6 +735,7 @@ void VSTDriver::initSysTray()
 	if (code != NoError) {
 		process_terminate();
 	}
+	Sleep(50);
 }
 
 void VSTDriver::setSinglePort32ChMode() 

@@ -717,7 +717,7 @@ public:
 			}
 			if(!highDpiMode)SaveDwordValue(_T("HighDpiMode"),(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
 			if(enableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(_T("EnableSinglePort32ChMode"), 1);
-			if(keepDriverLoaded == (DWORD)-1)SaveDwordValue(_T("KeepDriverLoaded"), 1);
+			if(keepDriverLoaded == (DWORD)-1)SaveDwordValue(_T("KeepDriverLoaded"), 0);
 			if(IsVistaOrNewer())SaveDwordValue(_T("UsePrivateAsioOnly"), usePrivateAsioOnly);
 			
 			delete effect;

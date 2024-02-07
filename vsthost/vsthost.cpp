@@ -13,22 +13,18 @@
 #define WIN32DEF(f) (WINAPI *f)
 #define LOADUSER32FUNCTION(f) *((void**)&f)=GetProcAddress(user32,#f)
 
-#define WM_ICONMSG  WM_APP + 1
-
-#define PORTMENUOFFSET  100
-
-#define MAX_PLUGINS 10
-
 #if(_WIN32_WINNT < 0x0500) 
 	#define SM_CXVIRTUALSCREEN  78
 	#define SM_CYVIRTUALSCREEN  79
 	#define ASFW_ANY    ((DWORD)-1)
 #endif 
 
-enum
-{
-	BUFFER_SIZE = 4800  //matches better for typical 48/96/192 kHz
-};
+#define WM_ICONMSG WM_APP + 1
+#define MAX_PLUGINS 10
+#define RESET_MENU_OFFSET 10
+#define PORT_MENU_OFFSET 100
+#define RESET_EVENT_COUNT 64 //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
+#define BUFFER_SIZE 4800  //matches better for typical 48/96/192 kHz
 
 namespace Command {
 	enum : uint32_t
@@ -90,8 +86,9 @@ static HMENU pluginMenu = NULL;
 static TCHAR clientBitnessStr[8] = { 0 };
 static TCHAR outputModeStr[8] = { 0 };
 
-static int lastUsedSysEx = 15;
-static bool resetRequested = false;
+static volatile int lastUsedSysEx = RESET_MENU_OFFSET + 5;
+static volatile bool doOwnReset = false;
+static bool driverResetRequested = false;
 static bool need_idle = false;
 static bool idle_started = false;
 
@@ -140,16 +137,67 @@ static const unsigned char gsReset[] = { 0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x0
 static const unsigned char xgReset[] = { 0xF0, 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00, 0xF7 };
 static const unsigned char gm2Reset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x03, 0xF7 };
 
-static const DWORD resetEventCount = 64; //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
-struct ResetVstEvents
+static VstMidiEvent resetMidiEvents[RESET_EVENT_COUNT] = { 0 };
+
+static struct ResetVstEvent
 {
 	VstInt32 numEvents;
 	VstIntPtr reserved;
-	VstEvent* events[resetEventCount];
+	VstEvent* events[RESET_EVENT_COUNT];
+} resetEvents = { 0 };
+
+struct myVstEvent
+{
+	struct myVstEvent* next;
+	unsigned port;
+	union
+	{
+		VstMidiEvent midiEvent;
+		VstMidiSysexEvent sysexEvent;
+	} ev;
+} *evChain = NULL, * evTail = NULL;
+
+
+static class Win32Lock {
+private:
+	CRITICAL_SECTION cCritSec;
+
+public:
+	Win32Lock() {
+		InitializeCriticalSection(&cCritSec);
+	}
+
+	~Win32Lock() {
+		DeleteCriticalSection(&cCritSec);
+	}
+
+	inline void lock() {
+		EnterCriticalSection(&cCritSec);
+	}
+
+	inline void unlock() {
+		LeaveCriticalSection(&cCritSec);
+	}
+}dialogLock;
+
+template <class T>
+class ScopeLock
+{
+private:
+	T* _lock;
+public:
+	inline ScopeLock(T* lockObj)
+	{
+		_lock = lockObj;
+		_lock->lock();
+	}
+
+	inline ~ScopeLock()
+	{
+		_lock->unlock();
+	}
 };
 
-static VstMidiEvent resetMidiEvents[resetEventCount] = { 0 };
-static ResetVstEvents resetEvents = { 0 };
 
 #ifdef LOG
 void Log(LPCTSTR szFormat, ...)
@@ -177,11 +225,182 @@ void NoLog(LPCTSTR szFormat, ...) {}
 #define Log while(0) NoLog
 #endif
 
+#ifdef MINIDUMP
+/*****************************************************************************/
+/* LoadMiniDump : tries to load minidump functionality                       */
+/*****************************************************************************/
+
+#include <dbghelp.h>
+typedef BOOL(__stdcall* PMiniDumpWriteDump)(IN HANDLE hProcess, IN DWORD ProcessId, IN HANDLE hFile, IN MINIDUMP_TYPE DumpType, IN CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam, OPTIONAL IN CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, OPTIONAL IN CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam OPTIONAL);
+static PMiniDumpWriteDump pMiniDumpWriteDump = NULL;
+static TCHAR szExeName[_MAX_PATH] = _T("");
+bool LoadMiniDump()
+{
+	static HMODULE hmodDbgHelp = NULL;
+
+	if (!pMiniDumpWriteDump && !hmodDbgHelp)
+	{
+		TCHAR szBuf[_MAX_PATH];
+		szBuf[0] = _T('\0');
+		::GetEnvironmentVariable(_T("ProgramFiles"), szBuf, MAX_PATH);
+		UINT omode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+		TCHAR* p = szBuf + lstrlen(szBuf);
+		if (*szBuf && !hmodDbgHelp)
+		{
+#ifdef _M_IX86
+			_tcscpy(p, _T("\\Debugging Tools for Windows (x86)\\dbghelp.dll"));
+#elif defined(_M_X64)
+			_tcscpy(p, _T("\\Debugging Tools for Windows (x64)\\dbghelp.dll"));
+#endif
+			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
+		}
+		if (*szBuf && !hmodDbgHelp)
+		{
+			_tcscpy(p, _T("\\Debugging Tools for Windows\\dbghelp.dll"));
+			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
+		}
+#if defined _M_X64
+		if (*szBuf && !hmodDbgHelp)       /* still not found?                  */
+		{                               /* try 64-bit version                */
+			_tcscpy(p, _T("\\Debugging Tools for Windows 64-Bit\\dbghelp.dll"));
+			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
+		}
+#endif
+		if (!hmodDbgHelp)      // if not already loaded, try to load a default-one
+			hmodDbgHelp = LoadLibrary(_T("dbghelp.dll"));
+		SetErrorMode(omode);
+
+		if (!hmodDbgHelp)                 /* if STILL not loaded,              */
+			return false;                   /* return with error                 */
+
+		pMiniDumpWriteDump = (PMiniDumpWriteDump)GetProcAddress(hmodDbgHelp, "MiniDumpWriteDump");
+	}
+	if (!pMiniDumpWriteDump)
+		return false;
+
+	if (!*szExeName)
+	{
+		TCHAR szPath[_MAX_PATH];
+		TCHAR* lbsl = NULL, * ldot = NULL;
+		_tcscpy_s(szExeName, _T("vsthost"));
+		GetModuleFileName(NULL, szPath, _MAX_PATH);
+		for (TCHAR* p = szPath; *p; p++)
+			if (*p == _T('\\'))
+				lbsl = p;
+			else if (*p == _T('.'))
+				ldot = p;
+		if (lbsl && ldot && ldot > lbsl + 1)
+		{
+			TCHAR* s, * t;
+			for (s = lbsl + 1, t = szExeName; s != ldot; s++)
+				*t++ = *s;
+			*t = _T('\0');
+		}
+	}
+
+	return true;
+}
+
+/*****************************************************************************/
+/* MiniDump : writes out a minidump                                          */
+/*****************************************************************************/
+
+void MiniDump(EXCEPTION_POINTERS* ExceptionInfo)
+{
+	// all variables static so they're preallocated - stack might be damaged!
+	// doesn't catch everything, but should get most.
+	static TCHAR szPath[_MAX_PATH];
+	if (!pMiniDumpWriteDump)
+	{
+		Log(_T("MiniDump impossible!\n"));
+		return;
+	}
+
+	static DWORD dwExeLen;
+	dwExeLen = (DWORD)lstrlen(szExeName);
+	if (!(dwExeLen = GetTempPath(_countof(szPath) - dwExeLen - 21, szPath)) ||
+		(dwExeLen > _countof(szPath) - dwExeLen - 22))
+	{
+		Log(_T("TempPath allocation error 1\n"));
+		return;
+	}
+	static SYSTEMTIME st;
+	GetLocalTime(&st);
+	_tcscpy(szPath + dwExeLen, szExeName);
+	dwExeLen += (DWORD)lstrlen(szExeName);
+	wsprintf(szPath + dwExeLen, _T(".%04d%02d%02d-%02d%02d%02d.mdmp"),
+		szExeName,
+		st.wYear, st.wMonth, st.wDay,
+		st.wHour, st.wMinute, st.wSecond);
+	static HANDLE hFile;                    /* create the minidump file          */
+	Log(_T("Dumping to %s ...\n"), szPath);
+	hFile = ::CreateFile(szPath,
+		GENERIC_WRITE, FILE_SHARE_WRITE,
+		NULL, CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hFile != INVALID_HANDLE_VALUE)
+	{
+		static _MINIDUMP_EXCEPTION_INFORMATION ExInfo = { 0 };
+		ExInfo.ThreadId = ::GetCurrentThreadId();
+		ExInfo.ExceptionPointers = ExceptionInfo;
+		pMiniDumpWriteDump(GetCurrentProcess(),
+			GetCurrentProcessId(),
+			hFile,
+			MiniDumpNormal,
+			&ExInfo,
+			NULL, NULL);
+		::CloseHandle(hFile);
+		Log(_T("Dumped to %s\n"), szPath);
+	}
+	else
+		Log(_T("Could not dump to %s!\n"), szPath);
+}
+#endif
+
 static void InvalidParamHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t pReserved)
 {
 	if (MessageBox(0, _T("An unexpected invalid parameter error occured.\r\nDo you want to try to continue?"), _T("VST Host Bridge Error"), MB_YESNO | MB_ICONERROR | MB_SYSTEMMODAL) == IDNO)
 		TerminateProcess(GetCurrentProcess(), 1);
 }
+
+LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
+{
+	if (IsDebuggerPresent())
+	{
+		return UnhandledExceptionFilter(param);
+	}
+	else
+	{
+#ifdef MINIDUMP
+		Log(_T("Dumping! pMiniDumpWriteDump=%p\nszExeName=%s\n"), pMiniDumpWriteDump, szExeName);
+		MiniDump(param);
+#endif
+		if (!trayMenu) return 1; // Do not disturb users with error messages caused by faulty plugins when driver is closing anyway
+
+		static TCHAR buffer[MAX_PATH] = { 0 };
+
+		if (DynGetModuleHandleEx)
+		{
+			static TCHAR titleBuffer[MAX_PATH / 2] = { 0 };
+			HMODULE hFaultyModule;
+			DynGetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCTSTR)param->ExceptionRecord->ExceptionAddress, &hFaultyModule);
+			GetModuleFileName(hFaultyModule, buffer, MAX_PATH);
+			GetFileTitle(buffer, titleBuffer, MAX_PATH / 2);
+			wsprintf(buffer, _T("An unexpected error 0x%X occured in %ls.\r\nVST host bridge now exits."), param->ExceptionRecord->ExceptionCode, titleBuffer);
+		}
+		else
+		{
+			wsprintf(buffer, _T("An unexpected error 0x%X occured.\r\nVST host bridge now exits."), param->ExceptionRecord->ExceptionCode);
+		}
+
+		MessageBox(0, buffer, _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
+		Shell_NotifyIcon(NIM_DELETE, &nIconData);
+		DestroyMenu(trayMenu);
+		TerminateProcess(GetCurrentProcess(), 1);
+		return 1;
+	}
+}
+
 
 #pragma comment(lib,"Version.lib") 
 static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned int buffSize)
@@ -244,60 +463,6 @@ static bool IsWinNT4()
 		return true;
 	return false;
 }
-
-static class FastLock
-{
-private:
-	volatile long lockCount;
-
-public:
-	void Lock() {
-		while (_InterlockedExchange(&lockCount, 1)) {
-			YieldProcessor();
-			SwitchToThread();
-		}		
-	}
-
-	void UnLock() {
-		lockCount = 0;
-	}
-
-}fastLock;
-
-static class MutexWin32
-{
-private:
-	CRITICAL_SECTION cCritSec;
-
-public:
-	int Init() {
-		InitializeCriticalSection(&cCritSec);
-		return 0;
-	}
-
-	void Close() {
-		DeleteCriticalSection(&cCritSec);
-	}
-
-	void Enter() {
-		EnterCriticalSection(&cCritSec);
-	}
-
-	void Leave() {
-		LeaveCriticalSection(&cCritSec);
-	}
-} dialogMutex;
-
-struct myVstEvent
-{
-	struct myVstEvent* next;
-	unsigned port;
-	union
-	{
-		VstMidiEvent midiEvent;
-		VstMidiSysexEvent sysexEvent;
-	} ev;
-} *evChain = NULL, * evTail = NULL;
 
 void freeChain()
 {
@@ -560,35 +725,13 @@ static void setEditorPosition(int port, int x, int y)
 	}
 }
 
-static void sendSysExEvent(char* sysExBytes, int size)
-{
-	fastLock.Lock();
-
-	static VstMidiSysexEvent syxEvent = { 0 };
-	static VstEvents events = { 0 };
-
-	syxEvent.byteSize = sizeof(syxEvent);
-	syxEvent.dumpBytes = size;
-	syxEvent.sysexDump = sysExBytes;
-	syxEvent.type = kVstSysExType;
-
-	events.events[0] = (VstEvent*)&syxEvent;
-	events.numEvents = 1;
-
-	
-	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &events, 0);
-	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &events, 0);
-	
-	fastLock.UnLock();
-
-}
-
 static void InitSimpleResetEvents()
 {
-	resetEvents.numEvents = resetEventCount;
+	resetEvents.numEvents = RESET_EVENT_COUNT;
 	resetEvents.reserved = 0;
+	const int ChannelCount = 16;
 
-	for (int i = 0; i <= 15; i++)
+	for (int i = 0; i < ChannelCount; i++)
 	{
 		DWORD msg, index;		
 
@@ -624,27 +767,54 @@ static void InitSimpleResetEvents()
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
 		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
 	}
+}
 
+static void sendSysExEvent(char* sysExBytes, int size)
+{
+	static VstMidiSysexEvent syxEvent = { 0 };
+	static VstEvents events = { 0 };
+
+	syxEvent.byteSize = sizeof(syxEvent);
+	syxEvent.dumpBytes = size;
+	syxEvent.sysexDump = sysExBytes;
+	syxEvent.type = kVstSysExType;
+
+	events.events[0] = (VstEvent*)&syxEvent;
+	events.numEvents = 1;
+
+	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &events, 0);
+	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &events, 0);
 }
 
 static void sendSimpleResetEvents()
-{
-	fastLock.Lock();
-
+{	
 	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &resetEvents, 0);
 	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &resetEvents, 0);
-
-	fastLock.UnLock();
 }
 
-struct MyDLGTEMPLATE : DLGTEMPLATE
-{
-	WORD ext[3];
-	MyDLGTEMPLATE()
-	{
-		memset(this, 0, sizeof(*this));
-	};
-};
+static void SendOwnReset()
+{	
+	switch (lastUsedSysEx)
+	{	
+	case RESET_MENU_OFFSET + 1:
+		sendSysExEvent((char*)gmReset, sizeof(gmReset));
+		break;
+	case RESET_MENU_OFFSET + 2:
+		sendSysExEvent((char*)gsReset, sizeof(gsReset));
+		break;
+	case RESET_MENU_OFFSET + 3:
+		sendSysExEvent((char*)xgReset, sizeof(xgReset));
+		break;
+	case RESET_MENU_OFFSET + 4:
+		sendSysExEvent((char*)gm2Reset, sizeof(gm2Reset));
+		break;
+	case RESET_MENU_OFFSET + 5:
+		sendSimpleResetEvents();
+		break;		
+	}
+
+	doOwnReset = false;
+}
 
 INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -668,6 +838,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 			if (effect)
 			{
+				ScopeLock<Win32Lock> scopeLock(&dialogLock);
+				
 				/*
 				falco:
 				DPI adjustment for NT4/W2K/XP that do not use DPI virtualization but can use large font (125% - 120 DPI) and actually all other DPI settings.
@@ -675,8 +847,6 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				Since we have no DPI Aware manifest on Vista+ DPI virtualization is used.
 				It's better than setting DPI awareness to true since allmost all VST 2.0 Editors know nothing about DPI scaling. So we let modern Windows handle this.
 				*/
-				dialogMutex.Enter();				
-
 				HDC screen = GetDC(0);
 				dpiMul = (float)(GetDeviceCaps(screen, LOGPIXELSY)) / 96.0f;
 				ReleaseDC(0, screen);
@@ -698,7 +868,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{
 					extraHeight[portNum] = (int)(24 * dpiMul);
 					sameThread = false;
-				}				
+				}
 
 				SetTimer(hwnd, 1, timerPeriodMS, 0);
 				ERect* eRect = NULL;
@@ -751,10 +921,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 						effect->dispatcher(effect, effSetSampleRate, 0, 0, 0, float(sample_rate));
 						effect->dispatcher(effect, effSetBlockSize, 0, (int)(sample_rate * timerPeriodMS * 0.001), 0, 0);
 						sample_pos = 0;
-					}
+					}					
 				}
-
-				dialogMutex.Leave();
 			}
 			SetForegroundWindow(hwnd);
 		}
@@ -765,7 +933,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 		if (effect && wParam == SIZE_RESTORED)
 		{
-			dialogMutex.Enter();
+			ScopeLock<Win32Lock> scopeLock(&dialogLock);
+			
 			ERect* eRect = 0;
 			effect->dispatcher(effect, effEditGetRect, 0, 0, &eRect, 0);
 			if (eRect)
@@ -792,7 +961,6 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					SetWindowPos(buttonWnd[portNum], NULL, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
 				}
 			}			
-			dialogMutex.Leave();
 		}
 		break;
 	case WM_TIMER:
@@ -897,13 +1065,14 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 		break;
 
 	case audioMasterGetTime: //Some VST requires this. E.g. Genny throws AV without this.  
-		vstTimeInfo.flags = kVstTransportPlaying | kVstNanosValid | kVstTempoValid | kVstTimeSigValid;
+		vstTimeInfo.flags = kVstTransportPlaying | kVstNanosValid | kVstTempoValid | kVstTimeSigValid | kVstPpqPosValid;
 		vstTimeInfo.samplePos = sample_pos;
 		vstTimeInfo.sampleRate = sample_rate;
 		vstTimeInfo.timeSigNumerator = 4;
 		vstTimeInfo.timeSigDenominator = 4;
 		vstTimeInfo.tempo = 120;
-		vstTimeInfo.nanoSeconds = (double)timeGetTime() * 1000000.0L;
+		vstTimeInfo.nanoSeconds = (double)timeGetTime() * 1000000.0;
+		vstTimeInfo.ppqPos = (double)sample_pos / sample_rate * 2.0;
 
 		return (VstIntPtr)&vstTimeInfo;
 
@@ -969,178 +1138,16 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 	return 0;
 }
 
-#ifdef MINIDUMP
-/*****************************************************************************/
-/* LoadMiniDump : tries to load minidump functionality                       */
-/*****************************************************************************/
-
-#include <dbghelp.h>
-typedef BOOL(__stdcall* PMiniDumpWriteDump)(IN HANDLE hProcess, IN DWORD ProcessId, IN HANDLE hFile, IN MINIDUMP_TYPE DumpType, IN CONST PMINIDUMP_EXCEPTION_INFORMATION ExceptionParam, OPTIONAL IN CONST PMINIDUMP_USER_STREAM_INFORMATION UserStreamParam, OPTIONAL IN CONST PMINIDUMP_CALLBACK_INFORMATION CallbackParam OPTIONAL);
-static PMiniDumpWriteDump pMiniDumpWriteDump = NULL;
-static TCHAR szExeName[_MAX_PATH] = _T("");
-bool LoadMiniDump()
+struct MyDLGTEMPLATE : DLGTEMPLATE
 {
-	static HMODULE hmodDbgHelp = NULL;
-
-	if (!pMiniDumpWriteDump && !hmodDbgHelp)
+	WORD ext[3];
+	MyDLGTEMPLATE()
 	{
-		TCHAR szBuf[_MAX_PATH];
-		szBuf[0] = _T('\0');
-		::GetEnvironmentVariable(_T("ProgramFiles"), szBuf, MAX_PATH);
-		UINT omode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-		TCHAR* p = szBuf + lstrlen(szBuf);
-		if (*szBuf && !hmodDbgHelp)
-		{
-#ifdef _M_IX86
-			_tcscpy(p, _T("\\Debugging Tools for Windows (x86)\\dbghelp.dll"));
-#elif defined(_M_X64)
-			_tcscpy(p, _T("\\Debugging Tools for Windows (x64)\\dbghelp.dll"));
-#endif
-			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
-		}
-		if (*szBuf && !hmodDbgHelp)
-		{
-			_tcscpy(p, _T("\\Debugging Tools for Windows\\dbghelp.dll"));
-			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
-		}
-#if defined _M_X64
-		if (*szBuf && !hmodDbgHelp)       /* still not found?                  */
-		{                               /* try 64-bit version                */
-			_tcscpy(p, _T("\\Debugging Tools for Windows 64-Bit\\dbghelp.dll"));
-			if (!(hmodDbgHelp = LoadLibrary(szBuf))) *p = '\0';
-		}
-#endif
-		if (!hmodDbgHelp)      // if not already loaded, try to load a default-one
-			hmodDbgHelp = LoadLibrary(_T("dbghelp.dll"));
-		SetErrorMode(omode);
-
-		if (!hmodDbgHelp)                 /* if STILL not loaded,              */
-			return false;                   /* return with error                 */
-
-		pMiniDumpWriteDump = (PMiniDumpWriteDump)GetProcAddress(hmodDbgHelp, "MiniDumpWriteDump");
-	}
-	if (!pMiniDumpWriteDump)
-		return false;
-
-	if (!*szExeName)
-	{
-		TCHAR szPath[_MAX_PATH];
-		TCHAR* lbsl = NULL, * ldot = NULL;
-		_tcscpy_s(szExeName, _T("vsthost"));
-		GetModuleFileName(NULL, szPath, _MAX_PATH);
-		for (TCHAR* p = szPath; *p; p++)
-			if (*p == _T('\\'))
-				lbsl = p;
-			else if (*p == _T('.'))
-				ldot = p;
-		if (lbsl && ldot && ldot > lbsl + 1)
-		{
-			TCHAR* s, * t;
-			for (s = lbsl + 1, t = szExeName; s != ldot; s++)
-				*t++ = *s;
-			*t = _T('\0');
-		}
-	}
-
-	return true;
-}
-
-/*****************************************************************************/
-/* MiniDump : writes out a minidump                                          */
-/*****************************************************************************/
-
-void MiniDump(EXCEPTION_POINTERS* ExceptionInfo)
-{
-	// all variables static so they're preallocated - stack might be damaged!
-	// doesn't catch everything, but should get most.
-	static TCHAR szPath[_MAX_PATH];
-	if (!pMiniDumpWriteDump)
-	{
-		Log(_T("MiniDump impossible!\n"));
-		return;
-	}
-
-	static DWORD dwExeLen;
-	dwExeLen = (DWORD)lstrlen(szExeName);
-	if (!(dwExeLen = GetTempPath(_countof(szPath) - dwExeLen - 21, szPath)) ||
-		(dwExeLen > _countof(szPath) - dwExeLen - 22))
-	{
-		Log(_T("TempPath allocation error 1\n"));
-		return;
-	}
-	static SYSTEMTIME st;
-	GetLocalTime(&st);
-	_tcscpy(szPath + dwExeLen, szExeName);
-	dwExeLen += (DWORD)lstrlen(szExeName);
-	wsprintf(szPath + dwExeLen, _T(".%04d%02d%02d-%02d%02d%02d.mdmp"),
-		szExeName,
-		st.wYear, st.wMonth, st.wDay,
-		st.wHour, st.wMinute, st.wSecond);
-	static HANDLE hFile;                    /* create the minidump file          */
-	Log(_T("Dumping to %s ...\n"), szPath);
-	hFile = ::CreateFile(szPath,
-		GENERIC_WRITE, FILE_SHARE_WRITE,
-		NULL, CREATE_ALWAYS,
-		FILE_ATTRIBUTE_NORMAL, NULL);
-	if (hFile != INVALID_HANDLE_VALUE)
-	{
-		static _MINIDUMP_EXCEPTION_INFORMATION ExInfo = { 0 };
-		ExInfo.ThreadId = ::GetCurrentThreadId();
-		ExInfo.ExceptionPointers = ExceptionInfo;
-		pMiniDumpWriteDump(GetCurrentProcess(),
-			GetCurrentProcessId(),
-			hFile,
-			MiniDumpNormal,
-			&ExInfo,
-			NULL, NULL);
-		::CloseHandle(hFile);
-		Log(_T("Dumped to %s\n"), szPath);
-	}
-	else
-		Log(_T("Could not dump to %s!\n"), szPath);
-}
-#endif
-
-LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
-{
-	if (IsDebuggerPresent())
-	{
-		return UnhandledExceptionFilter(param);
-	}
-	else
-	{
-#ifdef MINIDUMP
-		Log(_T("Dumping! pMiniDumpWriteDump=%p\nszExeName=%s\n"), pMiniDumpWriteDump, szExeName);
-		MiniDump(param);
-#endif
-		if (!trayMenu) return 1; // Do not disturb users with error messages caused by faulty plugins when driver is closing anyway
-
-		static TCHAR buffer[MAX_PATH] = { 0 };			
-		
-		if (DynGetModuleHandleEx)
-		{			
-			static TCHAR titleBuffer[MAX_PATH / 2] = { 0 };	
-			HMODULE hFaultyModule;
-			DynGetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCTSTR)param->ExceptionRecord->ExceptionAddress, &hFaultyModule);
-			GetModuleFileName(hFaultyModule, buffer, MAX_PATH);
-			GetFileTitle(buffer, titleBuffer, MAX_PATH / 2);
-			wsprintf(buffer, _T("An unexpected error 0x%X occured in %ls.\r\nVST host bridge now exits."), param->ExceptionRecord->ExceptionCode, titleBuffer);
-		}
-		else 
-		{
-			wsprintf(buffer, _T("An unexpected error 0x%X occured.\r\nVST host bridge now exits."), param->ExceptionRecord->ExceptionCode);
-		}		
-		
-		MessageBox(0, buffer, _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
-		Shell_NotifyIcon(NIM_DELETE, &nIconData);
-		DestroyMenu(trayMenu);		
-		TerminateProcess(GetCurrentProcess(), 1);
-		return 1;
-	}
-}
+		memset(this, 0, sizeof(*this));
+	};
+};
 
 #pragma comment(lib, "Winmm")
-
 static unsigned __stdcall EditorThread(void* threadparam)
 {
 	MyDLGTEMPLATE vstiEditor;
@@ -1246,13 +1253,13 @@ void setSelectedPluginIndex(int index)
 		RegCloseKey(hKey);
 	}
 
-	resetRequested = true;
+	driverResetRequested = true;
 }
 
 int getSelectedSysExIndex()
 {
 	HKEY hKey;
-	int retRes = 15;
+	int retRes = RESET_MENU_OFFSET + 5;
 
 	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ | KEY_WRITE, &hKey);
 	if (result == NO_ERROR)
@@ -1285,6 +1292,7 @@ void setSelectedSysExIndex(int index)
 LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {		
 	TCHAR tmpPath[MAX_PATH] = { 0 };
+	const int STILLRUNNING = 255;
 
 	switch (msg)
 	{
@@ -1301,18 +1309,18 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 			
 			trayMenu = CreatePopupMenu();
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORTMENUOFFSET, _T("Port A VST Dialog"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORTMENUOFFSET + 1, _T("Port B VST Dialog"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET, _T("Port A VST Dialog"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET + 1, _T("Port B VST Dialog"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_POPUP, (UINT)pluginMenu, _T("Switch Plugin"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 11, _T("Send GM Reset"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 12, _T("Send GS Reset"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 13, _T("Send XG Reset"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 14, _T("Send GM2 Reset"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 15, _T("All Notes/CC Off"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 3, _T("Send XG Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 4, _T("Send GM2 Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 5, _T("All Notes/CC Off"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 21, _T("Info..."));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 2 * RESET_MENU_OFFSET + 1, _T("Info..."));
 
 
 			nIconData.cbSize = sizeof(NOTIFYICONDATA);
@@ -1326,7 +1334,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 			InitSimpleResetEvents();			
 			lastUsedSysEx = getSelectedSysExIndex();
-			if (lastUsedSysEx != 15) PostMessage(hwnd, WM_COMMAND, lastUsedSysEx, 0);
+			if (lastUsedSysEx != RESET_MENU_OFFSET + 5) PostMessage(hwnd, WM_COMMAND, lastUsedSysEx, 0);
 
 			return 0;
 		}
@@ -1351,20 +1359,20 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				POINT cursorPoint;
 				bool hasEditor = pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor;
 				GetCursorPos(&cursorPoint);
-				CheckMenuItem(trayMenu, PORTMENUOFFSET, editorHandle[0] != 0 && IsWindowVisible(editorHandle[0]) ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, PORTMENUOFFSET + 1, editorHandle[1] != 0 && IsWindowVisible(editorHandle[1]) ? MF_CHECKED : MF_UNCHECKED);
-				EnableMenuItem(trayMenu, PORTMENUOFFSET,  isPortActive[0] && hasEditor ? MF_ENABLED : MF_GRAYED);
-				EnableMenuItem(trayMenu, PORTMENUOFFSET + 1, isPortActive[1] && hasEditor ? MF_ENABLED : MF_GRAYED);
+				CheckMenuItem(trayMenu, PORT_MENU_OFFSET, editorHandle[0] != 0 && IsWindowVisible(editorHandle[0]) ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, editorHandle[1] != 0 && IsWindowVisible(editorHandle[1]) ? MF_CHECKED : MF_UNCHECKED);
+				EnableMenuItem(trayMenu, PORT_MENU_OFFSET,  isPortActive[0] && hasEditor ? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, isPortActive[1] && hasEditor ? MF_ENABLED : MF_GRAYED);
 
-				CheckMenuItem(trayMenu, 11, lastUsedSysEx == 11 ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, 12, lastUsedSysEx == 12 ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, 13, lastUsedSysEx == 13 ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, 14, lastUsedSysEx == 14 ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, 15, lastUsedSysEx == 15 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 3, lastUsedSysEx == RESET_MENU_OFFSET + 3 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 4, lastUsedSysEx == RESET_MENU_OFFSET + 4 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 5, lastUsedSysEx == RESET_MENU_OFFSET + 5 ? MF_CHECKED : MF_UNCHECKED);
 
-				SetForegroundWindow(trayWndHandle);
+				SetForegroundWindow(hwnd);
 				TrackPopupMenu(trayMenu, TPM_RIGHTBUTTON | (GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN), cursorPoint.x, cursorPoint.y, 0, hwnd, NULL);
-				PostMessage(trayWndHandle, WM_NULL, 0, 0);
+				PostMessage(hwnd, WM_NULL, 0, 0);
 			}
 
 			return 0;
@@ -1399,32 +1407,22 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 			switch (wParam)
 			{			
-			case PORTMENUOFFSET:
-			case PORTMENUOFFSET + 1:
-				showVstEditor((uint32_t)wParam - PORTMENUOFFSET);
+			case PORT_MENU_OFFSET:
+			case PORT_MENU_OFFSET + 1:
+				showVstEditor((uint32_t)wParam - PORT_MENU_OFFSET);
 				return 0;
-			case 11:
-				sendSysExEvent((char*)gmReset, sizeof(gmReset));
+			
+			case RESET_MENU_OFFSET + 1:			
+			case RESET_MENU_OFFSET + 2:				
+			case RESET_MENU_OFFSET + 3:				
+			case RESET_MENU_OFFSET + 4:				
+			case RESET_MENU_OFFSET + 5:
 				lastUsedSysEx = (int)wParam;
+				doOwnReset = true;				
 				return 0;
-			case 12:
-				sendSysExEvent((char*)gsReset, sizeof(gsReset));
-				lastUsedSysEx = (int)wParam;
-				return 0;
-			case 13:
-				sendSysExEvent((char*)xgReset, sizeof(xgReset));
-				lastUsedSysEx = (int)wParam;
-				return 0;
-			case 14:
-				sendSysExEvent((char*)gm2Reset, sizeof(gm2Reset));
-				lastUsedSysEx = (int)wParam;
-				return 0;
-			case 15:
-				sendSimpleResetEvents();
-				lastUsedSysEx = (int)wParam;
-				return 0;
-			case 21:
-				if (aboutBoxResult == 255) return 0;
+
+			case 2 * RESET_MENU_OFFSET + 1:
+				if (aboutBoxResult == STILLRUNNING) return 0;
 
 				_tcscat_s(versionBuff, midiClient);
 				_tcscat_s(versionBuff, _T(" "));
@@ -1458,7 +1456,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				params.lpszText = versionBuff;
 				params.lpszIcon = MAKEINTRESOURCE(32512);
 
-				aboutBoxResult = 255;
+				aboutBoxResult = STILLRUNNING;
 				aboutBoxResult = MessageBoxIndirect(&params);				
 				
 				return 0;
@@ -1724,9 +1722,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	float** float_list_out;
 	float* float_null;
 	float* float_out;
-
-	dialogMutex.Init();	
-	fastLock.UnLock();
+	
 	
 	for (;;)
 	{
@@ -1807,8 +1803,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			{
 				uint32_t port_num = get_code();
 
-				//showVstEditor(port_num);
-				PostMessage(trayWndHandle, WM_COMMAND, PORTMENUOFFSET + port_num, 0);
+				if(trayWndHandle)
+					PostMessage(trayWndHandle, WM_COMMAND, PORT_MENU_OFFSET + port_num, 0);
+				else
+					showVstEditor(port_num);
+				
 
 				put_code(Response::NoError);
 			}
@@ -1853,11 +1852,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			break;
 
 		case Command::Reset: // Reset 
-			{				
-				if (lastUsedSysEx == 15)
-					sendSimpleResetEvents();
-				else
-					SendMessage(trayWndHandle, WM_COMMAND, lastUsedSysEx, 0);
+			{	
+				SendMessage(trayWndHandle, WM_COMMAND, lastUsedSysEx, 0);
 
 				uint32_t port_num = get_code();
 
@@ -1946,8 +1942,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			break;
 
 		case Command::RenderAudioSamples: // Render Samples
-			{
-				fastLock.Lock();
+			{			
+				bool tmpDoOwnReset = doOwnReset;
 
 				if (!blState.size())
 				{
@@ -2004,7 +2000,6 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 							pEffect[0]->dispatcher(pEffect[0], DECLARE_VST_DEPRECATED(effIdle), 0, 0, 0, 0);
 							pEffect[1]->dispatcher(pEffect[1], DECLARE_VST_DEPRECATED(effIdle), 0, 0, 0, 0);
 
-
 							idle_run -= count_to_do;
 						}
 					}
@@ -2038,7 +2033,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 						}
 
 						pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, events[0], 0);
-					}
+					}					
 
 					if (event_count[1])
 					{
@@ -2057,9 +2052,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 						pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, events[1], 0);
 					}
-
 				}
 
+				if (tmpDoOwnReset) SendOwnReset();
 
 				if (need_idle)
 				{
@@ -2071,15 +2066,15 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					{
 						if (events[0]) pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, events[0], 0);
 						if (events[1]) pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, events[1], 0);
-
+						if (tmpDoOwnReset) SendOwnReset();
 						idle_started = true;
 					}
 				}
 
 				uint32_t count = get_code();
-				sample_pos += count;			
-				
-				if (!resetRequested)
+				sample_pos += count;
+
+				if (!driverResetRequested)
 					put_code(Response::NoError);
 				else
 					put_code(Response::ResetRequest);
@@ -2134,14 +2129,12 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				if (events[1]) free(events[1]);
 
 				freeChain();
-
-				fastLock.UnLock();
-			}
-			break;
+				break;						
+			}			
 
 		case Command::RenderAudioSamples4channel: // Render Samples for 4 channel mode
-			{
-				fastLock.Lock();
+			{				
+				bool tmpDoOwnReset = doOwnReset;
 
 				if (!blState.size())
 				{
@@ -2198,7 +2191,6 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 							pEffect[0]->dispatcher(pEffect[0], DECLARE_VST_DEPRECATED(effIdle), 0, 0, 0, 0);
 							pEffect[1]->dispatcher(pEffect[1], DECLARE_VST_DEPRECATED(effIdle), 0, 0, 0, 0);
 
-
 							idle_run -= count_to_do;
 						}
 					}
@@ -2232,7 +2224,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 						}
 
 						pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, events[0], 0);
-					}
+					}					
 
 					if (event_count[1])
 					{
@@ -2250,10 +2242,10 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 						}
 
 						pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, events[1], 0);
-					}
-
+					}					
 				}
 
+				if (tmpDoOwnReset) SendOwnReset();
 
 				if (need_idle)
 				{
@@ -2265,15 +2257,15 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					{
 						if (events[0]) pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, events[0], 0);
 						if (events[1]) pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, events[1], 0);
-
+						if (tmpDoOwnReset) SendOwnReset();
 						idle_started = true;
 					}
 				}
 
 				uint32_t count = get_code();
-				sample_pos += count;			
-					
-				if (!resetRequested)
+				sample_pos += count;
+
+				if (!driverResetRequested)
 					put_code(Response::NoError);
 				else
 					put_code(Response::ResetRequest);
@@ -2337,11 +2329,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				if (events[0]) free(events[0]);
 				if (events[1]) free(events[1]);
 
-				freeChain();
-
-				fastLock.UnLock();
-			}
-			break;
+				freeChain();			
+				break;
+			}			
 
 		default:
 			code = Response::CommandUnknown;;
@@ -2387,8 +2377,7 @@ exit:
 		SetStdHandle(STD_INPUT_HANDLE, pipe_in);
 		SetStdHandle(STD_OUTPUT_HANDLE, pipe_out);
 	}
-
-	dialogMutex.Close();
+	
 	Log(_T("Exit with code %d\n"), code);
 
 	return code;

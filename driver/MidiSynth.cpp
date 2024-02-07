@@ -151,28 +151,45 @@ namespace VSTMIDIDRV{
 		}
 	}midiStream;
 
-	static class SynthMutexWin32{
+	
+	static class Win32Lock{
 	private:
 		CRITICAL_SECTION cCritSec;
 
 	public:
-		int Init(){
-			InitializeCriticalSection(&cCritSec);
-			return 0;
+		Win32Lock(){
+			InitializeCriticalSection(&cCritSec);			
 		}
 
-		void Close(){
+		~Win32Lock(){
 			DeleteCriticalSection(&cCritSec);
 		}
 
-		void Enter(){
+		inline void lock(){
 			EnterCriticalSection(&cCritSec);
 		}
 
-		void Leave(){
+		inline void unlock(){
 			LeaveCriticalSection(&cCritSec);
 		}
-	}synthMutex;
+	}synthLock;
+		
+
+	template <class T>
+	class ScopeLock
+	{
+	private:
+		T* _lock;
+	public:
+		inline ScopeLock(T* lockObj) {
+			_lock = lockObj;
+			_lock->lock();
+		}
+
+		inline ~ScopeLock() {
+			_lock->unlock();
+		}
+	};
 
 	
 	inline static DWORD DwordMin(DWORD a, DWORD b) //min macro calls bassAsioOut.GetPos() 2 times that can cause problems...
@@ -920,19 +937,23 @@ namespace VSTMIDIDRV{
 				DWORD sysex_len;
 				DWORD port;
 				unsigned char* sysex;
-				synthMutex.Enter();
-				midiStream.GetMessage(port, msg, sysex, sysex_len);
+				
+				{
+					ScopeLock<Win32Lock> scopeLock(&synthLock);
 
-				if (msg && !sysex)
-				{
-					vstDriver->ProcessMIDIMessage(port, msg);
+					midiStream.GetMessage(port, msg, sysex, sysex_len);
+
+					if (msg && !sysex)
+					{
+						vstDriver->ProcessMIDIMessage(port, msg);
+					}
+					else if (!msg && sysex && sysex_len)
+					{
+						vstDriver->ProcessSysEx(port, sysex, sysex_len);
+						free(sysex);
+					}
 				}
-				else if (!msg && sysex && sysex_len)
-				{
-					vstDriver->ProcessSysEx(port, sysex, sysex_len);
-					free(sysex);
-				}
-				synthMutex.Leave();
+				
 			}
 
 			// Find out how many frames to render. The value of timeStamp == -1 indicates the MIDI buffer is empty
@@ -941,9 +962,15 @@ namespace VSTMIDIDRV{
 				// MIDI message is too far - render the rest of frames
 				framesToRender = totalFrames;
 			}
-			synthMutex.Enter();
-			uint32_t result = vstDriver->Render(bufpos, framesToRender, outputGain, channels);
-			synthMutex.Leave();
+			
+			uint32_t result;
+			{
+				ScopeLock<Win32Lock> scopeLock(&synthLock);
+
+				result = vstDriver->Render(bufpos, framesToRender, outputGain, channels);
+			}
+			
+
 			framesRendered += framesToRender;
 			bufpos += framesToRender * channels;
 			totalFrames -= framesToRender;
@@ -967,19 +994,21 @@ namespace VSTMIDIDRV{
 				DWORD sysex_len;
 				DWORD port;
 				unsigned char* sysex;
-				synthMutex.Enter();
-				midiStream.GetMessage(port, msg, sysex, sysex_len);
+				{
+					ScopeLock<Win32Lock> scopeLock(&synthLock);
 
-				if (msg && !sysex)
-				{
-					vstDriver->ProcessMIDIMessage(port, msg);
+					midiStream.GetMessage(port, msg, sysex, sysex_len);
+
+					if (msg && !sysex)
+					{
+						vstDriver->ProcessMIDIMessage(port, msg);
+					}
+					else if (!msg && sysex && sysex_len)
+					{
+						vstDriver->ProcessSysEx(port, sysex, sysex_len);
+						free(sysex);
+					}
 				}
-				else if (!msg && sysex && sysex_len)
-				{
-					vstDriver->ProcessSysEx(port, sysex, sysex_len);
-					free(sysex);
-				}
-				synthMutex.Leave();
 			}
 
 			// Find out how many frames to render. The value of timeStamp == -1 indicates the MIDI buffer is empty
@@ -988,9 +1017,14 @@ namespace VSTMIDIDRV{
 				// MIDI message is too far - render the rest of frames
 				framesToRender = totalFrames;
 			}
-			synthMutex.Enter();
-			uint32_t result = vstDriver->RenderFloat(bufpos, framesToRender, outputGain, channels);
-			synthMutex.Leave();
+
+			uint32_t result;
+			{
+				ScopeLock<Win32Lock> scopeLock(&synthLock);
+
+				result = vstDriver->RenderFloat(bufpos, framesToRender, outputGain, channels);
+			}
+			
 			framesRendered += framesToRender;
 			bufpos += framesToRender * channels;
 			totalFrames -= framesToRender;
@@ -1106,12 +1140,7 @@ namespace VSTMIDIDRV{
 		statusBuff[1] = 0;
 		isSinglePort32Ch = false;
 		virtualPortNum = 0;
-		lastOpenedPort = uDeviceID;
-
-		// Init synth
-		if (synthMutex.Init()) {
-			return 1;
-		}
+		lastOpenedPort = uDeviceID;		
 
 		UINT wResult = 0;
 		if (useAsio)
@@ -1180,13 +1209,15 @@ namespace VSTMIDIDRV{
 		UINT wResult = useAsio ? bassAsioOut.Pause() : waveOut.Pause();
 		if (wResult) return wResult;
 
-		synthMutex.Enter();
-		vstDriver->ResetDriver(uDeviceID);
-		midiStream.Reset();
-		statusBuff[uDeviceID] = 0;
-		isSinglePort32Ch = false;
-		virtualPortNum = 0;
-		synthMutex.Leave();
+		{
+			ScopeLock<Win32Lock> scopeLock(&synthLock);
+
+			vstDriver->ResetDriver(uDeviceID);
+			midiStream.Reset();
+			statusBuff[uDeviceID] = 0;
+			isSinglePort32Ch = false;
+			virtualPortNum = 0;
+		}
 
 		wResult = useAsio ? bassAsioOut.Resume() : waveOut.Resume();
 		return wResult;
@@ -1265,36 +1296,24 @@ namespace VSTMIDIDRV{
 	
 	void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg){
 
-		synthMutex.Enter();	
+		ScopeLock<Win32Lock> scopeLock(&synthLock);
 		
 		if (!PreprocessMIDI(uDeviceID, msg))
-		{
-			synthMutex.Leave();
 			return;
-		}
-		DWORD tmpTimestamp = useAsio ? DwordMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
-
-		midiStream.PutMessage(uDeviceID, msg, tmpTimestamp);		
-
-		synthMutex.Leave();
 		
+		DWORD tmpTimestamp = useAsio ? DwordMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
+		midiStream.PutMessage(uDeviceID, msg, tmpTimestamp);						
 	}
 
 	void MidiSynth::PlaySysEx(unsigned uDeviceID, unsigned char *bufpos, DWORD len){
 
-		synthMutex.Enter();
+		ScopeLock<Win32Lock> scopeLock(&synthLock);
 		
-		if(!PreprocessSysEx(uDeviceID, bufpos, len))
-		{
-			synthMutex.Leave();
+		if(!PreprocessSysEx(uDeviceID, bufpos, len)) 
 			return;
-		}
-
+		
 		DWORD tmpTimestamp = useAsio ? DwordMin(bassAsioOut.GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut.GetPos(channels) + midiLatency) % bufferSize);
-
-		midiStream.PutSysEx(uDeviceID, bufpos, len, tmpTimestamp);
-
-		synthMutex.Leave();
+		midiStream.PutSysEx(uDeviceID, bufpos, len, tmpTimestamp);		
 	}	
 
 	void MidiSynth::SetVolume(unsigned uDeviceID, float volume){
@@ -1311,14 +1330,13 @@ namespace VSTMIDIDRV{
 			waveOut.Close();
 		}
 
-		synthMutex.Enter();
+		{
+			ScopeLock<Win32Lock> scopeLock(&synthLock);
 
-		// Cleanup memory
-		delete vstDriver;
-		vstDriver = NULL;
-
-		synthMutex.Leave();
-		synthMutex.Close();
+			// Cleanup memory
+			delete vstDriver;
+			vstDriver = NULL;		
+		}
 	}
 
 }
