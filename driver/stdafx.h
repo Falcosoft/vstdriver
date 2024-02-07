@@ -17,6 +17,7 @@
 #include <mmddk.h>
 #include <mmreg.h>
 #include "../external_packages/audiodefs.h"
+#include "../external_packages/win32lock.h"
 #include <process.h>
 #include <vector>
 #include <iostream>

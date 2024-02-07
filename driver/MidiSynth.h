@@ -66,6 +66,7 @@ private:
 	bool PreprocessMIDI(unsigned int& uDeviceID, DWORD& msg);
 	bool PreprocessSysEx(unsigned int& uDeviceID, unsigned char* bufpos, const DWORD len);
 	void LoadSettings();
+	static void CALLBACK ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);
 
 	MidiSynth();
 

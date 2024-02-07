@@ -30,6 +30,7 @@
 
 #include "../external_packages/aeffect.h"
 #include "../external_packages/aeffectx.h"
+#include "../external_packages/win32lock.h"
 
 /* Added manifest as resource instead since DPI awareness/requestedExecutionLevel cannot be set as pragma comment
 

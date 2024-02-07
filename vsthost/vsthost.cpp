@@ -3,7 +3,6 @@
 
 #include "stdafx.h"
 #include <process.h>
-#include <intrin.h>
 #include "../version.h"
 
 // #define LOG_EXCHANGE
@@ -129,7 +128,7 @@ static AEffect* pEffect[2] = { NULL };
 
 static VstTimeInfo vstTimeInfo = { 0 };
 
-static HWND trayWndHandle = NULL;
+static volatile HWND trayWndHandle = NULL;
 static volatile int aboutBoxResult = 0;
 
 static const unsigned char gmReset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7 };
@@ -138,6 +137,8 @@ static const unsigned char xgReset[] = { 0xF0, 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7
 static const unsigned char gm2Reset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x03, 0xF7 };
 
 static VstMidiEvent resetMidiEvents[RESET_EVENT_COUNT] = { 0 };
+
+static Win32Lock dialogLock;
 
 static struct ResetVstEvent
 {
@@ -156,47 +157,6 @@ struct myVstEvent
 		VstMidiSysexEvent sysexEvent;
 	} ev;
 } *evChain = NULL, * evTail = NULL;
-
-
-static class Win32Lock {
-private:
-	CRITICAL_SECTION cCritSec;
-
-public:
-	Win32Lock() {
-		InitializeCriticalSection(&cCritSec);
-	}
-
-	~Win32Lock() {
-		DeleteCriticalSection(&cCritSec);
-	}
-
-	inline void lock() {
-		EnterCriticalSection(&cCritSec);
-	}
-
-	inline void unlock() {
-		LeaveCriticalSection(&cCritSec);
-	}
-}dialogLock;
-
-template <class T>
-class ScopeLock
-{
-private:
-	T* _lock;
-public:
-	inline ScopeLock(T* lockObj)
-	{
-		_lock = lockObj;
-		_lock->lock();
-	}
-
-	inline ~ScopeLock()
-	{
-		_lock->unlock();
-	}
-};
 
 
 #ifdef LOG
@@ -1347,6 +1307,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			Shell_NotifyIcon(NIM_DELETE, &nIconData);
 			DestroyMenu(trayMenu);
 			trayMenu = NULL;
+			trayWndHandle = NULL;
 			PostQuitMessage(0);
 			return 0;
 		}
@@ -1803,13 +1764,18 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			{
 				uint32_t port_num = get_code();
 
-				if(trayWndHandle)
-					PostMessage(trayWndHandle, WM_COMMAND, PORT_MENU_OFFSET + port_num, 0);
-				else
-					showVstEditor(port_num);
-				
-
 				put_code(Response::NoError);
+
+				int loops = 0;
+				while (!trayWndHandle && loops < 1000)
+				{
+					Sleep(1);
+					loops++;
+				}
+				if(trayWndHandle)
+					PostMessage(trayWndHandle, WM_COMMAND, PORT_MENU_OFFSET + port_num, 0);			
+				
+				
 			}
 			break;
 

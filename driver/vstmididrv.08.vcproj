@@ -48,7 +48,7 @@
 				PreprocessorDefinitions="I_ASM;_DEBUG;_USRDLL;_CRT_SECURE_NO_WARNINGS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="3"
+				RuntimeLibrary="1"
 				FloatingPointModel="2"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
@@ -214,6 +214,7 @@
 				AdditionalIncludeDirectories="..\external_packages"
 				PreprocessorDefinitions="I_ASM;NDEBUG;_USRDLL;_CRT_SECURE_NO_WARNINGS"
 				RuntimeLibrary="0"
+				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="true"
 				FloatingPointModel="2"
 				UsePrecompiledHeader="0"
@@ -300,6 +301,7 @@
 				AdditionalIncludeDirectories="..\external_packages"
 				PreprocessorDefinitions="WIN64;I_ASM;NDEBUG;_USRDLL;_CRT_SECURE_NO_WARNINGS"
 				RuntimeLibrary="0"
+				BufferSecurityCheck="false"
 				EnableFunctionLevelLinking="true"
 				FloatingPointModel="2"
 				UsePrecompiledHeader="0"
@@ -422,6 +424,10 @@
 			</File>
 			<File
 				RelativePath=".\VSTDriver.h"
+				>
+			</File>
+			<File
+				RelativePath="..\external_packages\win32lock.h"
 				>
 			</File>
 		</Filter>

@@ -22,6 +22,18 @@
 #define BASSASIODEF(f) (WINAPI *f)
 #define LOADBASSASIOFUNCTION(f) *((void**)&f)=GetProcAddress(bassAsio,#f)
 
+// for dynamic loading of Avrt.dll functions
+#define WIN32DEF(f) (WINAPI *f)
+typedef enum _AVRT_PRIORITY
+{
+	AVRT_PRIORITY_VERYLOW = -2,
+	AVRT_PRIORITY_LOW,
+	AVRT_PRIORITY_NORMAL,
+	AVRT_PRIORITY_HIGH,
+	AVRT_PRIORITY_CRITICAL
+} AVRT_PRIORITY, * PAVRT_PRIORITY;
+
+
 #include "../external_packages/bassasio.h"
 
 #include "VSTDriver.h"
@@ -33,7 +45,9 @@ extern "C" { extern bool keepLoaded; };
 
 namespace VSTMIDIDRV{
 
-	static MidiSynth &midiSynth = MidiSynth::getInstance();
+	static MidiSynth &midiSynth = MidiSynth::getInstance();	
+	
+	static Win32Lock synthLock;
 	
 	static class MidiStream{
 	private:
@@ -150,47 +164,7 @@ namespace VSTMIDIDRV{
 			}
 		}
 	}midiStream;
-
-	
-	static class Win32Lock{
-	private:
-		CRITICAL_SECTION cCritSec;
-
-	public:
-		Win32Lock(){
-			InitializeCriticalSection(&cCritSec);			
-		}
-
-		~Win32Lock(){
-			DeleteCriticalSection(&cCritSec);
-		}
-
-		inline void lock(){
-			EnterCriticalSection(&cCritSec);
-		}
-
-		inline void unlock(){
-			LeaveCriticalSection(&cCritSec);
-		}
-	}synthLock;
 		
-
-	template <class T>
-	class ScopeLock
-	{
-	private:
-		T* _lock;
-	public:
-		inline ScopeLock(T* lockObj) {
-			_lock = lockObj;
-			_lock->lock();
-		}
-
-		inline ~ScopeLock() {
-			_lock->unlock();
-		}
-	};
-
 	
 	inline static DWORD DwordMin(DWORD a, DWORD b) //min macro calls bassAsioOut.GetPos() 2 times that can cause problems...
 	{
@@ -478,8 +452,29 @@ namespace VSTMIDIDRV{
 		}
 
 		static unsigned __stdcall RenderingThread(void* pthis)
-		{
-			SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+		{			
+			HANDLE WIN32DEF(AvSetMmThreadCharacteristicsW)(LPCWSTR TaskName, LPDWORD TaskIndex) = NULL;
+			BOOL WIN32DEF(AvSetMmThreadPriority)(HANDLE AvrtHandle, AVRT_PRIORITY Priority) = NULL;
+
+			HMODULE AvrtLib = LoadLibrary(_T("avrt.dll"));
+			if (AvrtLib) 
+			{
+				*((void**)&AvSetMmThreadCharacteristicsW) = GetProcAddress(AvrtLib, "AvSetMmThreadCharacteristicsW");
+				*((void**)&AvSetMmThreadPriority) = GetProcAddress(AvrtLib, "AvSetMmThreadPriority");	 
+			}
+
+			if (AvSetMmThreadCharacteristicsW && AvSetMmThreadPriority)
+			{
+				DWORD taskIndex = 0;
+				HANDLE hAv = AvSetMmThreadCharacteristicsW(L"Pro Audio", &taskIndex);
+				if (hAv) AvSetMmThreadPriority(hAv, AVRT_PRIORITY_CRITICAL);
+			}
+			else 
+			{
+				SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+			}
+			
+			
 			WaveOutWin32* _this = (WaveOutWin32*)pthis;
 
 			while (!waveOut.stopProcessing)
@@ -507,6 +502,10 @@ namespace VSTMIDIDRV{
 					WaitForSingleObject(waveOut.hEvent, 2000);
 				}
 			}
+
+			if (AvrtLib) FreeLibrary(AvrtLib);
+			AvrtLib = NULL;
+			
 			_endthreadex(0);
 			return 0;
 		}
@@ -913,18 +912,18 @@ namespace VSTMIDIDRV{
 	MidiSynth::MidiSynth()
 	{
 		lastOpenedPort = 0;
-	}
-
-	static void CALLBACK resetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
-	{
-		midiSynth.Close();
-		midiSynth.Init(midiSynth.getLastOpenedPort());
-	}
+	}	
 
 	MidiSynth &MidiSynth::getInstance(){
 		static MidiSynth *instance = new MidiSynth;
 		return *instance;
-	}	
+	}
+
+	void CALLBACK MidiSynth::ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
+	{
+		midiSynth.Close();
+		midiSynth.Init(midiSynth.getLastOpenedPort());
+	}
 
 	// Renders totalFrames frames starting from bufpos
 	// The number of frames rendered is added to the global counter framesRendered
@@ -975,7 +974,7 @@ namespace VSTMIDIDRV{
 			bufpos += framesToRender * channels;
 			totalFrames -= framesToRender;
 			if (result == ResetRequest)
-				timeSetEvent(1, 1, resetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
+				timeSetEvent(1, 1, ResetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
 				
 		}
 
@@ -1029,7 +1028,7 @@ namespace VSTMIDIDRV{
 			bufpos += framesToRender * channels;
 			totalFrames -= framesToRender;
 			if (result == ResetRequest)
-				timeSetEvent(1, 1, resetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
+				timeSetEvent(1, 1, ResetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
 		}
 
 		// Wrap framesRendered counter
