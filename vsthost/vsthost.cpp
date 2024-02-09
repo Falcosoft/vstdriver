@@ -138,7 +138,7 @@ static const unsigned char gm2Reset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x03, 0xF7 };
 
 static VstMidiEvent resetMidiEvents[RESET_EVENT_COUNT] = { 0 };
 
-static Win32Lock dialogLock;
+static Win32Lock dialogLock(true);
 
 static struct ResetVstEvent
 {

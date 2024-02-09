@@ -24,14 +24,14 @@
 
 // for dynamic loading of Avrt.dll functions
 #define WIN32DEF(f) (WINAPI *f)
-typedef enum _AVRT_PRIORITY
+typedef enum _MYAVRT_PRIORITY
 {
 	AVRT_PRIORITY_VERYLOW = -2,
 	AVRT_PRIORITY_LOW,
 	AVRT_PRIORITY_NORMAL,
 	AVRT_PRIORITY_HIGH,
 	AVRT_PRIORITY_CRITICAL
-} AVRT_PRIORITY, * PAVRT_PRIORITY;
+} MYAVRT_PRIORITY, * PMYAVRT_PRIORITY;
 
 
 #include "../external_packages/bassasio.h"
@@ -48,6 +48,7 @@ namespace VSTMIDIDRV{
 	static MidiSynth &midiSynth = MidiSynth::getInstance();	
 	
 	static Win32Lock synthLock;
+
 	
 	static class MidiStream{
 	private:
@@ -454,7 +455,7 @@ namespace VSTMIDIDRV{
 		static unsigned __stdcall RenderingThread(void* pthis)
 		{			
 			HANDLE WIN32DEF(AvSetMmThreadCharacteristicsW)(LPCWSTR TaskName, LPDWORD TaskIndex) = NULL;
-			BOOL WIN32DEF(AvSetMmThreadPriority)(HANDLE AvrtHandle, AVRT_PRIORITY Priority) = NULL;
+			BOOL WIN32DEF(AvSetMmThreadPriority)(HANDLE AvrtHandle, MYAVRT_PRIORITY Priority) = NULL;
 
 			HMODULE AvrtLib = LoadLibrary(_T("avrt.dll"));
 			if (AvrtLib) 
@@ -466,8 +467,14 @@ namespace VSTMIDIDRV{
 			if (AvSetMmThreadCharacteristicsW && AvSetMmThreadPriority)
 			{
 				DWORD taskIndex = 0;
-				HANDLE hAv = AvSetMmThreadCharacteristicsW(L"Pro Audio", &taskIndex);
-				if (hAv) AvSetMmThreadPriority(hAv, AVRT_PRIORITY_CRITICAL);
+				HANDLE hAv = AvSetMmThreadCharacteristicsW(L"Audio", &taskIndex);
+				
+				BOOL result = FALSE;
+				if (hAv)
+					result = AvSetMmThreadPriority(hAv, AVRT_PRIORITY_CRITICAL);
+				
+				if(!result)
+					SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 			}
 			else 
 			{
@@ -1124,7 +1131,9 @@ namespace VSTMIDIDRV{
 		if(IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID);
 	}
 
-	int MidiSynth::Init(unsigned uDeviceID){
+	int MidiSynth::Init(unsigned uDeviceID){		
+		
+
 		LoadSettings();
 
 		if (sampleRate == 0) sampleRate = 48000;
