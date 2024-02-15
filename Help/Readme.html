@@ -60,10 +60,11 @@
         <li>15. Fixed ASIO related instabilities of DB50XG's fork. </li>
         <li>16. Fixed dual port related problems of DB50XG's fork.</li>
         <li>17. Added system tray menu. </li>
-        <li>18. Added management of 10  plugins at once and switching between them at runtime (tray menu). <strong><br>
-        </strong>        </li>
+        <li>18. Added management of up to 10 plugins at once and switching between them at runtime (tray menu).</li> 
+        <li>19. Added WASAPI output mode with the help of the private ASIO2WASAPI plugin. </li>
+        <strong><br>
+        </strong>       
       </ul>
-
       <p>
         <br>
         <strong>Some guidelines for the new features and options :</strong>
@@ -147,7 +148,7 @@
         <strong>
           Storage of settings: </strong>
       </p>
-      <p>The driver settings are stored in the registry at HKEY_CURRENT_USER\Software\VSTi Driver. The plugin settings are stored
+      <p>The driver settings are stored in the registry at <strong>HKEY_CURRENT_USER\Software\VSTi Driver</strong>. The plugin settings are stored
         in the plugin's folder with the same name as the plugin dll but with the extension of .set.</p>
       <p> Some rare to be changed driver settings have no options available on the GUI but can be changed directly from the registry
         if necessary:</p>
@@ -168,6 +169,11 @@
         scaling in 90% of cases this option most likely results in tiny editors.
         <br> Enhanced GDI scaling optimizations are mostly visible on fonts/texts and common controls (they are sharper). Unfortunately
         bitmaps cannot be scaled without blur.</p>
+      <p>3. <strong>UsePrivateAsioOnly</strong>. This option can be set during driver installation but you can change it anytime.<br>
+      This option defines if the driver should use only the ASIO2WASAPI private plugin and ignore all other system-wide ASIO drivers or not.<br> 
+      This  is useful if you have problems with your standard ASIO driver(s) but you still would like to use WASAPI  output mode on Vista+. </p>
+      <p>4. <strong>KeepDriverLoaded</strong>. This option defines if the driver should  stay loaded even if ports are closed or not. Originally the driver switched this option on internally only when  Roland's SC-VA plugin was detected since it takes long seconds to load/unload this plugin.With this option you can enable this behavior to be on/off regardless of the used plugin. The on state can be useful in case of some Midi/Multimedia players like Van Basco and WMP that always close Midi Out ports when playback is stopped and/or focus is lost (and thus the driver's tray menu also disappears). <br>
+      The off state is somewhat more compatible and conform better to specification. </p>
       <p>&nbsp;</p>
       <p>
         <strong>Brief history of the driver:</strong>

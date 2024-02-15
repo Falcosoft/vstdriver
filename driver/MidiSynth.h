@@ -49,6 +49,7 @@ private:
 	float midiVol[2];
 	
 	unsigned char statusBuff[2]; //running status buffer
+	bool isPortOff[2];
 	bool isSinglePort32Ch;
 	bool enableSinglePort32ChMode;
 	unsigned int virtualPortNum;
@@ -71,8 +72,7 @@ private:
 	MidiSynth();
 
 public:	
-
-	int getLastOpenedPort() { return lastOpenedPort; }
+		
 	unsigned int getSampleRate() { return sampleRate; }
 	unsigned int getBufferSizeMS() { return bufferSizeMS; }
 	bool getUsingFloat() { return usingFloat; }

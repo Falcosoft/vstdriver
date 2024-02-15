@@ -696,7 +696,7 @@ public:
 			::SetForegroundWindow(this->m_hWnd); //Gets back focus after editor is closed. AllowSetForegroundWindow has to be called by vsthost.			
 			
 			effect->ProcessMIDIMessage(0, 0x90); //force some plugins to enable save/load functions.
-			float sample[2];
+			float sample[2] = {0};
 			effect->RenderFloat(&sample[0], 1);
 		}
 		return 0;
@@ -715,10 +715,10 @@ public:
 				strcat_s(msg, "!");
 				::MessageBoxA(m_hWnd, msg, "VST MIDI Driver", MB_OK | MB_ICONERROR);
 			}
-			if(!highDpiMode)SaveDwordValue(_T("HighDpiMode"),(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
-			if(enableSinglePort32ChMode == (DWORD)-1)SaveDwordValue(_T("EnableSinglePort32ChMode"), 1);
-			if(keepDriverLoaded == (DWORD)-1)SaveDwordValue(_T("KeepDriverLoaded"), 0);
-			if(IsVistaOrNewer())SaveDwordValue(_T("UsePrivateAsioOnly"), usePrivateAsioOnly);
+			if(!highDpiMode) SaveDwordValue(_T("HighDpiMode"),(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
+			if(enableSinglePort32ChMode == (DWORD)-1) SaveDwordValue(_T("EnableSinglePort32ChMode"), 1);
+			if(keepDriverLoaded == (DWORD)-1) SaveDwordValue(_T("KeepDriverLoaded"), 1);
+			if(IsVistaOrNewer()) SaveDwordValue(_T("UsePrivateAsioOnly"), usePrivateAsioOnly);
 			
 			delete effect;
 			effect = NULL;
@@ -751,7 +751,7 @@ public:
 		::SetWindowTextA(vst_vendor.m_hWnd, vstStr.c_str());
 
 		effect->ProcessMIDIMessage(0, 0x90); //force some plugins to enable save/load functions.
-		float sample[2];
+		float sample[2] = {0};
 		effect->RenderFloat(&sample[0], 1);
 
 		settings_load(effect);	   

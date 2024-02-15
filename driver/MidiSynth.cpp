@@ -48,7 +48,6 @@ namespace VSTMIDIDRV{
 	static MidiSynth &midiSynth = MidiSynth::getInstance();	
 	
 	static Win32Lock synthLock;
-
 	
 	static class MidiStream{
 	private:
@@ -232,7 +231,7 @@ namespace VSTMIDIDRV{
 
 			//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;			
 
-			PCMWAVEFORMAT wFormatLegacy;			
+			PCMWAVEFORMAT wFormatLegacy = {0};
 			WAVEFORMATEXTENSIBLE wFormat;
 			memset(&wFormat, 0, sizeof(wFormat));
 
@@ -397,7 +396,7 @@ namespace VSTMIDIDRV{
 			if(usingFloat) WRAP_BITS--;
 			if(channels == 4) WRAP_BITS--;
 
-			UINT64 WRAP_MASK = (1 << WRAP_BITS) - 1;
+			UINT64 WRAP_MASK = (UINT64)((1 << WRAP_BITS) - 1);
 			int WRAP_THRESHOLD = 1 << (WRAP_BITS - 1);
 
 			// Taking a snapshot to avoid possible thread interference
@@ -405,7 +404,7 @@ namespace VSTMIDIDRV{
 			DWORD wrapCount = DWORD(playPositionSnapshot >> WRAP_BITS);
 			DWORD wrappedPosition = DWORD(playPositionSnapshot & WRAP_MASK);
 
-			MMTIME mmTime;
+			MMTIME mmTime = {0};
 			mmTime.wType = TIME_SAMPLES;
 
 			if (waveOutGetPosition(hWaveOut, &mmTime, sizeof(MMTIME)) != MMSYSERR_NOERROR) {
@@ -443,7 +442,7 @@ namespace VSTMIDIDRV{
 #endif
 				return playPositionSnapshot;
 			}
-			prevPlayPos = playPositionSnapshot = mmTime.u.sample + (wrapCount << WRAP_BITS);
+			prevPlayPos = playPositionSnapshot = (UINT64)(mmTime.u.sample + (wrapCount << WRAP_BITS));
 
 #ifdef _DEBUG
 			std::cout << "VST MIDI Driver: GetPos()" << playPositionSnapshot << "\n";
@@ -919,6 +918,8 @@ namespace VSTMIDIDRV{
 	MidiSynth::MidiSynth()
 	{
 		lastOpenedPort = 0;
+		isPortOff[0] = false;
+		isPortOff[1] = false;
 	}	
 
 	MidiSynth &MidiSynth::getInstance(){
@@ -929,7 +930,7 @@ namespace VSTMIDIDRV{
 	void CALLBACK MidiSynth::ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
 	{
 		midiSynth.Close();
-		midiSynth.Init(midiSynth.getLastOpenedPort());
+		midiSynth.Init(DWORD(-1));
 	}
 
 	// Renders totalFrames frames starting from bufpos
@@ -1108,7 +1109,7 @@ namespace VSTMIDIDRV{
 		sampleRate = GetSampleRate();		
 		bufferSizeMS = GetBufferSize();
 		bufferSize = MillisToFrames(bufferSizeMS);
-		chunkSizeMS = bufferSizeMS / 4;
+		chunkSizeMS = bufferSizeMS < 120 ? bufferSizeMS / 4 : bufferSizeMS < 200 ? bufferSizeMS / 5 : bufferSizeMS / 8;
 		chunkSize = MillisToFrames(chunkSizeMS);
 		midiLatencyMS = 0;
 		midiLatency = MillisToFrames(midiLatencyMS);
@@ -1128,12 +1129,13 @@ namespace VSTMIDIDRV{
 
 	void MidiSynth::InitDialog(unsigned uDeviceID){
 
+		isPortOff[uDeviceID] = false;
+		lastOpenedPort = uDeviceID;
 		if(IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID);
 	}
 
 	int MidiSynth::Init(unsigned uDeviceID){		
-		
-
+						
 		LoadSettings();
 
 		if (sampleRate == 0) sampleRate = 48000;
@@ -1145,10 +1147,9 @@ namespace VSTMIDIDRV{
 		midiVol[0] = 1.0f;
 		midiVol[1] = 1.0f;
 		statusBuff[0] = 0;
-		statusBuff[1] = 0;
+		statusBuff[1] = 0;		
 		isSinglePort32Ch = false;
-		virtualPortNum = 0;
-		lastOpenedPort = uDeviceID;		
+		virtualPortNum = 0;			
 
 		UINT wResult = 0;
 		if (useAsio)
@@ -1192,7 +1193,17 @@ namespace VSTMIDIDRV{
 		
 		vstDriver->setHighDpiMode(GetHighDpiMode());
 		vstDriver->initSysTray();		
-		InitDialog(uDeviceID);
+		
+		if (uDeviceID == (DWORD)-1)
+		{
+			uDeviceID = lastOpenedPort;
+			if (!isPortOff[uDeviceID]) InitDialog(uDeviceID);
+
+		}
+		else
+		{
+			InitDialog(uDeviceID);			
+		}		
 
 		framesRendered = 0;
 
@@ -1223,6 +1234,7 @@ namespace VSTMIDIDRV{
 			vstDriver->ResetDriver(uDeviceID);
 			midiStream.Reset();
 			statusBuff[uDeviceID] = 0;
+			isPortOff[uDeviceID] = true;
 			isSinglePort32Ch = false;
 			virtualPortNum = 0;
 		}
@@ -1303,7 +1315,7 @@ namespace VSTMIDIDRV{
 	}
 	
 	void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg){
-
+		
 		ScopeLock<Win32Lock> scopeLock(&synthLock);
 		
 		if (!PreprocessMIDI(uDeviceID, msg))

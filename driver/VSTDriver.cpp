@@ -391,7 +391,7 @@ bool VSTDriver::process_create()
 {
 	if ( uPluginPlatform != 32 && uPluginPlatform != 64 ) return false;
 
-	SECURITY_ATTRIBUTES saAttr;
+	SECURITY_ATTRIBUTES saAttr = {0};
 
 	saAttr.nLength = sizeof(saAttr);
 	saAttr.bInheritHandle = TRUE;
@@ -497,7 +497,7 @@ bool VSTDriver::process_create()
 #ifdef NDEBUG
 	SetPriorityClass( hProcess, GetPriorityClass( GetCurrentProcess() ) );
 	//SetThreadPriority( hThread, GetThreadPriority( GetCurrentThread() ) );
-	SetThreadPriority( hThread, THREAD_PRIORITY_HIGHEST );
+	SetThreadPriority( hThread, THREAD_PRIORITY_TIME_CRITICAL);
 #endif
 
 	uint32_t code = process_read_code();
@@ -891,7 +891,7 @@ uint32_t VSTDriver::RenderFloat(float* samples, int len, float volume, WORD chan
 
 uint32_t VSTDriver::Render(short * samples, int len, float volume, WORD channels)
 {
-	float * float_out = (float *) _alloca((BUFFER_SIZE / 8) * uNumOutputs * channels / 2 * sizeof(*float_out) );
+	float * float_out = (float *) _alloca((UINT64)(BUFFER_SIZE / 8) * uNumOutputs * channels / 2 * sizeof(*float_out) );
 	while ( len > 0 )
 	{
 		int len_todo = len > (BUFFER_SIZE / 8) ? (BUFFER_SIZE / 8) : len;

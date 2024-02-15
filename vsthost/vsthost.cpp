@@ -22,8 +22,9 @@
 #define MAX_PLUGINS 10
 #define RESET_MENU_OFFSET 10
 #define PORT_MENU_OFFSET 100
-#define RESET_EVENT_COUNT 64 //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
+#define RESET_MIDIMSG_COUNT 64 //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
 #define BUFFER_SIZE 4800  //matches better for typical 48/96/192 kHz
+#define MAX_INPUTEVENT_COUNT 1024  //it's impossible to get more events in 1 cycle since midiStream also uses this size.
 
 namespace Command {
 	enum : uint32_t
@@ -56,7 +57,7 @@ namespace Response {
 		CannotReset = 8,
 		VstiIsNotAMidiSynth = 9,
 		CannotSetSampleRate = 10,
-		CommandUnknown = 12,
+		CommandUnknown = 12,		
 		ResetRequest = 255,
 	};
 };
@@ -68,9 +69,50 @@ namespace Error {
 		MalformedChecksum = 2,
 		ChecksumMismatch = 3,
 		//Comctl32LoadFailed = 4,
-		ComInitializationFailed = 5,
+		ComInitializationFailed = 5,		
 	};
 };
+
+static struct ResetVstEvent
+{
+	VstInt32 numEvents;
+	VstIntPtr reserved;
+	VstEvent* events[RESET_MIDIMSG_COUNT];
+
+} resetVstEvents = { 0 };
+
+static struct RenderVstEvent
+{
+	VstInt32 numEvents;
+	VstIntPtr reserved;
+	VstEvent* events[MAX_INPUTEVENT_COUNT];
+
+}renderEvents[2] = { 0 };
+
+static struct InputEventList
+{
+	unsigned int position;
+	unsigned int portMessageCount[2];
+	struct InputEvent
+	{
+		unsigned port;
+		union
+		{
+			VstMidiEvent midiEvent;
+			VstMidiSysexEvent sysexEvent;
+		} ev;
+
+	} events[MAX_INPUTEVENT_COUNT];
+
+}inputEventList = { 0 };
+
+static const unsigned char gmReset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7 };
+static const unsigned char gsReset[] = { 0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7 };
+static const unsigned char xgReset[] = { 0xF0, 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00, 0xF7 };
+static const unsigned char gm2Reset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x03, 0xF7 };
+
+static VstMidiEvent resetMidiEvents[RESET_MIDIMSG_COUNT] = { 0 };
+
 
 #ifdef WIN64
 	static TCHAR bitnessStr[8] =_T(" 64-bit"); 
@@ -110,7 +152,6 @@ static bool isSinglePort32Ch = false;
 
 static uint32_t num_outputs_per_port = 2;
 static uint32_t sample_rate = 48000;
-
 static uint32_t sample_pos = 0;
 
 static DWORD MainThreadId;
@@ -131,33 +172,7 @@ static VstTimeInfo vstTimeInfo = { 0 };
 static volatile HWND trayWndHandle = NULL;
 static volatile int aboutBoxResult = 0;
 
-static const unsigned char gmReset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7 };
-static const unsigned char gsReset[] = { 0xF0, 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41, 0xF7 };
-static const unsigned char xgReset[] = { 0xF0, 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00, 0xF7 };
-static const unsigned char gm2Reset[] = { 0xF0, 0x7E, 0x7F, 0x09, 0x03, 0xF7 };
-
-static VstMidiEvent resetMidiEvents[RESET_EVENT_COUNT] = { 0 };
-
 static Win32Lock dialogLock(true);
-
-static struct ResetVstEvent
-{
-	VstInt32 numEvents;
-	VstIntPtr reserved;
-	VstEvent* events[RESET_EVENT_COUNT];
-} resetEvents = { 0 };
-
-struct myVstEvent
-{
-	struct myVstEvent* next;
-	unsigned port;
-	union
-	{
-		VstMidiEvent midiEvent;
-		VstMidiSysexEvent sysexEvent;
-	} ev;
-} *evChain = NULL, * evTail = NULL;
-
 
 #ifdef LOG
 void Log(LPCTSTR szFormat, ...)
@@ -424,18 +439,14 @@ static bool IsWinNT4()
 	return false;
 }
 
-void freeChain()
+void resetInputEvents()
 {
-	myVstEvent* ev = evChain;
-	while (ev)
-	{
-		myVstEvent* next = ev->next;
-		if (ev->port && ev->ev.sysexEvent.type == kVstSysExType) free(ev->ev.sysexEvent.sysexDump);
-		free(ev);
-		ev = next;
-	}
-	evChain = NULL;
-	evTail = NULL;
+	for (unsigned int i = 0; i < inputEventList.position; i++)
+		if (inputEventList.events[i].ev.sysexEvent.type == kVstSysExType) free(inputEventList.events[i].ev.sysexEvent.sysexDump);
+	
+	inputEventList.position = 0;
+	inputEventList.portMessageCount[0] = 0;
+	inputEventList.portMessageCount[1] = 0;
 }
 
 #ifdef LOG_EXCHANGE
@@ -687,8 +698,8 @@ static void setEditorPosition(int port, int x, int y)
 
 static void InitSimpleResetEvents()
 {
-	resetEvents.numEvents = RESET_EVENT_COUNT;
-	resetEvents.reserved = 0;
+	resetVstEvents.numEvents = RESET_MIDIMSG_COUNT;
+	resetVstEvents.reserved = 0;
 	const int ChannelCount = 16;
 
 	for (int i = 0; i < ChannelCount; i++)
@@ -701,7 +712,7 @@ static void InitSimpleResetEvents()
 		resetMidiEvents[index].type = kVstMidiType;
 		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
-		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
+		resetVstEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
 
 		msg = (0xB0 | i) | (0x7B << 8); //All Notes off
 		index = i * 4 + 1;
@@ -709,7 +720,7 @@ static void InitSimpleResetEvents()
 		resetMidiEvents[index].type = kVstMidiType;
 		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
-		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
+		resetVstEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
 
 		msg = (0xB0 | i) | (0x79 << 8);  //All Controllers off
 		index = i * 4 + 2;
@@ -717,7 +728,7 @@ static void InitSimpleResetEvents()
 		resetMidiEvents[index].type = kVstMidiType;
 		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
-		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
+		resetVstEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
 
 		msg = (0xB0 | i) | (0x78 << 8);  //All Sounds off
 		index = i * 4 + 3;
@@ -725,7 +736,7 @@ static void InitSimpleResetEvents()
 		resetMidiEvents[index].type = kVstMidiType;
 		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
-		resetEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
+		resetVstEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
 	}
 }
 
@@ -748,12 +759,14 @@ static void sendSysExEvent(char* sysExBytes, int size)
 
 static void sendSimpleResetEvents()
 {	
-	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &resetEvents, 0);
-	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &resetEvents, 0);
+	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &resetVstEvents, 0);
+	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &resetVstEvents, 0);
 }
 
 static void SendOwnReset()
 {	
+	sendSimpleResetEvents(); //always sent since not all synths react to a particular SysEx reset.
+
 	switch (lastUsedSysEx)
 	{	
 	case RESET_MENU_OFFSET + 1:
@@ -767,10 +780,7 @@ static void SendOwnReset()
 		break;
 	case RESET_MENU_OFFSET + 4:
 		sendSysExEvent((char*)gm2Reset, sizeof(gm2Reset));
-		break;
-	case RESET_MENU_OFFSET + 5:
-		sendSimpleResetEvents();
-		break;		
+		break;	
 	}
 
 	doOwnReset = false;
@@ -879,7 +889,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					else
 					{
 						effect->dispatcher(effect, effSetSampleRate, 0, 0, 0, float(sample_rate));
-						effect->dispatcher(effect, effSetBlockSize, 0, (int)(sample_rate * timerPeriodMS * 0.001), 0, 0);
+						effect->dispatcher(effect, effSetBlockSize, 0, (VstIntPtr)(sample_rate * timerPeriodMS * 0.001), 0, 0);
 						sample_pos = 0;
 					}					
 				}
@@ -1506,8 +1516,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	std::vector<uint8_t> blState;
 
 	std::vector<uint8_t> chunk;
-	std::vector<float> sample_buffer;
-	unsigned int samples_buffered = 0;
+	std::vector<float> sample_buffer;	
 
 	MainThreadId = GetCurrentThreadId();
 
@@ -1543,6 +1552,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	}
 
 	if (FAILED(CoInitialize(NULL))) return Error::ComInitializationFailed;
+		
 
 #ifndef _DEBUG
 #ifdef MINIDUMP
@@ -1583,7 +1593,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 #if 0
 	MessageBox(GetDesktopWindow(), argv[1], _T("HUUUURRRRRR"), 0);
-#endif
+#endif	
 
 	pEffect[0] = pMain(&audioMaster);
 
@@ -1773,7 +1783,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					loops++;
 				}
 				if(trayWndHandle)
-					PostMessage(trayWndHandle, WM_COMMAND, PORT_MENU_OFFSET + port_num, 0);			
+					PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)PORT_MENU_OFFSET + port_num, 0);			
 				
 				
 			}
@@ -1852,45 +1862,49 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				}
 				
 				blState.resize(0);
-				freeChain();	
+				resetInputEvents();	
 
 				put_code(Response::NoError);
 			}
 			break;
 
 		case Command::SendMidiEvent: // Send MIDI Event
-			{
-				myVstEvent* ev = (myVstEvent*)calloc(sizeof(myVstEvent), 1);
-				if (evTail) evTail->next = ev;
-				evTail = ev;
-				if (!evChain) evChain = ev;
-
+			{				
+				InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position];				
+				inputEventList.position++;
+				inputEventList.position &= (MAX_INPUTEVENT_COUNT - 1); 
+				
+				memset(ev, 0, sizeof(InputEventList::InputEvent));
+					
 				uint32_t b = get_code();
 
 				uint32_t port = ((b & 0x7F000000) >> 24) & 1;
 				isPortActive[port] = true;
+				inputEventList.portMessageCount[port]++;
 
 				ev->port = port;
 				//if (ev->port > 1) ev->port = 1;
 				ev->ev.midiEvent.type = kVstMidiType;
 				ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
 				memcpy(&ev->ev.midiEvent.midiData, &b, 3);
-
+				
 				put_code(Response::NoError);
 			}
 			break;
 
 		case Command::SendMidiSysExEvent: // Send System Exclusive Event
-			{
-				myVstEvent* ev = (myVstEvent*)calloc(sizeof(myVstEvent), 1);
-				if (evTail) evTail->next = ev;
-				evTail = ev;
-				if (!evChain) evChain = ev;
+			{			
+				InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position];
+				inputEventList.position ++;
+				inputEventList.position &= (MAX_INPUTEVENT_COUNT - 1);
+				
+				memset(ev, 0, sizeof(InputEventList::InputEvent));
 
 				uint32_t size = get_code();
 
 				uint32_t port = (size >> 24) & 1;
 				isPortActive[port] = true;
+				inputEventList.portMessageCount[port]++;
 
 				size &= 0xFFFFFF;
 
@@ -1901,7 +1915,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				ev->ev.sysexEvent.dumpBytes = size;
 				ev->ev.sysexEvent.sysexDump = (char*)malloc(size);
 
-				get_bytes(ev->ev.sysexEvent.sysexDump, size);
+				get_bytes(ev->ev.sysexEvent.sysexDump, size);				
 
 				put_code(Response::NoError);
 			}
@@ -1923,7 +1937,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					pEffect[1]->dispatcher(pEffect[1], effMainsChanged, 0, 1, 0, 0);
 					pEffect[1]->dispatcher(pEffect[1], effStartProcess, 0, 0, 0, 0);
 
-					size_t buffer_size = sizeof(float*) * (pEffect[0]->numInputs + pEffect[0]->numOutputs * 2); // float lists
+					size_t buffer_size = sizeof(float*) * (size_t)(pEffect[0]->numInputs + pEffect[0]->numOutputs * 2); // float lists
 					buffer_size += sizeof(float) * BUFFER_SIZE;                                // null input
 					buffer_size += sizeof(float) * BUFFER_SIZE * pEffect[0]->numOutputs * 2;          // outputs
 
@@ -1943,7 +1957,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					memset(float_null, 0, sizeof(float) * BUFFER_SIZE);
 
-					sample_buffer.resize(BUFFER_SIZE * num_outputs_per_port);
+					sample_buffer.resize((size_t)BUFFER_SIZE * num_outputs_per_port);
 				}
 
 				if (need_idle)
@@ -1969,54 +1983,34 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 							idle_run -= count_to_do;
 						}
 					}
-				}
+				}				
 
-				VstEvents* events[2] = { 0 };
+				if (inputEventList.position)
+				{	
+					if (inputEventList.portMessageCount[0])
+					{				
+						renderEvents[0].numEvents = inputEventList.portMessageCount[0];
+						renderEvents[0].reserved = 0;						
 
-				if (evChain)
-				{
-					unsigned event_count[2] = { 0 };
-					myVstEvent* ev = evChain;
-					while (ev)
-					{
-						event_count[ev->port]++;
-						ev = ev->next;
-					}
-
-					if (event_count[0])
-					{
-						events[0] = (VstEvents*)malloc(sizeof(VstInt32) + sizeof(VstIntPtr) + sizeof(VstEvent*) * event_count[0]);
-
-						events[0]->numEvents = event_count[0];
-						events[0]->reserved = 0;
-
-						ev = evChain;
-
-						for (unsigned i = 0; ev; )
+						for (unsigned int i = 0, j = 0; i < inputEventList.position && j < inputEventList.portMessageCount[0]; i++)
 						{
-							if (!ev->port) events[0]->events[i++] = (VstEvent*)&ev->ev;
-							ev = ev->next;
+							if (!inputEventList.events[i].port) renderEvents[0].events[j++] = (VstEvent*)&inputEventList.events[i].ev;							
 						}
 
-						pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, events[0], 0);
+						pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &renderEvents[0], 0);
 					}					
 
-					if (event_count[1])
-					{
-						events[1] = (VstEvents*)malloc(sizeof(VstInt32) + sizeof(VstIntPtr) + sizeof(VstEvent*) * event_count[1]);
+					if (inputEventList.portMessageCount[1])
+					{					
+						renderEvents[1].numEvents = inputEventList.portMessageCount[1];
+						renderEvents[1].reserved = 0;						
 
-						events[1]->numEvents = event_count[1];
-						events[1]->reserved = 0;
-
-						ev = evChain;
-
-						for (unsigned i = 0; ev; )
+						for (unsigned int i = 0, j = 0; i < inputEventList.position && j < inputEventList.portMessageCount[1]; i++)
 						{
-							if (ev->port == 1) events[1]->events[i++] = (VstEvent*)&ev->ev;
-							ev = ev->next;
+							if (inputEventList.events[i].port) renderEvents[1].events[j++] = (VstEvent*)&inputEventList.events[i].ev;							
 						}
 
-						pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, events[1], 0);
+						pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &renderEvents[1], 0);
 					}
 				}
 
@@ -2030,8 +2024,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					if (!idle_started)
 					{
-						if (events[0]) pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, events[0], 0);
-						if (events[1]) pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, events[1], 0);
+						if (inputEventList.portMessageCount[0]) pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &renderEvents[0], 0);
+						if (inputEventList.portMessageCount[1]) pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &renderEvents[1], 0);
 						if (tmpDoOwnReset) SendOwnReset();
 						idle_started = true;
 					}
@@ -2055,9 +2049,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					pEffect[1]->processReplacing(pEffect[1], float_list_in, float_list_out + num_outputs, count_to_do);
 
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-					float* out = &sample_buffer.front() + samples_buffered * num_outputs_per_port;
+					float* out = &sample_buffer.front();
 #else
-					float* out = sample_buffer.data() + samples_buffered * num_outputs_per_port;
+					float* out = sample_buffer.data();
 #endif
 
 					if (num_outputs == 2)
@@ -2089,12 +2083,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 #endif
 
 					count -= count_to_do;
-				}
+				}				
 
-				if (events[0]) free(events[0]);
-				if (events[1]) free(events[1]);
-
-				freeChain();
+				resetInputEvents();
 				break;						
 			}			
 
@@ -2114,7 +2105,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					pEffect[1]->dispatcher(pEffect[1], effMainsChanged, 0, 1, 0, 0);
 					pEffect[1]->dispatcher(pEffect[1], effStartProcess, 0, 0, 0, 0);
 
-					size_t buffer_size = sizeof(float*) * (pEffect[0]->numInputs + pEffect[0]->numOutputs * 2 * 2); // float lists
+					size_t buffer_size = sizeof(float*) * (size_t)(pEffect[0]->numInputs + pEffect[0]->numOutputs * 2 * 2); // float lists
 					buffer_size += sizeof(float) * BUFFER_SIZE;                                // null input
 					buffer_size += sizeof(float) * BUFFER_SIZE * pEffect[0]->numOutputs * 2 * 2;          // outputs
 
@@ -2134,7 +2125,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					memset(float_null, 0, sizeof(float) * BUFFER_SIZE);
 
-					sample_buffer.resize(BUFFER_SIZE * num_outputs_per_port * 2);
+					sample_buffer.resize((size_t)BUFFER_SIZE * num_outputs_per_port * 2);
 				}
 
 				if (need_idle)
@@ -2161,54 +2152,34 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 						}
 					}
 				}
+				
+				if (inputEventList.position)
+				{	
+					if (inputEventList.portMessageCount[0])
+					{						
+						renderEvents[0].numEvents = inputEventList.portMessageCount[0];
+						renderEvents[0].reserved = 0;						
 
-				VstEvents* events[2] = { 0 };
+						for (unsigned int i = 0, j = 0; i < inputEventList.position && j < inputEventList.portMessageCount[0]; i++)
+						{
+							if (!inputEventList.events[i].port) renderEvents[0].events[j++] = (VstEvent*)&inputEventList.events[i].ev;							
+						}
 
-				if (evChain)
-				{
-					unsigned event_count[2] = { 0 };
-					myVstEvent* ev = evChain;
-					while (ev)
-					{
-						event_count[ev->port]++;
-						ev = ev->next;
+						pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &renderEvents[0], 0);
+					}					
+
+					if (inputEventList.portMessageCount[1])
+					{					
+						renderEvents[1].numEvents = inputEventList.portMessageCount[1];
+						renderEvents[1].reserved = 0;						
+
+						for (unsigned int i = 0, j = 0; i < inputEventList.position && j < inputEventList.portMessageCount[1]; i++)
+						{
+							if (inputEventList.events[i].port) renderEvents[1].events[j++] = (VstEvent*)&inputEventList.events[i].ev;							
+						}
+
+						pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &renderEvents[1], 0);
 					}
-
-					if (event_count[0])
-					{
-						events[0] = (VstEvents*)malloc(sizeof(VstInt32) + sizeof(VstIntPtr) + sizeof(VstEvent*) * event_count[0]);
-
-						events[0]->numEvents = event_count[0];
-						events[0]->reserved = 0;
-
-						ev = evChain;
-
-						for (unsigned i = 0; ev; )
-						{
-							if (!ev->port) events[0]->events[i++] = (VstEvent*)&ev->ev;
-							ev = ev->next;
-						}
-
-						pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, events[0], 0);
-					}					
-
-					if (event_count[1])
-					{
-						events[1] = (VstEvents*)malloc(sizeof(VstInt32) + sizeof(VstIntPtr) + sizeof(VstEvent*) * event_count[1]);
-
-						events[1]->numEvents = event_count[1];
-						events[1]->reserved = 0;
-
-						ev = evChain;
-
-						for (unsigned i = 0; ev; )
-						{
-							if (ev->port == 1) events[1]->events[i++] = (VstEvent*)&ev->ev;
-							ev = ev->next;
-						}
-
-						pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, events[1], 0);
-					}					
 				}
 
 				if (tmpDoOwnReset) SendOwnReset();
@@ -2221,8 +2192,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					if (!idle_started)
 					{
-						if (events[0]) pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, events[0], 0);
-						if (events[1]) pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, events[1], 0);
+						if (inputEventList.portMessageCount[0]) pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &renderEvents[0], 0);
+						if (inputEventList.portMessageCount[1]) pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &renderEvents[1], 0);
 						if (tmpDoOwnReset) SendOwnReset();
 						idle_started = true;
 					}
@@ -2245,9 +2216,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					pEffect[1]->processReplacing(pEffect[1], float_list_in, float_list_out + num_outputs, count_to_do);
 
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-					float* out = &sample_buffer.front() + samples_buffered * num_outputs_per_port;
+					float* out = &sample_buffer.front();
 #else
-					float* out = sample_buffer.data() + samples_buffered * num_outputs_per_port;
+					float* out = sample_buffer.data();
 #endif
 
 					if (num_outputs == 2)
@@ -2291,16 +2262,13 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 					count -= count_to_do;
 				}
-
-				if (events[0]) free(events[0]);
-				if (events[1]) free(events[1]);
-
-				freeChain();			
+				
+				resetInputEvents();			
 				break;
 			}			
 
 		default:
-			code = Response::CommandUnknown;;
+			code = Response::CommandUnknown;
 			goto exit;
 			break;
 		}
@@ -2327,10 +2295,11 @@ exit:
 		if (blState.size()) pEffect[0]->dispatcher(pEffect[0], effStopProcess, 0, 0, 0, 0);
 		pEffect[0]->dispatcher(pEffect[0], effClose, 0, 0, 0, 0);
 	}
-	freeChain();
+	resetInputEvents();
 	if (hDll) FreeLibrary(hDll);
 	CoUninitialize();
-	if (dll_dir) free(dll_dir);
+	if (dll_dir) free(dll_dir);	
+		
 	
 	//if (argv) LocalFree(argv); only needed when CommandLineToArgvW() was called.
 

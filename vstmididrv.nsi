@@ -69,6 +69,7 @@ UninstPage Custom un.LockedListShow
 !macroend
 !define DeleteOnReboot `!insertmacro DeleteOnReboot`
 
+
 Function LockedListShow
  ${If} ${AtLeastWinVista}
   !insertmacro MUI_HEADER_TEXT `File in use check` `Drive use check`
@@ -460,7 +461,7 @@ LangString DESC_uninstSection2 ${LANG_ENGLISH} "Core VSTi driver components. The
 !endif
 
 LangString DESC_instSection1 ${LANG_ENGLISH} "Core VSTi driver components. Installation is required."
-LangString DESC_instSection2 ${LANG_ENGLISH} "If you only need the default WaveOut driver then you can skip installing the ASIO components."
+LangString DESC_instSection2 ${LANG_ENGLISH} "If you only need the default Wave output then you can skip installing BassAsio. CPU with SSE is required."
 LangString DESC_instSection3 ${LANG_ENGLISH} "If ASIO is installed you can also install ASIO2WASAPI plugin to use WASAPI output modes."
 LangString DESC_instSection4 ${LANG_ENGLISH} "If you have problems with system ASIO drivers you can ignore them and use only private ASIO2WASAPI."
 
