@@ -19,7 +19,6 @@
 #include <math.h>
 
 extern "C" { HINSTANCE hinst_vst_driver = 0; }
-extern "C" { bool keepLoaded = false; }
 
 #define MAX_DRIVERS 2
 #define MAX_CLIENTS 8 // Per driver
@@ -151,7 +150,7 @@ STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwP
 	case DRV_FREE:
 		if (synthOpened)
 		{
-			midiSynth.Close();
+			midiSynth.Close(true);
 			synthOpened = false;			
 		}
 		return DRV_OK;	
@@ -315,8 +314,8 @@ STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_P
 			if (clientCounts) break;
 			}
 
-			if(!clientCounts && !keepLoaded) {
-				midiSynth.Close();
+			if(!clientCounts) {
+				midiSynth.Close(false);
 				synthOpened = false;
 			}		
 

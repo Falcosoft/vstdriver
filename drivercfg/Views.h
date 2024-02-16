@@ -38,7 +38,6 @@ static INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
 // for VSTDriver
 extern "C" HINSTANCE hinst_vst_driver = NULL;
-extern "C" bool keepLoaded = false; 
 
 static HINSTANCE bassasio = NULL;       // bassasio handle  
 

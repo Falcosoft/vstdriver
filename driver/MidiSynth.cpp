@@ -917,9 +917,8 @@ namespace VSTMIDIDRV{
 
 	MidiSynth::MidiSynth()
 	{
-		lastOpenedPort = 0;
-		isPortOff[0] = false;
-		isPortOff[1] = false;
+		lastOpenedPort = 0;			
+		vstDriver = NULL;
 	}	
 
 	MidiSynth &MidiSynth::getInstance(){
@@ -929,7 +928,7 @@ namespace VSTMIDIDRV{
 
 	void CALLBACK MidiSynth::ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2)
 	{
-		midiSynth.Close();
+		midiSynth.Close(true);
 		midiSynth.Init(DWORD(-1));
 	}
 
@@ -1127,11 +1126,9 @@ namespace VSTMIDIDRV{
 		}
 	}	
 
-	void MidiSynth::InitDialog(unsigned uDeviceID){
-
-		isPortOff[uDeviceID] = false;
-		lastOpenedPort = uDeviceID;
-		if(IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID);
+	void MidiSynth::InitDialog(unsigned uDeviceID){	
+		
+		if(IsShowVSTDialog() && !isDriverOff) vstDriver->displayEditorModal(uDeviceID);
 	}
 
 	int MidiSynth::Init(unsigned uDeviceID){		
@@ -1184,27 +1181,32 @@ namespace VSTMIDIDRV{
 
 		if (wResult) return wResult;
 
-		vstDriver = new VSTDriver;
-		if (!vstDriver->OpenVSTDriver(NULL, sampleRate)) {
-			delete vstDriver;
-			vstDriver = NULL;
-			return 1;
+		if (!vstDriver)
+		{
+			vstDriver = new VSTDriver;
+			if (!vstDriver->OpenVSTDriver(NULL, sampleRate)) 
+			{
+				delete vstDriver;
+				vstDriver = NULL;
+				return 1;
+			}
+			
+			vstDriver->setHighDpiMode(GetHighDpiMode());
+			vstDriver->initSysTray();
 		}
-		
-		vstDriver->setHighDpiMode(GetHighDpiMode());
-		vstDriver->initSysTray();		
-		
+				
 		if (uDeviceID == (DWORD)-1)
 		{
 			uDeviceID = lastOpenedPort;
-			if (!isPortOff[uDeviceID]) InitDialog(uDeviceID);
-
 		}
 		else
-		{
-			InitDialog(uDeviceID);			
-		}		
-
+		{			
+			lastOpenedPort = uDeviceID;
+			isDriverOff = false;
+		}
+		
+		InitDialog(uDeviceID);		
+	
 		framesRendered = 0;
 
 		// Start playing stream
@@ -1224,24 +1226,24 @@ namespace VSTMIDIDRV{
 		return wResult;
 	}
 
-	int MidiSynth::Reset(unsigned uDeviceID){
+	int MidiSynth::Reset(unsigned uDeviceID) {		
+
 		UINT wResult = useAsio ? bassAsioOut.Pause() : waveOut.Pause();
 		if (wResult) return wResult;
 
 		{
 			ScopeLock<Win32Lock> scopeLock(&synthLock);
-
 			vstDriver->ResetDriver(uDeviceID);
 			midiStream.Reset();
-			statusBuff[uDeviceID] = 0;
-			isPortOff[uDeviceID] = true;
+			statusBuff[uDeviceID] = 0;			
 			isSinglePort32Ch = false;
 			virtualPortNum = 0;
+			isDriverOff = true;
 		}
 
 		wResult = useAsio ? bassAsioOut.Resume() : waveOut.Resume();
 		return wResult;
-	}	
+	}
 
 	bool MidiSynth::PreprocessMIDI(unsigned int& uDeviceID, DWORD& msg){
 		//// support for F5 xx port select message (FSMP can send this message)
@@ -1340,7 +1342,7 @@ namespace VSTMIDIDRV{
 		midiVol[uDeviceID] = volume;
 	}
 
-	void MidiSynth::Close(){
+	void MidiSynth::Close(bool forceUnload){
 		if (useAsio) {
 			bassAsioOut.Pause();
 			bassAsioOut.Close();
@@ -1348,15 +1350,16 @@ namespace VSTMIDIDRV{
 		else {
 			waveOut.Pause();
 			waveOut.Close();
-		}
+		}		
 
+		if(!keepLoaded || forceUnload)
 		{
 			ScopeLock<Win32Lock> scopeLock(&synthLock);
 
 			// Cleanup memory
 			delete vstDriver;
-			vstDriver = NULL;		
-		}
+			vstDriver = NULL;			
+		}		
 	}
 
 }

@@ -24,6 +24,9 @@ enum
 	BUFFER_SIZE = 3840  
 };
 
+extern "C" { extern HINSTANCE hinst_vst_driver; };
+extern "C" { bool keepLoaded = false; }
+
 UINT GetWaveOutDeviceId() {
 
 	HKEY hKey;
@@ -360,9 +363,6 @@ bool VSTDriver::connect_pipe( HANDLE hPipe )
 	}
 	return true;
 }
-
-extern "C" { extern HINSTANCE hinst_vst_driver; };
-extern "C" { extern bool keepLoaded; };
 
 tstring VSTDriver::GetVsthostPath()
 {

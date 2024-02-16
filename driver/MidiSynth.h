@@ -49,7 +49,7 @@ private:
 	float midiVol[2];
 	
 	unsigned char statusBuff[2]; //running status buffer
-	bool isPortOff[2];
+	bool isDriverOff;
 	bool isSinglePort32Ch;
 	bool enableSinglePort32ChMode;
 	unsigned int virtualPortNum;
@@ -81,7 +81,7 @@ public:
 	static MidiSynth &getInstance();
 	int Init(unsigned uDeviceID);
 	void InitDialog(unsigned uDeviceID);
-	void Close();
+	void Close(bool forceUnload);
 	int Reset(unsigned uDeviceID);	
 	void Render(short *bufpos, DWORD totalFrames);
 	void RenderFloat(float *bufpos, DWORD totalFrames);		
