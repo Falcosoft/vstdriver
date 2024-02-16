@@ -25,6 +25,7 @@
 #define RESET_MIDIMSG_COUNT 64 //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
 #define BUFFER_SIZE 4800  //matches better for typical 48/96/192 kHz
 #define MAX_INPUTEVENT_COUNT 1024  //it's impossible to get more events in 1 cycle since midiStream also uses this size.
+#define PORT_ALL 0xFFFF
 
 namespace Command {
 	enum : uint32_t
@@ -147,6 +148,7 @@ static HANDLE highDpiMode = NULL;
 static HWND editorHandle[2] = { NULL };
 static HANDLE threadHandle[2] = { NULL };
 static bool isPortActive[2] = { false };
+static volatile DWORD destPort = PORT_ALL;
 
 static bool isSinglePort32Ch = false;
 
@@ -740,47 +742,95 @@ static void InitSimpleResetEvents()
 	}
 }
 
-static void sendSysExEvent(char* sysExBytes, int size)
+static void InsertSysExEvent(char* sysExBytes, int size, DWORD portNum)
+{
+	InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position];
+	inputEventList.position++;
+	inputEventList.position &= (MAX_INPUTEVENT_COUNT - 1);
+
+	memset(ev, 0, sizeof(InputEventList::InputEvent));	
+
+	uint32_t port = (int)portNum;
+	isPortActive[port] = true;
+	inputEventList.portMessageCount[port]++;	
+
+	ev->port = port;	
+	ev->ev.sysexEvent.type = kVstSysExType;
+	ev->ev.sysexEvent.byteSize = sizeof(ev->ev.sysexEvent);
+	ev->ev.sysexEvent.dumpBytes = size;
+	ev->ev.sysexEvent.sysexDump = (char*)malloc(size);
+
+	if(ev->ev.sysexEvent.sysexDump) 
+		memcpy(ev->ev.sysexEvent.sysexDump, sysExBytes, size);
+}
+
+static void InsertOwnReset(DWORD portNum)
+{
+	switch (lastUsedSysEx)
+	{
+	case RESET_MENU_OFFSET + 1:
+		InsertSysExEvent((char*)gmReset, sizeof(gmReset), portNum);
+		break;
+	case RESET_MENU_OFFSET + 2:
+		InsertSysExEvent((char*)gsReset, sizeof(gsReset), portNum);
+		break;
+	case RESET_MENU_OFFSET + 3:
+		InsertSysExEvent((char*)xgReset, sizeof(xgReset), portNum);
+		break;
+	case RESET_MENU_OFFSET + 4:
+		InsertSysExEvent((char*)gm2Reset, sizeof(gm2Reset), portNum);
+		break;	
+	}	
+}
+
+static void sendSysExEvent(char* sysExBytes, int size, DWORD portNum)
 {
 	static VstMidiSysexEvent syxEvent = { 0 };
-	static VstEvents events = { 0 };
+	static VstEvents vstEvents = { 0 };
 
 	syxEvent.byteSize = sizeof(syxEvent);
 	syxEvent.dumpBytes = size;
 	syxEvent.sysexDump = sysExBytes;
 	syxEvent.type = kVstSysExType;
 
-	events.events[0] = (VstEvent*)&syxEvent;
-	events.numEvents = 1;
+	vstEvents.events[0] = (VstEvent*)&syxEvent;
+	vstEvents.numEvents = 1;
 
-	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &events, 0);
-	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &events, 0);
+	if (!portNum || portNum == PORT_ALL)
+		pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &vstEvents, 0);
+	
+	if (portNum)
+		pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &vstEvents, 0);
 }
 
-static void sendSimpleResetEvents()
+static void sendSimpleResetEvents(DWORD portNum)
 {	
-	pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &resetVstEvents, 0);
-	pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &resetVstEvents, 0);
+	if (!portNum || portNum == PORT_ALL)
+		pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &resetVstEvents, 0);
+	
+	if (portNum)
+		pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &resetVstEvents, 0);
 }
 
-static void SendOwnReset()
+static void SendOwnReset(DWORD portNum)
 {	
-	sendSimpleResetEvents(); //always sent since not all synths react to a particular SysEx reset.
-
 	switch (lastUsedSysEx)
 	{	
 	case RESET_MENU_OFFSET + 1:
-		sendSysExEvent((char*)gmReset, sizeof(gmReset));
+		sendSysExEvent((char*)gmReset, sizeof(gmReset), portNum);
 		break;
 	case RESET_MENU_OFFSET + 2:
-		sendSysExEvent((char*)gsReset, sizeof(gsReset));
+		sendSysExEvent((char*)gsReset, sizeof(gsReset), portNum);
 		break;
 	case RESET_MENU_OFFSET + 3:
-		sendSysExEvent((char*)xgReset, sizeof(xgReset));
+		sendSysExEvent((char*)xgReset, sizeof(xgReset), portNum);
 		break;
 	case RESET_MENU_OFFSET + 4:
-		sendSysExEvent((char*)gm2Reset, sizeof(gm2Reset));
+		sendSysExEvent((char*)gm2Reset, sizeof(gm2Reset), portNum);
 		break;	
+	case RESET_MENU_OFFSET + 5:
+		sendSimpleResetEvents(portNum);
+		break;
 	}
 
 	doOwnReset = false;
@@ -1300,12 +1350,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			nIconData.uCallbackMessage = WM_ICONMSG;
 			nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
 			_tcsncpy_s(nIconData.szTip, trayTip, _countof(nIconData.szTip));
-			Shell_NotifyIcon(NIM_ADD, &nIconData);
-
-			InitSimpleResetEvents();			
-			lastUsedSysEx = getSelectedSysExIndex();
-			if (lastUsedSysEx != RESET_MENU_OFFSET + 5) PostMessage(hwnd, WM_COMMAND, lastUsedSysEx, 0);
-
+			Shell_NotifyIcon(NIM_ADD, &nIconData);				
+			
 			return 0;
 		}
 		break;
@@ -1334,6 +1380,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, editorHandle[1] != 0 && IsWindowVisible(editorHandle[1]) ? MF_CHECKED : MF_UNCHECKED);
 				EnableMenuItem(trayMenu, PORT_MENU_OFFSET,  isPortActive[0] && hasEditor ? MF_ENABLED : MF_GRAYED);
 				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, isPortActive[1] && hasEditor ? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, 3, isPortActive[0] || isPortActive[1] ?  MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
 
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
@@ -1388,7 +1435,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			case RESET_MENU_OFFSET + 3:				
 			case RESET_MENU_OFFSET + 4:				
 			case RESET_MENU_OFFSET + 5:
-				lastUsedSysEx = (int)wParam;
+				lastUsedSysEx = (int)wParam;				
+				destPort = PORT_ALL;							
 				doOwnReset = true;				
 				return 0;
 
@@ -1783,15 +1831,21 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					loops++;
 				}
 				if(trayWndHandle)
-					PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)PORT_MENU_OFFSET + port_num, 0);			
-				
-				
+					PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)PORT_MENU_OFFSET + port_num, 0);		
+								
 			}
 			break;
 
 		case Command::InitSysTray:
 			{
-				_beginthreadex(NULL, 16384, &TrayThread, pEffect, 0, NULL);
+				_beginthreadex(NULL, 16384, &TrayThread, pEffect, 0, NULL);				
+
+				InitSimpleResetEvents();
+				lastUsedSysEx = getSelectedSysExIndex();
+				
+				//Insert SysEx resets to the beginning of the event list to prevent all piano problems at start.
+				InsertOwnReset(0);
+				InsertOwnReset(1);
 
 				put_code(Response::NoError);
 
@@ -1805,9 +1859,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				{
 					code = Response::CannotSetSampleRate;
 					goto exit;
-				}
+				}						
 
-				sample_rate = get_code();
+				sample_rate = get_code();				
 
 				put_code(Response::NoError);
 			}
@@ -1828,10 +1882,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			break;
 
 		case Command::Reset: // Reset 
-			{	
-				SendMessage(trayWndHandle, WM_COMMAND, lastUsedSysEx, 0);
-
-				uint32_t port_num = get_code();
+			{					
+				uint32_t port_num = get_code();				
+				
+				destPort = port_num;
+				doOwnReset = true;
 
 				if (isSinglePort32Ch)
 				{
@@ -2014,7 +2069,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					}
 				}
 
-				if (tmpDoOwnReset) SendOwnReset();
+				if (tmpDoOwnReset) SendOwnReset(destPort);
 
 				if (need_idle)
 				{
@@ -2026,7 +2081,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					{
 						if (inputEventList.portMessageCount[0]) pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &renderEvents[0], 0);
 						if (inputEventList.portMessageCount[1]) pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &renderEvents[1], 0);
-						if (tmpDoOwnReset) SendOwnReset();
+						if (tmpDoOwnReset) SendOwnReset(destPort);
 						idle_started = true;
 					}
 				}
@@ -2182,7 +2237,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					}
 				}
 
-				if (tmpDoOwnReset) SendOwnReset();
+				if (tmpDoOwnReset) SendOwnReset(destPort);
 
 				if (need_idle)
 				{
@@ -2194,7 +2249,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 					{
 						if (inputEventList.portMessageCount[0]) pEffect[0]->dispatcher(pEffect[0], effProcessEvents, 0, 0, &renderEvents[0], 0);
 						if (inputEventList.portMessageCount[1]) pEffect[1]->dispatcher(pEffect[1], effProcessEvents, 0, 0, &renderEvents[1], 0);
-						if (tmpDoOwnReset) SendOwnReset();
+						if (tmpDoOwnReset) SendOwnReset(destPort);
 						idle_started = true;
 					}
 				}

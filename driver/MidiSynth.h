@@ -45,11 +45,11 @@ private:
 	unsigned int chunkSize, chunkSizeMS;
 	bool usingFloat;
 	bool useAsio;
+	bool keepLoaded;
 	float outputGain;
 	float midiVol[2];
 	
 	unsigned char statusBuff[2]; //running status buffer
-	bool isDriverOff;
 	bool isSinglePort32Ch;
 	bool enableSinglePort32ChMode;
 	unsigned int virtualPortNum;

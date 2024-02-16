@@ -25,7 +25,6 @@ enum
 };
 
 extern "C" { extern HINSTANCE hinst_vst_driver; };
-extern "C" { bool keepLoaded = false; }
 
 UINT GetWaveOutDeviceId() {
 
@@ -199,6 +198,7 @@ VSTDriver::VSTDriver() {
 	sName = NULL;
 	sVendor = NULL;
 	sProduct = NULL;
+	IsSCVA = false;
 }
 
 VSTDriver::~VSTDriver() {
@@ -532,7 +532,7 @@ bool VSTDriver::process_create()
 	sProduct[ product_string_length ] = 0;
 
 	//Always keep SC-VA loaded even when ports are closed because of huge loading times. For other plugins this setting is optional.
-	keepLoaded = (uUniqueId == (uint32_t)'scva') || keepLoaded;
+	IsSCVA = (uUniqueId == (uint32_t)'scva');
 
 	return true;
 }

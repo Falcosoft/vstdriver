@@ -41,7 +41,6 @@ typedef enum _MYAVRT_PRIORITY
 #include <math.h>
 
 extern "C"{ extern HINSTANCE hinst_vst_driver; }
-extern "C" { extern bool keepLoaded; };
 
 namespace VSTMIDIDRV{
 
@@ -1116,7 +1115,8 @@ namespace VSTMIDIDRV{
 		usingFloat = GetUsingFloat();
 		useAsio = UseAsio();
 		enableSinglePort32ChMode = GetEnableSinglePort32ChMode();
-		keepLoaded = GetKeepDriverLoaded();		
+		keepLoaded = GetKeepDriverLoaded();
+		
 
 		if (chunkSize) {
 			// Number of chunks should be ceil(bufferSize / chunkSize)
@@ -1128,7 +1128,7 @@ namespace VSTMIDIDRV{
 
 	void MidiSynth::InitDialog(unsigned uDeviceID){	
 		
-		if(IsShowVSTDialog() && !isDriverOff) vstDriver->displayEditorModal(uDeviceID);
+		if(IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID);
 	}
 
 	int MidiSynth::Init(unsigned uDeviceID){		
@@ -1194,17 +1194,14 @@ namespace VSTMIDIDRV{
 			vstDriver->setHighDpiMode(GetHighDpiMode());
 			vstDriver->initSysTray();
 		}
+
+		keepLoaded = keepLoaded || vstDriver->getIsSCVA();
 				
 		if (uDeviceID == (DWORD)-1)
-		{
-			uDeviceID = lastOpenedPort;
-		}
-		else
-		{			
-			lastOpenedPort = uDeviceID;
-			isDriverOff = false;
-		}
-		
+			uDeviceID = lastOpenedPort;		
+		else					
+			lastOpenedPort = uDeviceID;	
+
 		InitDialog(uDeviceID);		
 	
 		framesRendered = 0;
@@ -1228,8 +1225,8 @@ namespace VSTMIDIDRV{
 
 	int MidiSynth::Reset(unsigned uDeviceID) {		
 
-		UINT wResult = useAsio ? bassAsioOut.Pause() : waveOut.Pause();
-		if (wResult) return wResult;
+		//UINT wResult = useAsio ? bassAsioOut.Pause() : waveOut.Pause();
+		//if (wResult) return wResult;
 
 		{
 			ScopeLock<Win32Lock> scopeLock(&synthLock);
@@ -1237,12 +1234,12 @@ namespace VSTMIDIDRV{
 			midiStream.Reset();
 			statusBuff[uDeviceID] = 0;			
 			isSinglePort32Ch = false;
-			virtualPortNum = 0;
-			isDriverOff = true;
+			virtualPortNum = 0;			
 		}
 
-		wResult = useAsio ? bassAsioOut.Resume() : waveOut.Resume();
-		return wResult;
+		//wResult = useAsio ? bassAsioOut.Resume() : waveOut.Resume();
+		//return wResult;
+		return 0;
 	}
 
 	bool MidiSynth::PreprocessMIDI(unsigned int& uDeviceID, DWORD& msg){

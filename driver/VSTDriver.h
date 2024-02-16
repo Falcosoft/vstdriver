@@ -52,6 +52,7 @@ private:
 
 	bool         bInitialized;
 	bool         bInitializedOtherModel;
+	bool		 IsSCVA;
 	HANDLE       hProcess;
 	HANDLE       hThread;
 	HANDLE       hReadEvent;
@@ -85,7 +86,7 @@ private:
 
 	void load_settings(TCHAR * szPath);
 
-public:
+public:	
 	VSTDriver();
 	~VSTDriver();
 	void CloseVSTDriver();
@@ -101,6 +102,7 @@ public:
 	void getProductString(std::string & out);
 	long getVendorVersion();
 	long getUniqueID();
+	bool getIsSCVA() { return IsSCVA; };
 
 	// configuration
 	void getChunk(std::vector<uint8_t> & out);
