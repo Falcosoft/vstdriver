@@ -340,8 +340,11 @@ static void InvalidParamHandler(const wchar_t* expression, const wchar_t* functi
 		TerminateProcess(GetCurrentProcess(), 1);
 }
 
+
 LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 {
+	void setSelectedSysExIndex(int index); //forward declaration...
+
 	if (IsDebuggerPresent())
 	{
 		return UnhandledExceptionFilter(param);
@@ -371,6 +374,8 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 		}
 
 		MessageBox(0, buffer, _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
+		lastUsedSysEx = 15;
+		setSelectedSysExIndex(lastUsedSysEx);
 		Shell_NotifyIcon(NIM_DELETE, &nIconData);
 		DestroyMenu(trayMenu);
 		TerminateProcess(GetCurrentProcess(), 1);
@@ -749,12 +754,10 @@ static void InsertSysExEvent(char* sysExBytes, int size, DWORD portNum)
 	inputEventList.position &= (MAX_INPUTEVENT_COUNT - 1);
 
 	memset(ev, 0, sizeof(InputEventList::InputEvent));	
+	
+	inputEventList.portMessageCount[portNum]++;
 
-	uint32_t port = (int)portNum;
-	isPortActive[port] = true;
-	inputEventList.portMessageCount[port]++;	
-
-	ev->port = port;	
+	ev->port = portNum;
 	ev->ev.sysexEvent.type = kVstSysExType;
 	ev->ev.sysexEvent.byteSize = sizeof(ev->ev.sysexEvent);
 	ev->ev.sysexEvent.dumpBytes = size;
