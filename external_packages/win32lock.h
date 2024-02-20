@@ -1,13 +1,12 @@
 //falco: utility classes for various Win32 locks (SRWLock/CriticalSection/custom spin locks)
 
-//#define DEBUG_FASTLOCKS
-
+//#define DEBUG_LOCKS
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <intrin.h>
 
-#ifdef DEBUG_FASTLOCKS
+#ifdef DEBUG_LOCKS
 #include <iostream>
 #endif
 
@@ -17,85 +16,79 @@
 //Be aware that SRWLock does not support re-entrance. If you need it use alwaysUseCriticalSection in constructor.  
 class Win32Lock {
 	
-	typedef struct _MYSRWLOCK {
+	typedef struct _MYLOCK {
 		PVOID Ptr;
-	} MYSRWLOCK, * PMYSRWLOCK;
+	} MYLOCK, * PMYLOCK;
 
 private:
 	bool useSRWLock;
-
-	CRITICAL_SECTION critSec;	
-	MYSRWLOCK srw;	
-
-	void WIN32DEF(InitializeSRWLock)(PMYSRWLOCK SRWLock);
-	void WIN32DEF(AcquireSRWLockExclusive)(PMYSRWLOCK SRWLock);
-	void WIN32DEF(ReleaseSRWLockExclusive)(PMYSRWLOCK SRWLock);
+	MYLOCK _lock;
+		
+	void WIN32DEF(AcquireSRWLockExclusive)(PMYLOCK Lock);
+	void WIN32DEF(ReleaseSRWLockExclusive)(PMYLOCK Lock);
 
 public:
-	Win32Lock(bool alwaysUseCriticalSection = false) {
-		InitializeSRWLock = AcquireSRWLockExclusive = ReleaseSRWLockExclusive = NULL;		
+	Win32Lock(bool alwaysUseCriticalSection = false) :
+		_lock(/* Initializing to 0 means the same as SRWLOCK_INIT or using InitializeSRWLock() */) {
+		AcquireSRWLockExclusive = ReleaseSRWLockExclusive = NULL;
 		
-		if (!alwaysUseCriticalSection) {
-			HMODULE kernel32 = GetModuleHandle(_T("kernel32.dll"));
-			if (kernel32) {
-				*((void**)&InitializeSRWLock) = GetProcAddress(kernel32, "InitializeSRWLock");
+		if (!alwaysUseCriticalSection) {		
+			HMODULE kernel32;
+			if ((kernel32 = GetModuleHandle(_T("kernel32.dll"))) != NULL) {				
 				*((void**)&AcquireSRWLockExclusive) = GetProcAddress(kernel32, "AcquireSRWLockExclusive");
 				*((void**)&ReleaseSRWLockExclusive) = GetProcAddress(kernel32, "ReleaseSRWLockExclusive");
 			}
 		}
 
-		useSRWLock = (InitializeSRWLock && AcquireSRWLockExclusive && ReleaseSRWLockExclusive);
+		useSRWLock = (AcquireSRWLockExclusive && ReleaseSRWLockExclusive);
 
-		if (useSRWLock)	{
-			InitializeSRWLock(&srw);
-		}
-		else {			
-			InitializeCriticalSection(&critSec);
+		if (!useSRWLock) {
+			_lock.Ptr = new CRITICAL_SECTION; //only allocate CRITICAL_SECTION dynamically if needed.
+			InitializeCriticalSection((LPCRITICAL_SECTION)_lock.Ptr);
 		}
 	}
 
 	~Win32Lock() {
 		if (!useSRWLock) {
-			DeleteCriticalSection(&critSec);			
+			DeleteCriticalSection((LPCRITICAL_SECTION)_lock.Ptr);
+			delete _lock.Ptr;
 		}
 	}
 
 	inline void lock() {
 		if (useSRWLock)
-			AcquireSRWLockExclusive(&srw);
+			AcquireSRWLockExclusive(&_lock);
 		else
-			EnterCriticalSection(&critSec);
+			EnterCriticalSection((LPCRITICAL_SECTION)_lock.Ptr);
 	}
 
 	inline void unlock() {
 		if (useSRWLock)
-			ReleaseSRWLockExclusive(&srw);
+			ReleaseSRWLockExclusive(&_lock);
 		else
-			LeaveCriticalSection(&critSec);
+			LeaveCriticalSection((LPCRITICAL_SECTION)_lock.Ptr);
 	}
 };
 
 
-#define MAX_SPIN 0xFF //MAX_SPIN must be pow(2, x) - 1 
+#define MAX_SPIN 0xFFF //MAX_SPIN must be pow(2, x) - 1 
 
 //Experimental TTAS spinlock with re-entrance support.
-class FastLock
-{
+class FastLock {
 private:
 	volatile long threadId;
 	volatile unsigned int lockCount;
 	bool only1CoreAvailable;
 
-public:
-	static bool GetOnly1CoreAvailable()
-	{
+public:	
+	//Even on multiprocessor systems affinity can be set to only 1 processor. Spinning makes no sense in this case either.
+	static bool GetOnly1CoreAvailable()	{
 		DWORD_PTR procMask, sysMask;
 		GetProcessAffinityMask(GetCurrentProcess(), &procMask, &sysMask);
 		return (procMask & (procMask - 1)) == 0;
 	}
 
-	void SetOnly1CoreAvailable(bool value) 
-	{
+	void SetOnly1CoreAvailable(bool value) {
 		only1CoreAvailable = value;
 	}
 
@@ -122,20 +115,13 @@ public:
 			while (threadId) {
 				loops++;
 				if (only1CoreAvailable) { // in case of 1 available core there is no sense in spinning
-#ifdef DEBUG_FASTLOCKS
-					std::cout << "SwitchToThread: " << loops << "\n";
-#endif
 					SwitchToThread();
 				}
 				else if (loops & MAX_SPIN) { //try to get lock MAX_SPIN times
-#ifdef DEBUG_FASTLOCKS
-					std::cout << "YieldProcessor: " << loops << "\n";
-#endif
-					YieldProcessor();
-					
+					YieldProcessor();					
 				}
 				else { //sleep if lock is not successful after trying MAX_SPIN times
-#ifdef DEBUG_FASTLOCKS					
+#ifdef DEBUG_LOCKS					
 					std::cout << "Sleep: " << loops << "\n";
 #endif
 					Sleep(1); 
@@ -146,28 +132,27 @@ public:
 	}
 
 	inline void unlock() {
+		_WriteBarrier();
 		lockCount--;
 		if (!lockCount) threadId = 0;
 	}
 };
 
 //Experimental TTAS spinlock without re-entrance support. 
-class FasterLock
-{
+class FasterLock {
 private:
 	volatile long lockCount;
 	bool only1CoreAvailable;
 
 public:
-	static bool GetOnly1CoreAvailable()
-	{
+	//Even on multiprocessor systems affinity can be set to only 1 processor. Spinning makes no sense in this case either.
+	static bool GetOnly1CoreAvailable()	{
 		DWORD_PTR procMask, sysMask;
 		GetProcessAffinityMask(GetCurrentProcess(), &procMask, &sysMask);
 		return (procMask & (procMask - 1)) == 0;
 	}
 
-	void SetOnly1CoreAvailable(bool value)
-	{
+	void SetOnly1CoreAvailable(bool value) {
 		only1CoreAvailable = value;
 	}
 
@@ -187,20 +172,13 @@ public:
 			while (lockCount) {
 				loops++;
 				if (only1CoreAvailable) { // in case of 1 available core there is no sense in spinning
-#ifdef DEBUG_FASTLOCKS
-					std::cout << "SwitchToThread: " << loops << "\n";
-#endif
 					SwitchToThread();
 				}
 				else if (loops & MAX_SPIN) { //try to get lock MAX_SPIN times
-#ifdef DEBUG_FASTLOCKS
-					std::cout << "YieldProcessor: " << loops << "\n";
-#endif
 					YieldProcessor();
-
 				}
 				else { //sleep if lock is not successful after trying MAX_SPIN times
-#ifdef DEBUG_FASTLOCKS					
+#ifdef DEBUG_LOCKS					
 					std::cout << "Sleep: " << loops << "\n";
 #endif
 					Sleep(1);
@@ -210,13 +188,13 @@ public:
 	}
 
 	inline void unlock() {
+		_WriteBarrier();
 		lockCount = 0;
 	}
 };
 
 template <class T>
-class ScopeLock
-{
+class ScopeLock {
 private:
 	T* _lock;
 public:
