@@ -16,6 +16,11 @@ env:
   # Path to the solution file relative to the root of the project.
   SOLUTION_FILE_PATH: vstdriver.sln
 
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+  
 jobs:
   Analyze:
     runs-on: windows-2019
