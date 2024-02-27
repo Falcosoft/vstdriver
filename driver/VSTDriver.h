@@ -14,6 +14,8 @@
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#pragma warning(disable : 4351) //default bahavior is the right one since VS 2005
+
 #ifndef __VSTDRIVER_H__
 #define __VSTDRIVER_H__
 
@@ -72,7 +74,7 @@ private:
 	uint32_t     uUniqueId;
 
 	unsigned test_plugin_platform();
-	bool connect_pipe( HANDLE hPipe );
+	//bool connect_pipe( HANDLE hPipe );
 	tstring GetVsthostPath();
 	bool process_create();
 	void process_terminate();

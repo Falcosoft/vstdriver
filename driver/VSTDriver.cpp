@@ -32,7 +32,7 @@ UINT GetWaveOutDeviceId() {
 	DWORD dwType = REG_SZ;
 	DWORD dwSize = 0;
 	WAVEOUTCAPS caps;
-	TCHAR* regValue;
+	
 
 	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), 0, KEY_READ, &hKey);
 	if (result == NO_ERROR)
@@ -41,21 +41,25 @@ UINT GetWaveOutDeviceId() {
 		result = RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, NULL, &dwSize);
 		if (result == NO_ERROR && dwType == REG_SZ)
 		{
+			TCHAR* regValue;
 			regValue = (TCHAR*)calloc(dwSize + sizeof(TCHAR), 1);
-			RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
-
-			for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId)
+			if (regValue)
 			{
-				if (!_tcscmp(regValue, caps.szPname))
+				RegQueryValueEx(hKey, _T("WinMM WaveOut"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+
+				for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId)
 				{
-					free(regValue);
-					RegCloseKey(hKey);
-					return deviceId;
+					if (regValue && !_tcscmp(regValue, caps.szPname))
+					{
+						free(regValue);
+						RegCloseKey(hKey);
+						return deviceId;
+					}
+
 				}
 
+				free(regValue);
 			}
-
-			free(regValue);
 		}
 
 		RegCloseKey(hKey);
@@ -95,8 +99,7 @@ bool UseAsio()
 {
 	HKEY hKey;
 	DWORD dwType = REG_SZ;
-	DWORD dwSize = 0;
-	TCHAR* regValue;
+	DWORD dwSize = 0;	
 
 	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), 0, KEY_READ, &hKey);
 	if (result == NO_ERROR) 
@@ -104,16 +107,20 @@ bool UseAsio()
 		result = RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, NULL, &dwSize);
 		if (result == NO_ERROR && dwType == REG_SZ && dwSize > 8)
 		{
+			TCHAR* regValue;
 			regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
-			RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
-			if (!_tcscmp(regValue, _T("Bass ASIO")))
+			if (regValue)
 			{
-				free(regValue);
-				RegCloseKey(hKey);
-				return true;
-			}
+				RegQueryValueEx(hKey, _T("Driver Mode"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+				if (!_tcscmp(regValue, _T("Bass ASIO")))
+				{
+					free(regValue);
+					RegCloseKey(hKey);
+					return true;
+				}
 
-			free(regValue);
+				free(regValue);
+			}
 		}
 
 		RegCloseKey(hKey);
@@ -126,8 +133,7 @@ bool UseWasapi()
 {
 	HKEY hKey;
 	DWORD dwType = REG_SZ;
-	DWORD dwSize = 0;
-	TCHAR* regValue;
+	DWORD dwSize = 0;	
 
 	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver\\Output Driver"), 0, KEY_READ, &hKey);
 	if (result == NO_ERROR)
@@ -140,20 +146,24 @@ bool UseWasapi()
 		
 		if (result == NO_ERROR && dwType == REG_SZ && dwSize > 20)
 		{
+			TCHAR* regValue;
 			regValue = (TCHAR*)calloc(dwSize + sizeof(TCHAR), 1);
-#ifdef WIN64
-			RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
-#else
-			RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
-#endif
-			if (_tcsstr(regValue, _T("VSTDriver-ASIO2WASAPI")))
+			if (regValue)
 			{
-				free(regValue);
-				RegCloseKey(hKey);
-				return true;
-			}
+#ifdef WIN64
+				RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+#else
+				RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+#endif
+				if (_tcsstr(regValue, _T("VSTDriver-ASIO2WASAPI")))
+				{
+					free(regValue);
+					RegCloseKey(hKey);
+					return true;
+				}
 
-			free(regValue);
+				free(regValue);
+			}
 		}
 
 		RegCloseKey(hKey);
@@ -183,23 +193,25 @@ namespace Command {
 	};
 };
 
-VSTDriver::VSTDriver() {
-	szPluginPath = NULL;
-	bInitialized = false;
-	bInitializedOtherModel = false;
-	hProcess = NULL;
-	hThread = NULL;
-	hReadEvent = NULL;
-	hChildStd_IN_Rd = NULL;
-	hChildStd_IN_Wr = NULL;
-	hChildStd_OUT_Rd = NULL;
-	hChildStd_OUT_Wr = NULL;
-	uNumOutputs = 0;
-	sName = NULL;
-	sVendor = NULL;
-	sProduct = NULL;
-	IsSCVA = false;
-}
+VSTDriver::VSTDriver() :
+	szPluginPath(),
+	bInitialized(),
+	bInitializedOtherModel(),
+	hProcess(),
+	hThread(),
+	hReadEvent(),
+	hChildStd_IN_Rd(),
+	hChildStd_IN_Wr(),
+	hChildStd_OUT_Rd(),
+	hChildStd_OUT_Wr(),
+	uNumOutputs(),
+	sName(),
+	sVendor(),
+	sProduct(),
+	IsSCVA(),
+	uPluginPlatform(),
+	uVendorVersion(),
+	uUniqueId() {}
 
 VSTDriver::~VSTDriver() {
 	CloseVSTDriver();
@@ -245,13 +257,14 @@ error:
 }
 
 void VSTDriver::load_settings(TCHAR * szPath) {
-	HKEY hKey;
-	long lResult;
+	HKEY hKey;	
 	DWORD dwType = REG_SZ;
 	DWORD dwSize = 0;
 	DWORD selIndex = 0;
+	
 	if ( szPath || RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"),0,KEY_READ,&hKey) == ERROR_SUCCESS )
 	{
+		long lResult = 0;
 		TCHAR szValueName[20] = _T("plugin");
 		if (!szPath)
 		{
@@ -264,36 +277,38 @@ void VSTDriver::load_settings(TCHAR * szPath) {
 			}
 			lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &dwSize);
 		}
-		if ( szPath || ( lResult == ERROR_SUCCESS && dwType == REG_SZ ) ) {
-			if ( szPath ) dwSize = (DWORD)(_tcslen( szPath ) * sizeof(TCHAR));
-			szPluginPath = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
-			if ( szPath ) _tcscpy( szPluginPath, szPath );
-			else RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE) szPluginPath, &dwSize);
+		if (szPath || (lResult == ERROR_SUCCESS && dwType == REG_SZ)) {
+			if (szPath) dwSize = (DWORD)(_tcslen(szPath) * sizeof(TCHAR));
+			szPluginPath = (TCHAR*)calloc(dwSize + sizeof(TCHAR), 1);
+			if (szPluginPath) {
+				if (szPath) _tcscpy(szPluginPath, szPath);
+				else RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)szPluginPath, &dwSize);
 
-			uPluginPlatform = test_plugin_platform();
+				uPluginPlatform = test_plugin_platform();
 
-			blChunk.resize( 0 );
+				blChunk.resize(0);
 
-			const TCHAR * dot = _tcsrchr( szPluginPath, _T('.') );
-			if ( !dot ) dot = szPluginPath + _tcslen( szPluginPath );
-			TCHAR * szSettingsPath = ( TCHAR * ) _alloca( ( dot - szPluginPath + 5 ) * sizeof( TCHAR ) );
-			_tcsncpy( szSettingsPath, szPluginPath, dot - szPluginPath );
-			_tcscpy( szSettingsPath + ( dot - szPluginPath ), _T(".set") );
+				const TCHAR* dot = _tcsrchr(szPluginPath, _T('.'));
+				if (!dot) dot = szPluginPath + _tcslen(szPluginPath);
+				TCHAR* szSettingsPath = (TCHAR*)_alloca((dot - szPluginPath + 5) * sizeof(TCHAR));
+				_tcsncpy(szSettingsPath, szPluginPath, dot - szPluginPath);
+				_tcscpy(szSettingsPath + (dot - szPluginPath), _T(".set"));
 
-			FILE * f;
-			errno_t err = _tfopen_s( &f, szSettingsPath, _T("rb") );
-			if ( !err )
-			{
-				fseek( f, 0, SEEK_END );
-				size_t chunk_size = ftell( f );
-				fseek( f, 0, SEEK_SET );
-				blChunk.resize( chunk_size );
+				FILE* f;
+				errno_t err = _tfopen_s(&f, szSettingsPath, _T("rb"));
+				if (!err && f)
+				{
+					fseek(f, 0, SEEK_END);
+					size_t chunk_size = ftell(f);
+					fseek(f, 0, SEEK_SET);
+					blChunk.resize(chunk_size);
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-				if (chunk_size) fread( &blChunk.front(), 1, chunk_size, f );
+					if (chunk_size) fread(&blChunk.front(), 1, chunk_size, f);
 #else
-				if (chunk_size) fread( blChunk.data(), 1, chunk_size, f );
+					if (chunk_size) fread(blChunk.data(), 1, chunk_size, f);
 #endif
-				fclose( f );
+					fclose(f);
+				}
 			}
 		}
 		if ( !szPath ) RegCloseKey( hKey);
@@ -348,7 +363,8 @@ static bool create_pipe_name( tstring & out )
 	return true;
 }
 
-bool VSTDriver::connect_pipe( HANDLE hPipe )
+/*
+bool VSTDriver::connect_pipe(HANDLE hPipe)
 {
 	OVERLAPPED ol = {};
 	ol.hEvent = hReadEvent;
@@ -363,6 +379,7 @@ bool VSTDriver::connect_pipe( HANDLE hPipe )
 	}
 	return true;
 }
+*/
 
 tstring VSTDriver::GetVsthostPath()
 {

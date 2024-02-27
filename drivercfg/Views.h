@@ -87,8 +87,7 @@ static bool IsWaveFormatSupported(UINT sampleRate, UINT deviceId)
 static BOOL IsASIO() 
 {
 	TCHAR installpath[MAX_PATH];        
-	TCHAR bassasiopath[MAX_PATH];
-	TCHAR asio2WasapiPath[MAX_PATH];
+	TCHAR bassasiopath[MAX_PATH];	
 
 	GetModuleFileName(hinst_vst_driver, installpath, MAX_PATH);
 	//PathRemoveFileSpec(installpath);
@@ -130,6 +129,7 @@ static BOOL IsASIO()
 		LOADBASSASIOFUNCTION(BASS_ASIO_ControlPanel);
 		LOADBASSASIOFUNCTION(BASS_ASIO_CheckRate);
 				
+		TCHAR asio2WasapiPath[MAX_PATH];
 		_tcscpy_s(asio2WasapiPath, installpath);
 		_tcscat_s(asio2WasapiPath, _T("\\ASIO2WASAPI_vstdrv.dll"));
 		if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
@@ -157,8 +157,7 @@ static BOOL IsASIO()
 static BOOL settings_load(VSTDriver * effect)
 {
 	BOOL retResult = FALSE;
-	long lResult;
-	TCHAR vst_path[MAX_PATH] = {0};
+	long lResult;	
 	ULONG size;
 	CRegKeyEx reg;
 
@@ -172,6 +171,7 @@ static BOOL settings_load(VSTDriver * effect)
 		}
 		lResult = reg.QueryStringValue(szValueName, NULL, &size);
 		if (lResult == ERROR_SUCCESS) {
+			TCHAR vst_path[MAX_PATH] = { 0 };
 			reg.QueryStringValue(szValueName, vst_path, &size);
 			TCHAR *chrP = _tcsrchr(vst_path, '.'); // removes extension
 			if(chrP) chrP[0] = 0;
@@ -210,8 +210,7 @@ static BOOL settings_load(VSTDriver * effect)
 static BOOL settings_save(VSTDriver * effect)
 {
 	BOOL retResult = FALSE;
-	long lResult;
-	TCHAR vst_path[MAX_PATH] = {0};
+	long lResult;	
 	ULONG size;
 	CRegKeyEx reg;
 
@@ -227,6 +226,7 @@ static BOOL settings_save(VSTDriver * effect)
 		lResult = reg.QueryStringValue(szValueName, NULL, &size);
 		
 		if (lResult == ERROR_SUCCESS) {
+			TCHAR vst_path[MAX_PATH] = { 0 };
 			reg.QueryStringValue(szValueName, vst_path, &size);
 			TCHAR* chrP = _tcsrchr(vst_path, '.'); // removes extension
 			if(chrP) chrP[0] = 0;
@@ -280,10 +280,14 @@ static CString LoadOutputDriver(CString valueName)
 
 static void SaveDwordValue(LPCTSTR key, DWORD value)
 {	   
-	CRegKeyEx reg;	   
-	reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
-	reg.SetDWORDValue(key, value);
-	reg.Close();	   
+	CRegKeyEx reg;
+	long lResult;
+	lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
+	if (lResult == ERROR_SUCCESS)
+	{
+		reg.SetDWORDValue(key, value);
+		reg.Close();
+	}		   
 }
 
 
@@ -308,7 +312,41 @@ class CView1 : public CDialogImpl<CView1>
 	
 	VSTDriver * effect;
 public:
+	CView1() :		
+		vst_info(), vst_buffer_size(), vst_sample_rate(), vst_sample_format(),
+		vst_load(), vst_configure(), vst_showvst(), vst_4chmode(), vst_unload(),
+		vst_vendor(), vst_effect(), file_info(),
+		volume_slider(),
+		vst_path(),
+		hbrBkgnd(),
+		highDpiMode(),
+		origDropdownWidth(),
+		effect()
+	{		
+		
+		enableSinglePort32ChMode = (DWORD)-1;
+		keepDriverLoaded = (DWORD)-1;
+
+		usePrivateAsioOnly = 0;		
+		isWinNT4 = IsWinNT4();
+		isASIO = IsASIO();
+		usingASIO = isASIO && LoadOutputDriver(_T("Driver Mode")).CompareNoCase(_T("Bass ASIO")) == 0;
+	}
+
+	~CView1()
+	{
+		if (effect) free_vst();
+		if (bassasio)
+		{
+			FreeLibrary(bassasio);
+			bassasio = NULL;
+		}
+
+		if (hbrBkgnd != NULL) DeleteObject(hbrBkgnd);
+	}
+
 	enum { IDD = IDD_MAIN };
+
 	BEGIN_MSG_MAP(CView1)
 		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView1)
 		COMMAND_ID_HANDLER(IDC_VSTLOAD,OnButtonAdd)
@@ -323,40 +361,13 @@ public:
 		MESSAGE_HANDLER(WM_HSCROLL, OnHScroll)
 		MESSAGE_HANDLER(WM_CTLCOLORSTATIC, OnCtlColorStatic)
 		COMMAND_HANDLER(IDC_USE4CH, BN_CLICKED, OnBnClickedUse4ch)
-	END_MSG_MAP()
-
-	CView1() {
-		effect = NULL; 
-		hbrBkgnd = NULL;
-		highDpiMode = 0;
-		enableSinglePort32ChMode = (DWORD)-1;
-		keepDriverLoaded = (DWORD)-1;
-		usePrivateAsioOnly = 0;		
-
-		isWinNT4 = IsWinNT4();
-		isASIO = IsASIO();
-		usingASIO = isASIO && LoadOutputDriver(_T("Driver Mode")).CompareNoCase(_T("Bass ASIO")) == 0;
-	}
-
-	~CView1()
-	{ 
-		if(effect) free_vst(); 
-		if (bassasio)
-		{         
-			FreeLibrary(bassasio);
-			bassasio = NULL;
-		}
-
-		if (hbrBkgnd != NULL) DeleteObject(hbrBkgnd);  
-	}
+	END_MSG_MAP()	
 
 	void load_settings()
 	{
 		long lResult;
 		vst_path[0] = 0;
-		ULONG size;
-		DWORD reg_value; 
-		TCHAR tmpBuff[34];
+		ULONG size;		
 		CRegKeyEx reg;
 		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"));
 		if (lResult == ERROR_SUCCESS){
@@ -377,6 +388,9 @@ public:
 				else
 					vst_info.AddString(_T("No VSTi loaded"));
 			}
+
+			DWORD reg_value;
+			TCHAR tmpBuff[34];
 
 			lResult = reg.QueryDWORDValue(_T("SelectedPlugin"), reg_value);
 			if (lResult == ERROR_SUCCESS) {
@@ -486,16 +500,18 @@ public:
 		long lResult;
 		CRegKeyEx reg;
 		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
-
-		TCHAR szValueName[12] = _T("plugin");
-		if (SelectedPluginIndex)
+		if (lResult == ERROR_SUCCESS)
 		{
-			TCHAR szPostfix[4] = { 0 };
-			_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+			TCHAR szValueName[12] = _T("plugin");
+			if (SelectedPluginIndex)
+			{
+				TCHAR szPostfix[4] = { 0 };
+				_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+			}
+			reg.SetStringValue(szValueName, _T(""));
+			reg.Close();
 		}
-		reg.SetStringValue(szValueName, _T(""));
-
-		reg.Close();
+				
 		vst_configure.EnableWindow(false);
 		vst_unload.EnableWindow(false);
 
@@ -529,16 +545,18 @@ public:
 				long lResult;
 				CRegKeyEx reg;
 				lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
-
-				TCHAR szValueName[12] = _T("plugin");
-				if (SelectedPluginIndex)
+				if (lResult == ERROR_SUCCESS)
 				{
-					TCHAR szPostfix[4] = { 0 };
-					_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
-				}							
-				reg.SetStringValue(szValueName, szFileName);
-				
-				reg.Close();				
+					TCHAR szValueName[12] = _T("plugin");
+					if (SelectedPluginIndex)
+					{
+						TCHAR szPostfix[4] = { 0 };
+						_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+					}
+					reg.SetStringValue(szValueName, szFileName);
+					reg.Close();
+				}				
+							
 				vst_configure.EnableWindow(effect->hasEditor());
 				vst_unload.EnableWindow(true);
 
@@ -552,15 +570,18 @@ public:
 				CRegKeyEx reg;
 				lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
 
-				TCHAR szValueName[12] = _T("plugin");
-				if (SelectedPluginIndex)
+				if (lResult == ERROR_SUCCESS)
 				{
-					TCHAR szPostfix[4] = { 0 };
-					_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+					TCHAR szValueName[12] = _T("plugin");
+					if (SelectedPluginIndex)
+					{
+						TCHAR szPostfix[4] = { 0 };
+						_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+					}
+					reg.SetStringValue(szValueName, _T(""));
+					reg.Close();
 				}
-				reg.SetStringValue(szValueName, _T(""));
 
-				reg.Close();
 				vst_configure.EnableWindow(false);
 				vst_unload.EnableWindow(false);
 			}
@@ -624,8 +645,11 @@ public:
 			long lResult;
 			CRegKeyEx reg;
 			lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_WRITE);
-			reg.SetDWORDValue(_T("SelectedPlugin"), selIndex);
-			reg.Close();
+			if (lResult == ERROR_SUCCESS)
+			{
+				reg.SetDWORDValue(_T("SelectedPlugin"), selIndex);
+				reg.Close();
+			}
 			vst_configure.EnableWindow(effect->hasEditor());
 			vst_unload.EnableWindow(true);
 		}
@@ -874,8 +898,8 @@ public:
 			}
 
 			TCHAR tmpBuff[64];
-			DWORD realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
-			_stprintf_s(tmpBuff, 64, _T("4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)"), selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
+			unsigned int realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
+			_stprintf_s(tmpBuff, 64, _T("4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %u/%u)"), selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
 			vst_4chmode.SetWindowText(tmpBuff);
 
 		}
@@ -1082,8 +1106,8 @@ public:
 		TCHAR tmpBuff[64];
 		if (usingASIO) 
 		{			
-			DWORD realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
-			_stprintf_s(tmpBuff, 64, _T("4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %d/%d)"), selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
+			unsigned int realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
+			_stprintf_s(tmpBuff, 64, _T("4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %u/%u)"), selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
 			vst_4chmode.SetWindowText(tmpBuff);				
 		}
 		
@@ -1111,6 +1135,22 @@ class CView3 : public CDialogImpl<CView3>
 	std::vector<int> drvChArr;
 
 public:	
+	CView3() :
+		playbackDevices(),
+		driverMode(), portbOffset(),
+		asio_openctlp(),
+		portbOffsetText(),
+		driverChanged(),
+		resetList(),
+		drvChArr()
+	{		
+		drvChArr.reserve(8); //reasonable starting capacity
+	}
+
+	~CView3()
+	{
+
+	}
 
 	enum
 	{
@@ -1124,19 +1164,7 @@ public:
 		COMMAND_HANDLER(IDC_LIST1, LBN_SELCHANGE, OnLbnSelchangeList1)
 		//COMMAND_HANDLER(IDC_COMBO_PORTB, CBN_EDITCHANGE, OnCbnEditchangeComboPortb)
 		COMMAND_HANDLER(IDC_COMBO_PORTB, CBN_SELCHANGE, OnCbnSelchangeComboPortb)
-	END_MSG_MAP()
-
-	CView3()
-	{		
-		driverChanged = false;
-		resetList = false;
-		drvChArr.reserve(8); //reasonable starting capacity
-	}
-
-	~CView3()
-	{		
-
-	}
+	END_MSG_MAP()	
 
 	bool GetDriverChanged() 
 	{
@@ -1238,9 +1266,9 @@ public:
 			drvChArr.push_back(info.outputs);
 			BASS_ASIO_CHANNELINFO channelInfo;	
 
-			for (DWORD channel = 0; BASS_ASIO_ChannelGetInfo(FALSE, channel, &channelInfo); ++channel)
+			for (unsigned int channel = 0; BASS_ASIO_ChannelGetInfo(FALSE, channel, &channelInfo); ++channel)
 			{
-				deviceItem.Format(_T("%02d.%02d - %s %s"), deviceId, channel, deviceName, CString(channelInfo.name));
+				deviceItem.Format(_T("%02d.%02u - %s %s"), deviceId, channel, deviceName, CString(channelInfo.name));
 
 				//if (playbackDevices.FindStringExact(0, deviceItem) == LB_ERR)
 				{
@@ -1335,7 +1363,7 @@ public:
 
 		CRegKeyEx reg;
 		DWORD value = 0;
-		DWORD newValue = 0;
+		
 		bool isAsio2Wasapi = selectedOutputDriver.Find(_T("VSTDriver-ASIO2WASAPI"), 0) != -1;
 		if (isAsio2Wasapi)
 		{
@@ -1352,6 +1380,7 @@ public:
 
 		if (isAsio2Wasapi)
 		{				
+			DWORD newValue = 0;
 			reg.QueryDWORDValue(_T("Channels"), newValue);
 			reg.Close();			
 			
@@ -1437,8 +1466,8 @@ public:
 		{
 			selectedOutputDriver.ReleaseBuffer();
 
-			int index = driverMode.GetCurSel();
-			int length = driverMode.GetLBTextLen(index);
+			index = driverMode.GetCurSel();
+			length = driverMode.GetLBTextLen(index);
 
 			if (driverMode.GetLBText(index, selectedDriverMode.GetBuffer(max(length, 1))))
 			{
@@ -1510,9 +1539,15 @@ class CView2 : public CDialogImpl<CView2>
 	CButton apply;
 	CStatic groupBox;
 
-	typedef DWORD(STDAPICALLTYPE * pmodMessage)(UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
+	//typedef DWORD(STDAPICALLTYPE * pmodMessage)(UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
 
 public:
+
+	CView2() :
+		synthlist(),
+		apply(),
+		groupBox() {}
+
 	enum { IDD = IDD_ADVANCED };
 	BEGIN_MSG_MAP(CView1)
 		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView2)
@@ -1552,9 +1587,9 @@ public:
 		synthlist.GetLBText(selection, device_name.GetBuffer(max(n, 1)));
 		device_name.ReleaseBuffer(n);
 		lRet = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
-		lRet = reg.DeleteSubKey(_T("MIDIMap"));
-		lRet = subkey.Create(reg, _T("MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
-		lRet = subkey.SetStringValue(_T("szPname"), device_name);
+		if (lRet == ERROR_SUCCESS) lRet = reg.DeleteSubKey(_T("MIDIMap"));
+		if (lRet == ERROR_SUCCESS) lRet = subkey.Create(reg, _T("MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
+		if (lRet == ERROR_SUCCESS) lRet = subkey.SetStringValue(_T("szPname"), device_name);
 		if (lRet == ERROR_SUCCESS)
 		{
 			MessageBox(_T("MIDI synth set!"), _T("VST MIDI Driver"), MB_ICONINFORMATION);
@@ -1571,12 +1606,16 @@ public:
 	{
 		LONG lResult;
 		CRegKeyEx reg;
-		CString device_name;
-		ULONG size = 128;
+		CString device_name = _T("");
+		
 		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia\\MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_READ);
-		reg.QueryStringValue(_T("szPname"), device_name.GetBuffer(size), &size);
-		reg.Close();
-		device_name.ReleaseBuffer(size);
+		if (lResult == ERROR_SUCCESS)
+		{
+			ULONG size = 128;
+			lResult =  reg.QueryStringValue(_T("szPname"), device_name.GetBuffer(size), &size);
+			reg.Close();
+			if (lResult == ERROR_SUCCESS) device_name.ReleaseBuffer(size);
+		}		
 		int device_count = midiOutGetNumDevs();
 		for (int i = 0; i < device_count; ++i) {
 			MIDIOUTCAPS Caps;

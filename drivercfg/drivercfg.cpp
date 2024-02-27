@@ -41,7 +41,7 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 	ATLASSERT(SUCCEEDED(hRes));
 
 	// this resolves ATL window thunking problem when Microsoft Layer for Unicode (MSLU) is used
-	::DefWindowProc(NULL, 0, 0, 0L);
+	//::DefWindowProc(NULL, 0, 0, 0L); /* never used since only NT line is supported */
 
 	AtlInitCommonControls(ICC_WIN95_CLASSES);	// add flags to support other controls
 

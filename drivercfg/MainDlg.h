@@ -179,11 +179,10 @@ public:
 	}
 
 	LRESULT OnTcnSelchangeTab(int idCtrl, LPNMHDR pNMHDR, BOOL& bHandled)
-	{
-
-		BOOL dummy;
+	{		
 		if(m_ctrlTab.GetCurSel() == 0 && m_view3.GetDriverChanged())
 		{
+			BOOL dummy;
 			m_view1.ResetDriverSettings();
 			m_view1.OnCbnSelchangeBuffersize(0, 0, 0, dummy);
 			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);

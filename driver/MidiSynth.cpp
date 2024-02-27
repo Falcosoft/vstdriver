@@ -63,13 +63,14 @@ namespace VSTMIDIDRV{
 		message stream[maxPos];
 
 	public:
-		MidiStream(){
+		MidiStream(): stream() {			
 			Reset();
 		}
 
 		void Reset(){
 			startpos = 0;
-			endpos = 0;			
+			endpos = 0;
+			
 		}
 
 		DWORD PutMessage(DWORD port, DWORD msg, DWORD timestamp) {		
@@ -216,6 +217,18 @@ namespace VSTMIDIDRV{
 		volatile bool stopProcessing;
 
 	public:
+		WaveOutWin32() : 
+			errorShown(),
+			hWaveOut(),
+			WaveHdr(),
+			hEvent(),
+			hThread(),
+			chunks(),
+			prevPlayPos(),
+			stopProcessing(),
+			usingFloat(),
+			channels() {}
+
 		int Init(void* buffer, unsigned int bufferSize, unsigned int chunkSize, unsigned int sampleRate, bool useFloat, WORD channelCount){
 			DWORD callbackType = CALLBACK_NULL;
 			DWORD_PTR callback = NULL;
@@ -224,9 +237,7 @@ namespace VSTMIDIDRV{
 			hThread = NULL;
 			hEvent = CreateEvent(NULL, false, true, NULL);
 			callback = (DWORD_PTR)hEvent;
-			callbackType = CALLBACK_EVENT;
-
-			for (int i = 0; i < 10; i++) errorShown[i] = false;
+			callbackType = CALLBACK_EVENT;			
 
 			//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;			
 
@@ -276,8 +287,7 @@ namespace VSTMIDIDRV{
 			chunks = bufferSize / chunkSize;
 			WaveHdr = new WAVEHDR[chunks];
 			LPSTR chunkStart = (LPSTR)buffer;
-			DWORD chunkBytes = (usingFloat ? sizeof(float) * channels : sizeof(short) * channels) * chunkSize;
-			DWORD bufferBytes = (usingFloat ? sizeof(float) * channels : sizeof(short) * channels) * bufferSize;
+			DWORD chunkBytes = (usingFloat ? sizeof(float) * channels : sizeof(short) * channels) * chunkSize;			
 			for (UINT i = 0; i < chunks; i++) {
 
 				WaveHdr[i].dwBufferLength = chunkBytes;
@@ -480,7 +490,7 @@ namespace VSTMIDIDRV{
 			}
 			
 			
-			WaveOutWin32* _this = (WaveOutWin32*)pthis;
+			WaveOutWin32* _this = static_cast<WaveOutWin32*>(pthis);
 
 			while (!waveOut.stopProcessing)
 			{
@@ -522,9 +532,7 @@ namespace VSTMIDIDRV{
 	{
 	private:
 
-		HINSTANCE bassAsio; // bassasio handle
-
-		TCHAR* outputDriver;
+		HINSTANCE bassAsio; // bassasio handle		
 
 		bool usingFloat;
 		bool usingQPC;
@@ -638,9 +646,12 @@ namespace VSTMIDIDRV{
 				if (result == NO_ERROR && dwType == REG_SZ)
 				{
 					regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
-					RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
-					wresult = regValue;
-					free(regValue);
+					if (regValue)
+					{
+						RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+						wresult = regValue;
+						free(regValue);
+					}
 				}
 
 				if (wresult.empty()) 
@@ -649,9 +660,12 @@ namespace VSTMIDIDRV{
 					if (result == NO_ERROR && dwType == REG_SZ)
 					{
 						regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
-						RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
-						wresult = regValue;
-						free(regValue);
+						if (regValue)
+						{
+							RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+							wresult = regValue;
+							free(regValue);
+						}
 					}
 
 				}						
@@ -661,9 +675,12 @@ namespace VSTMIDIDRV{
 				if (result == NO_ERROR && dwType == REG_SZ)
 				{
 					regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
-					RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
-					wresult = regValue;
-					free(regValue);
+					if (regValue)
+					{
+						RegQueryValueEx(hKey, _T("Bass ASIO"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+						wresult = regValue;
+						free(regValue);
+					}
 				}
 
 				if (wresult.empty()) 
@@ -672,9 +689,12 @@ namespace VSTMIDIDRV{
 					if (result == NO_ERROR && dwType == REG_SZ)
 					{
 						regValue = (TCHAR*) calloc( dwSize + sizeof(TCHAR), 1 );
-						RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE) regValue, &dwSize);
-						wresult = regValue;
-						free(regValue);
+						if (regValue)
+						{
+							RegQueryValueEx(hKey, _T("Bass ASIO x64"), NULL, &dwType, (LPBYTE)regValue, &dwSize);
+							wresult = regValue;
+							free(regValue);
+						}
 					}
 
 				}
@@ -711,14 +731,20 @@ namespace VSTMIDIDRV{
 
 	public:		
 
-		BassAsioOut()
-		{
-			usingFloat = true;
-			buflen = 0;
-			channels = 2;
-			bassAsio = NULL;
-			isASIO2WASAPI = false;
-		}
+		BassAsioOut() : 
+			startTimeQp(),
+			installPath(),
+			bassAsioPath(),
+			asio2WasapiPath(),
+			usingFloat(),
+			buflen(),
+			channels(),
+			bassAsio(),
+			isASIO2WASAPI(),
+			usingQPC(),
+			samplerate(),
+			startTime(),
+			queryPerformanceUnit() {}
 
 		bool getIsASIO2WASAPI() { return isASIO2WASAPI; }		
 
@@ -881,7 +907,8 @@ namespace VSTMIDIDRV{
 
 		static DWORD CALLBACK AsioProc(BOOL input, DWORD channel, void* buffer, DWORD length, void* user)
 		{
-			BassAsioOut* _this = (BassAsioOut*)user;
+			BassAsioOut* _this = static_cast<BassAsioOut*>(user);
+			
 			if (_this->usingFloat)
 			{
 				midiSynth.RenderFloat((float*)buffer, length / (sizeof(float) * _this->channels));					
@@ -914,11 +941,29 @@ namespace VSTMIDIDRV{
 	}bassAsioOut;
 		
 
-	MidiSynth::MidiSynth()
-	{
-		lastOpenedPort = 0;			
-		vstDriver = NULL;
-	}	
+	MidiSynth::MidiSynth() : 
+		statusBuff(),
+		midiVol(),
+		lastOpenedPort(),
+		vstDriver(),
+		virtualPortNum(),
+		usingFloat(),
+		useAsio(),
+		sampleRate(),
+		outputGain(),
+		midiLatency(),
+		midiLatencyMS(),
+		keepLoaded(),
+		isSinglePort32Ch(),
+		framesRendered(),
+		enableSinglePort32ChMode(),
+		chunkSize(),
+		chunkSizeMS(),
+		channels(),
+		bufferSize(),
+		bufferSizeMS(),
+		bufferf(),
+		buffer() {}	
 
 	MidiSynth &MidiSynth::getInstance(){
 		static MidiSynth *instance = new MidiSynth;
@@ -937,13 +982,13 @@ namespace VSTMIDIDRV{
 		while (totalFrames > 0) {
 			DWORD timeStamp;
 			// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-			while ((timeStamp = midiStream.PeekMessageTime()) == framesRendered) {
-				DWORD msg;
-				DWORD sysex_len;
-				DWORD port;
-				unsigned char* sysex;
-				
+			while ((timeStamp = midiStream.PeekMessageTime()) == framesRendered) {							
 				{
+					DWORD msg;
+					DWORD sysex_len;
+					DWORD port;
+					unsigned char* sysex;
+
 					ScopeLock<Win32Lock> scopeLock(&synthLock);
 
 					midiStream.GetMessage(port, msg, sysex, sysex_len);
@@ -994,12 +1039,13 @@ namespace VSTMIDIDRV{
 		while (totalFrames > 0) {
 			DWORD timeStamp;
 			// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-			while ((timeStamp = midiStream.PeekMessageTime()) == framesRendered) {
-				DWORD msg;
-				DWORD sysex_len;
-				DWORD port;
-				unsigned char* sysex;
+			while ((timeStamp = midiStream.PeekMessageTime()) == framesRendered) {				
 				{
+					DWORD msg;
+					DWORD sysex_len;
+					DWORD port;
+					unsigned char* sysex;
+
 					ScopeLock<Win32Lock> scopeLock(&synthLock);
 
 					midiStream.GetMessage(port, msg, sysex, sysex_len);

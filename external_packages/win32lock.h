@@ -198,7 +198,7 @@ class ScopeLock {
 private:
 	T* _lock;
 public:
-	inline ScopeLock(T* lockObj) {
+	inline explicit ScopeLock(T* lockObj) {
 		_lock = lockObj;
 		_lock->lock();
 	}

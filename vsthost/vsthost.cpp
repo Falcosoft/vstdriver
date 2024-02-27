@@ -306,7 +306,7 @@ void MiniDump(EXCEPTION_POINTERS* ExceptionInfo)
 	_tcscpy(szPath + dwExeLen, szExeName);
 	dwExeLen += (DWORD)lstrlen(szExeName);
 	wsprintf(szPath + dwExeLen, _T(".%04d%02d%02d-%02d%02d%02d.mdmp"),
-		szExeName,
+		//szExeName,
 		st.wYear, st.wMonth, st.wDay,
 		st.wHour, st.wMinute, st.wSecond);
 	static HANDLE hFile;                    /* create the minidump file          */
@@ -387,11 +387,11 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 #pragma comment(lib,"Version.lib") 
 static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned int buffSize)
 {
-	DWORD               dwSize = 0;
+	DWORD dwSize = 0;
 	BYTE* pVersionInfo = NULL;
 	VS_FIXEDFILEINFO* pFileInfo = NULL;
-	UINT                pLenFileInfo = 0;
-	TCHAR tmpBuff[MAX_PATH];
+	UINT pLenFileInfo = 0;
+	TCHAR tmpBuff[MAX_PATH] = {0};
 
 	if(!filePath)
 		GetModuleFileName(NULL, tmpBuff, MAX_PATH);
@@ -449,7 +449,11 @@ static bool IsWinNT4()
 void resetInputEvents()
 {
 	for (unsigned int i = 0; i < inputEventList.position; i++)
-		if (inputEventList.events[i].ev.sysexEvent.type == kVstSysExType) free(inputEventList.events[i].ev.sysexEvent.sysexDump);
+		if (inputEventList.events[i].ev.sysexEvent.type == kVstSysExType && inputEventList.events[i].ev.sysexEvent.sysexDump)
+		{
+			free(inputEventList.events[i].ev.sysexEvent.sysexDump);
+			inputEventList.events[i].ev.sysexEvent.sysexDump = NULL;
+		}
 	
 	inputEventList.position = 0;
 	inputEventList.portMessageCount[0] = 0;
@@ -583,8 +587,7 @@ static BOOL settings_save(AEffect* pEffect)
 	BOOL retResult = FALSE;
 	long lResult;
 	DWORD dwType = REG_SZ;
-	HKEY hKey;
-	TCHAR vst_path[MAX_PATH] = { 0 };
+	HKEY hKey;	
 	ULONG size;
 	
 	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
@@ -603,6 +606,7 @@ static BOOL settings_save(AEffect* pEffect)
 		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
 		if (lResult == ERROR_SUCCESS && dwType == REG_SZ)
 		{
+			TCHAR vst_path[MAX_PATH] = { 0 };
 			RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
 			TCHAR* chrP = _tcsrchr(vst_path, '.'); // removes extension
 			if (chrP) chrP[0] = 0;
@@ -708,12 +712,13 @@ static void InitSimpleResetEvents()
 	resetVstEvents.numEvents = RESET_MIDIMSG_COUNT;
 	resetVstEvents.reserved = 0;
 	const int ChannelCount = 16;
+	const unsigned char ControllerStatus = 0xB0U;
 
 	for (int i = 0; i < ChannelCount; i++)
 	{
 		DWORD msg, index;		
 
-		msg = (0xB0 | i) | (0x40 << 8); //Sustain off		
+		msg = (ControllerStatus | i) | (0x40 << 8); //Sustain off		
 		index = i * 4;
 		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
 		resetMidiEvents[index].type = kVstMidiType;
@@ -721,7 +726,7 @@ static void InitSimpleResetEvents()
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
 		resetVstEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
 
-		msg = (0xB0 | i) | (0x7B << 8); //All Notes off
+		msg = (ControllerStatus | i) | (0x7B << 8); //All Notes off
 		index = i * 4 + 1;
 		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
 		resetMidiEvents[index].type = kVstMidiType;
@@ -729,7 +734,7 @@ static void InitSimpleResetEvents()
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
 		resetVstEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
 
-		msg = (0xB0 | i) | (0x79 << 8);  //All Controllers off
+		msg = (ControllerStatus | i) | (0x79 << 8);  //All Controllers off
 		index = i * 4 + 2;
 		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
 		resetMidiEvents[index].type = kVstMidiType;
@@ -737,7 +742,7 @@ static void InitSimpleResetEvents()
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;		
 		resetVstEvents.events[index] = (VstEvent*)&resetMidiEvents[index];
 
-		msg = (0xB0 | i) | (0x78 << 8);  //All Sounds off
+		msg = (ControllerStatus | i) | (0x78 << 8);  //All Sounds off
 		index = i * 4 + 3;
 		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
 		resetMidiEvents[index].type = kVstMidiType;
@@ -857,7 +862,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_INITDIALOG:
 		{			
-			effect = (AEffect*)lParam;
+			effect = reinterpret_cast<AEffect*>(lParam);
 
 			if (effect)
 			{
@@ -882,7 +887,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
 
 				TCHAR wText[18] = _T("VST Editor port ");
-				TCHAR intCnst[] = { 'A' + portNum };
+				TCHAR intCnst[] = { 'A' + (char)portNum };
 				_tcsncat_s(wText, intCnst, 1);
 
 				SetWindowText(hwnd, wText);
@@ -950,8 +955,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			SetForegroundWindow(hwnd);
 		}
 		break;
-	case WM_SIZE: //Fixes SC-VA display bug after parts section opened/closed
-		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+	case WM_SIZE: //Fixes SC-VA display bug after parts section opened/closed		
+		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		portNum = *(int*)effect->user;
 
 		if (effect && wParam == SIZE_RESTORED)
@@ -977,48 +982,55 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				if (!sameThread)
 				{
-					SetWindowPos(checkBoxWnd[portNum], NULL, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
-					if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
-						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+					if (checkBoxWnd[portNum])
+					{
+						SetWindowPos(checkBoxWnd[portNum], NULL, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
+						if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
+							SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+					}
 
-					SetWindowPos(buttonWnd[portNum], NULL, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
+					if(buttonWnd[portNum])
+						SetWindowPos(buttonWnd[portNum], NULL, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
 				}
 			}			
 		}
 		break;
 	case WM_TIMER:
-		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect)
 		{
-			portNum = *(int*)effect->user;
+			//portNum = *(int*)effect->user;
 			if (sameThread)
 			{
 				int sampleFrames = (int)(sample_rate * timerPeriodMS * 0.001);
 				float** samples = (float**)malloc(sizeof(float**) * effect->numOutputs);
-				for (int channel = 0; channel < effect->numOutputs; channel++) {
-					samples[channel] = (float*)malloc(sizeof(float*) * sampleFrames);
+				if (samples)
+				{
+					for (int channel = 0; channel < effect->numOutputs; channel++) {
+						samples[channel] = (float*)malloc(sizeof(float*) * sampleFrames);
+					}
+
+					effect->processReplacing(effect, samples, samples, sampleFrames); //ADLPlug's editor is frozen without this.
+					sample_pos += sampleFrames;
+
+					for (int channel = 0; channel < effect->numOutputs; channel++) {
+						free(samples[channel]);
+					}
+
+					free(samples);
 				}
-
-				effect->processReplacing(effect, samples, samples, sampleFrames); //ADLPlug's editor is frozen without this.
-				sample_pos += sampleFrames;
-
-				for (int channel = 0; channel < effect->numOutputs; channel++) {
-					free(samples[channel]);
-				}
-
-				free(samples);
 			}
 
 			effect->dispatcher(effect, effEditIdle, 0, 0, 0, 0);
 		}
 		break;
 	case WM_COMMAND:
-		effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		portNum = *(int*)effect->user;
 
 		if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)checkBoxWnd[portNum])
 		{
-			if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
+			if (checkBoxWnd[portNum] && SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
 				SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 			else
 				SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
@@ -1036,7 +1048,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_CLOSE:		
 		if ((wParam == 66 && lParam == 66) || sameThread) //because of JUCE framework editors prevent real closing except when driver quits. 
 		{		
-			effect = (AEffect*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+			effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 			portNum = *(int*)effect->user;
 
 			RECT rect;
@@ -1074,18 +1086,19 @@ struct audioMasterData
 };
 
 static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstInt32 index, VstIntPtr value, void* ptr, float opt)
-{
-	audioMasterData* data = NULL;
-	if (effect) data = (audioMasterData*)effect->user;
-
+{	
 	switch (opcode)
 	{
 	case audioMasterVersion:
 		return 2400;
 
 	case audioMasterCurrentId:
+	{
+		audioMasterData* data = NULL;
+		if (effect) data = static_cast<audioMasterData*>(effect->user);
 		if (data) return data->effect_number;
 		break;
+	}
 
 	case audioMasterGetTime: //Some VST requires this. E.g. Genny throws AV without this.  
 		vstTimeInfo.flags = kVstTransportPlaying | kVstNanosValid | kVstTempoValid | kVstTimeSigValid | kVstPpqPosValid;
@@ -1174,14 +1187,14 @@ struct MyDLGTEMPLATE : DLGTEMPLATE
 static unsigned __stdcall EditorThread(void* threadparam)
 {
 	MyDLGTEMPLATE vstiEditor;
-	AEffect* pEffect = (AEffect*)threadparam;
+	AEffect* pEffect = static_cast<AEffect*>(threadparam);	
 	vstiEditor.style = WS_POPUPWINDOW | WS_DLGFRAME | WS_MINIMIZEBOX | WS_SYSMENU | WS_CAPTION | DS_MODALFRAME | DS_CENTER;
 	
 	if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
 
-	CoInitialize(NULL);
+	HRESULT res = CoInitialize(NULL);
 	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
-	CoUninitialize();
+	if(res == S_OK) CoUninitialize();
 	
 	_endthreadex(0);
 	return 0;
@@ -1208,8 +1221,6 @@ bool getPluginMenuItem(int itemIndex, TCHAR* result, unsigned int buffSize)
 	long lResult;
 	DWORD dwType = REG_SZ;
 	HKEY hKey;
-	TCHAR vst_path[MAX_PATH] = { 0 };
-	TCHAR vst_title[MAX_PATH - 4] = { 0 };
 	ULONG size;
 
 	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
@@ -1226,9 +1237,11 @@ bool getPluginMenuItem(int itemIndex, TCHAR* result, unsigned int buffSize)
 		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
 		if (lResult == ERROR_SUCCESS && dwType == REG_SZ && size > 2)
 		{
+			TCHAR vst_path[MAX_PATH] = { 0 };
 			lResult =  RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
 			if (lResult == ERROR_SUCCESS) 
 			{
+				TCHAR vst_title[MAX_PATH - 4] = { 0 };
 				RegCloseKey(hKey);
 				
 				GetFileTitle(vst_path, vst_title, MAX_PATH - 4);				
@@ -1313,14 +1326,14 @@ void setSelectedSysExIndex(int index)
 
 
 LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{		
-	TCHAR tmpPath[MAX_PATH] = { 0 };
+{	
 	const int STILLRUNNING = 255;
 
 	switch (msg)
 	{
 	case WM_CREATE:
 		{			
+			TCHAR tmpPath[MAX_PATH] = { 0 };
 			pluginMenu = CreatePopupMenu();
 
 			for (int i = 0; i < MAX_PLUGINS; i++)
@@ -1335,7 +1348,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET, _T("Port A VST Dialog"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET + 1, _T("Port B VST Dialog"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_POPUP, (UINT)pluginMenu, _T("Switch Plugin"));
+			AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
@@ -1403,15 +1416,17 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		{
 			TCHAR tmpPath[MAX_PATH] = { 0 };			
 
-			GetWindowsDirectory(tmpPath, MAX_PATH);
-			_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\Readme.html"));
-			if(GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
+			if (GetWindowsDirectory(tmpPath, MAX_PATH))
 			{
-				GetWindowsDirectory(tmpPath, MAX_PATH);
-				_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\Readme.html"));
-			}	
-						
-			ShellExecute(hwnd, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+				_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\Readme.html"));
+				if (GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
+				{
+					if(GetWindowsDirectory(tmpPath, MAX_PATH))
+						_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\Readme.html"));
+				}
+
+				ShellExecute(hwnd, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+			}
 		}
 		break;
 	case WM_COMMAND:
@@ -1420,7 +1435,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			TCHAR versionBuff[MAX_PATH] = _T("MIDI client: ");
 			MSGBOXPARAMS params = {0};
 
-			if (wParam >= 0 && wParam < MAX_PLUGINS)
+			if ((int)wParam >= 0 && wParam < MAX_PLUGINS)
 			{
 				setSelectedPluginIndex((int)wParam);
 				return 0;

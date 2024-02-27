@@ -101,7 +101,7 @@ static TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
 }
 
 
-STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwParam1, DWORD dwParam2) {
+EXTERN_C LRESULT WINAPI DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwParam1, DWORD dwParam2) {
 
 	TCHAR fileversionBuff[32] = _T("Driver ");
 
@@ -117,11 +117,12 @@ STDAPI_(LONG) DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwP
 		if (driverCount == MAX_DRIVERS) {
 			return DRV_CANCEL;
 		} else {
-			for (driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
-				if (driverNum == MAX_DRIVERS) return DRV_CANCEL;				
+			for (driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {								
 				if (!drivers[driverNum].open) break;				
-			}
+			}			
 		}
+		
+		if (driverNum == MAX_DRIVERS) return DRV_CANCEL;
 		drivers[driverNum].open = true;
 		drivers[driverNum].clientCount = 0;
 		drivers[driverNum].hdrvr = hdrvr;
@@ -249,11 +250,11 @@ LONG OpenDriver(Driver *driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWO
 		return MMSYSERR_ALLOCATED;
 	} else {
 		int i;
-		for (i = 0; i < MAX_CLIENTS; i++) {
-			if (i == MAX_CLIENTS) return MMSYSERR_ALLOCATED;			
+		for (i = 0; i < MAX_CLIENTS; i++) {				
 			if (!driver->clients[i].allocated) break;			
 		}
 
+		if (i == MAX_CLIENTS) return MMSYSERR_ALLOCATED;
 		clientNum = i;
 	}
 	MIDIOPENDESC *desc = (MIDIOPENDESC *)dwParam1;
@@ -277,7 +278,7 @@ LONG CloseDriver(Driver *driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DW
 	return MMSYSERR_NOERROR;
 }
 
-STDAPI_(DWORD) modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
+EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
 	MIDIHDR *midiHdr;
 	Driver *driver = &drivers[uDeviceID];
 	DWORD instance;
