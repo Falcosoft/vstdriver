@@ -17,6 +17,7 @@
 
 #include "stdafx.h"
 #include <math.h>
+#include <commdlg.h>
 
 extern "C" { HINSTANCE hinst_vst_driver = 0; }
 
@@ -316,7 +317,16 @@ EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, 
 			}
 
 			if(!clientCounts) {
-				midiSynth.Close(false);
+				TCHAR exe_path[MAX_PATH] = {0};
+				TCHAR exe_title[MAX_PATH / 2] = {0};
+				
+				GetModuleFileName(NULL, exe_path, _countof(exe_path));
+				GetFileTitle(exe_path, exe_title, _countof(exe_title));
+				
+				//Always close fully if client is explorer. This can happen in Windows 2000's sidebar preview.
+				bool forceUnload = !_tcsicmp(exe_title,_T("Explorer.exe")) || !_tcsicmp(exe_title,_T("Explorer"));
+				
+				midiSynth.Close(forceUnload);
 				synthOpened = false;
 			}		
 

@@ -140,40 +140,49 @@
         </li>
         <li>
           <p><strong>System tray menu</strong>: Even if you do not select the 'Show VST dialog when port is activated' option you can still open (and close) VST editor dialogs with the help of the system tray menu. From this menu you can also send GM/GS/XG/GM2 SysEx reset messages to active VSTi plugin instances. This way you can set your preferred Midi mode or simply reset the plugin to corresponding defaults even if the used Midi client has no such feature.<br>
-            From version 2.2. you can also switch between pre-configured plugins from the tray menu. <br>
-        </p>
+            From version 2.2. you can also switch between pre-configured plugins from the tray menu. 
+            <br>           
+		 </p>
         </li>
       </ol>
-      <p>
-        <strong>
-          Storage of settings: </strong>
+	  <p>
+	  	<a name="advanced"><strong>Advanced settings:</strong></a>	  </p>
+	  <p>As of v2.4.0 some rare to be changed driver settings are placed on the Advanced tab of the configuration utility. They are listed here by their  name in the registry since in previous versions they could be changed only through the registry. On the Advanced tab these options are listed in the same order as here. </p>
+	  <ol>
+        <li>
+      <p><strong>EnableSinglePort32ChMode</strong>. Enabled by default so has a value of 1. When the driver used together with FSMP
+        it can accept the special 0xF5 xx MIDI port select messages sent by FSMP to select ports automatically. This way
+        the driver can open port B automatically (or vice versa port A when port B is selected as output port) when a 32-channel
+      MIDI file is detected by FSMP. You can disable this function if you set the value to 0. </p>
+	  </li>
+	  <li>
+      <p><strong>KeepDriverLoaded</strong>. This option defines if the driver should  stay loaded even if ports are closed or not. Originally the driver switched this option on internally only when  Roland's SC-VA plugin was detected since it takes long seconds to load/unload this plugin.With this option you can enable this behavior to be on/off regardless of the used plugin. The on state can be useful in case of some Midi/Multimedia players like Van Basco and WMP that always close Midi Out ports when playback is stopped and/or focus is lost (and thus the driver's tray menu also disappears). <br>
+The off state is somewhat more compatible and conform better to specification. </p>
+	  </li>
+		<li>
+		  <p><strong>UsePrivateAsioOnly</strong>. This option can be set during driver installation but you can change it anytime.<br>
+This option defines if the driver should use only the ASIO2WASAPI private plugin and ignore all other system-wide ASIO drivers or not.<br>
+This  is useful if you have problems with your standard ASIO driver(s) but you still would like to use WASAPI  output mode on Vista+. </p>
+		</li>
+		<li>
+		  <p><strong>HighDpiMode</strong>. This option sets the High DPI mode of the VST editor dialog(s) together with the embedded GUI
+		    of the plugins. <br>
+		    Since VST2 editors mostly do not handle high DPI at all the default is not DPI aware + GDI scaling in Win10 1809+.
+		    The default DPI mode is rather compatible but DPI mode can be changed the following way: </p>
+		  <p><em>System enhanced</em>: Windows enhanced GDI scaling (Win10 1809+). This is the default. Enhanced GDI scaling optimizations are mostly visible on fonts/texts and common controls (they are sharper). Unfortunately
+	      bitmaps cannot be scaled without blur.<br>
+		    <em>System</em>:   Windows normal scaling. This is the most compatible one but results in blurry texts.
+		    This is the default before Win10 1809 (Vista/7/8/10). <br>
+		    <em>Application</em>:  Plugin scaling. This is the least compatible option. Since VST2 editors cannot do
+		    scaling in 90% of cases this option most likely results in tiny editors on high DPI screens.		  </p>
+	    </li>
+		</ol>
+      <p>&nbsp;</p>
+      <p>        
+        <strong>Storage of settings:</strong>
       </p>
       <p>The driver settings are stored in the registry at <strong>HKEY_CURRENT_USER\Software\VSTi Driver</strong>. The plugin settings are stored
         in the plugin's folder with the same name as the plugin dll but with the extension of .set.</p>
-      <p> Some rare to be changed driver settings have no options available on the GUI but can be changed directly from the registry
-        if necessary:</p>
-      <p>1.
-        <strong>EnableSinglePort32ChMode</strong>. Enabled by default so has a value of 1. When the driver used together with FSMP
-        it can accept the special 0xF5 xx MIDI port select messages sent by FSMP to select ports automatically. This way
-        the driver can open port B automatically (or vice versa port A when port B is selected as output port) when a 32-channel
-        MIDI file is detected by FSMP. You can disable this function if you set the value to 0. </p>
-      <p>2.
-        <strong>HighDpiMode</strong>. This option sets the High DPI mode of the VST editor dialog together with the embedded GUI
-        of the plugin.
-        <br> Since VST2 editors mostly do not handle high DPI at all the default is not DPI aware + GDI scaling in Win10 1809+.
-        The default DPI mode is rather compatible but DPI mode can be changed the following way: </p>
-      <p>HighDpiMode: -5 (0xFFFFFFFB) = Windows enhanced GDI scaling (Win10 1809+). This is the default.
-        <br> HighDpiMode: -1 (0xFFFFFFFF) = Windows normal scaling. This is the most compatible one but results in blurry texts.
-        This is the default before Win10 1809 (Vista/7/8/10).
-        <br> HighDpiMode: -2 (0xFFFFFFFE) = Plugin scaling. This is the less compatible option. Since VST2 editors cannot do
-        scaling in 90% of cases this option most likely results in tiny editors.
-        <br> Enhanced GDI scaling optimizations are mostly visible on fonts/texts and common controls (they are sharper). Unfortunately
-        bitmaps cannot be scaled without blur.</p>
-      <p>3. <strong>UsePrivateAsioOnly</strong>. This option can be set during driver installation but you can change it anytime.<br>
-      This option defines if the driver should use only the ASIO2WASAPI private plugin and ignore all other system-wide ASIO drivers or not.<br> 
-      This  is useful if you have problems with your standard ASIO driver(s) but you still would like to use WASAPI  output mode on Vista+. </p>
-      <p>4. <strong>KeepDriverLoaded</strong>. This option defines if the driver should  stay loaded even if ports are closed or not. Originally the driver switched this option on internally only when  Roland's SC-VA plugin was detected since it takes long seconds to load/unload this plugin.With this option you can enable this behavior to be on/off regardless of the used plugin. The on state can be useful in case of some Midi/Multimedia players like Van Basco and WMP that always close Midi Out ports when playback is stopped and/or focus is lost (and thus the driver's tray menu also disappears). <br>
-      The off state is somewhat more compatible and conform better to specification. </p>
       <p>&nbsp;</p>
       <p>
         <strong>Brief history of the driver:</strong>

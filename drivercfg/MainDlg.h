@@ -71,6 +71,7 @@ public:
 	CView1 m_view1;
 	CView2 m_view2;
 	CView3 m_view3;
+	CView4 m_view4;
 	CButton alwaysOnTop;
 
 	virtual BOOL PreTranslateMessage(MSG* pMsg)
@@ -87,6 +88,7 @@ public:
 	END_UPDATE_UI_MAP()
 
 	BEGIN_MSG_MAP(CMainDlg)
+		MESSAGE_HANDLER(WM_HELP, OnHelp)
 		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialog)
 		MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
 		COMMAND_ID_HANDLER(IDOK, OnOK)
@@ -100,7 +102,14 @@ public:
 		//	LRESULT MessageHandler(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 		//	LRESULT CommandHandler(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 		//	LRESULT NotifyHandler(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOOL& /*bHandled*/)
-		
+	
+
+	LRESULT OnHelp(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+	{
+		BOOL dummy;
+		m_view4.OnButtonHelp(0, 0, m_hWnd, dummy);
+		return 1;
+	}
 
 	LRESULT OnInitDialog(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
@@ -128,7 +137,7 @@ public:
 			}
 				
 			ExitProcess(0);
-		}
+		}	
 		
 		// center the dialog on the screen
 		alwaysOnTop = GetDlgItem(IDC_ALWAYSONTOP);
@@ -147,20 +156,28 @@ public:
 		if (showWindowsMidiTab)
 		{
 			m_view2.Create(m_hWnd);
-		}
-
+		}		
 
 		m_view3.Create(m_hWnd);
+		
+		m_view4.Create(m_hWnd);
+
 		TCITEM tci = { 0 };
 		tci.mask = TCIF_TEXT;
+
 		tci.pszText = _T("VST settings");
 		m_ctrlTab.InsertItem(0, &tci, m_view1);
-		tci.pszText = _T("OutPut devices");
+		
+		tci.pszText = _T("Audio devices");		
 		m_ctrlTab.InsertItem(1, &tci, m_view3);
+
+		tci.pszText = _T("Advanced");
+		m_ctrlTab.InsertItem(2, &tci, m_view4);
+
 		if (showWindowsMidiTab)
 		{
-			tci.pszText = _T("Windows MIDI");
-			m_ctrlTab.InsertItem(2, &tci, m_view2);
+			tci.pszText = _T("MIDI");
+			m_ctrlTab.InsertItem(3, &tci, m_view2);
 			if (!IsWinVistaOrWin7()) m_view2.SetGroupBoxCaption(_T("Default MIDI Synth (through Coolsoft MIDI Mapper)"));
 		}
 

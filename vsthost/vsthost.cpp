@@ -16,7 +16,7 @@
 	#define SM_CXVIRTUALSCREEN  78
 	#define SM_CYVIRTUALSCREEN  79
 	#define ASFW_ANY    ((DWORD)-1)
-#endif 
+#endif
 
 #define WM_ICONMSG WM_APP + 1
 #define MAX_PLUGINS 10
@@ -379,7 +379,7 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 		Shell_NotifyIcon(NIM_DELETE, &nIconData);
 		DestroyMenu(trayMenu);
 		TerminateProcess(GetCurrentProcess(), 1);
-		return 1;
+		return EXCEPTION_EXECUTE_HANDLER;
 	}
 }
 
@@ -1516,7 +1516,7 @@ static unsigned __stdcall TrayThread(void* threadparam)
 	windowClass.lpfnWndProc = TrayWndProc;
 	windowClass.lpszClassName = _T("VSTHostUtilWindow");
 	
-	if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext((HANDLE) -2); //System aware
+	if (SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext((HANDLE)-2); //System aware
 
 	RegisterClass(&windowClass);
 	trayWndHandle = CreateWindowEx(WS_EX_TOOLWINDOW, windowClass.lpszClassName, _T("VSTTray"), WS_POPUP, 0, 0, 0, 0, 0, 0, GetModuleHandle(NULL), NULL);
@@ -1887,7 +1887,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		case Command::SetHighDpiMode: // Set DPI awareness mode for plugin's editor
 			{
-				highDpiMode = (HANDLE)(int)get_code();
+				highDpiMode = (HANDLE)(int)get_code(); //requires sign extension on 64-bit
 				put_code(Response::NoError);
 			}
 			break;

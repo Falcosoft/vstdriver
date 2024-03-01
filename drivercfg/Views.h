@@ -22,6 +22,11 @@
 	}
 #endif
 
+//we can store these pseudo handle types as DWORD. Sign extension to 64-bit on x64 can be made in vsthost.
+#define MYDPI_AWARENESS_CONTEXT_UNAWARE              ((DWORD)-1)
+#define MYDPI_AWARENESS_CONTEXT_SYSTEM_AWARE         ((DWORD)-2)
+#define MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED    ((DWORD)-5)
+
 #ifdef WIN64
 	TCHAR windowName[32] = _T("VSTi Driver Configuration (x64)");
 #else	
@@ -45,8 +50,12 @@ static BOOL isASIO = FALSE;
 static bool usingASIO = false;  
 static bool is4chMode = false;
 static bool isWinNT4 =  false;
+static bool asio2WasapiDetected = false;
 static DWORD portBOffsetVal = 2;
-static DWORD usePrivateAsioOnly = 0;
+static DWORD highDpiMode = 0;
+static DWORD usePrivateAsioOnly = (DWORD)-1;
+static DWORD enableSinglePort32ChMode = (DWORD)-1;
+static DWORD keepDriverLoaded = (DWORD)-1;
 static unsigned char SelectedPluginIndex = 0;
 
 
@@ -134,6 +143,8 @@ static BOOL IsASIO()
 		_tcscat_s(asio2WasapiPath, _T("\\ASIO2WASAPI_vstdrv.dll"));
 		if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
 		{
+			
+			asio2WasapiDetected = true;
 			LOADBASSASIOFUNCTION(BASS_ASIO_AddDevice);
 
 			char asio2WasapiAnsiPath[MAX_PATH] = { 0 };
@@ -304,10 +315,7 @@ class CView1 : public CDialogImpl<CView1>
 	CStatic vst_vendor, vst_effect, file_info;
 	CTrackBarCtrl volume_slider;
 	TCHAR vst_path[MAX_PATH];
-	HANDLE hbrBkgnd;
-	DWORD highDpiMode;
-	DWORD enableSinglePort32ChMode;
-	DWORD keepDriverLoaded;
+	HANDLE hbrBkgnd;	
 	int origDropdownWidth;
 	
 	VSTDriver * effect;
@@ -319,15 +327,9 @@ public:
 		volume_slider(),
 		vst_path(),
 		hbrBkgnd(),
-		highDpiMode(),
 		origDropdownWidth(),
 		effect()
 	{		
-		
-		enableSinglePort32ChMode = (DWORD)-1;
-		keepDriverLoaded = (DWORD)-1;
-
-		usePrivateAsioOnly = 0;		
 		isWinNT4 = IsWinNT4();
 		isASIO = IsASIO();
 		usingASIO = isASIO && LoadOutputDriver(_T("Driver Mode")).CompareNoCase(_T("Bass ASIO")) == 0;
@@ -443,8 +445,7 @@ public:
 			lResult = reg.QueryDWORDValue(_T("UsePrivateAsioOnly"), reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				usePrivateAsioOnly = reg_value;
-			}	
-
+			}
 
 
 			reg.Close();
@@ -738,10 +739,10 @@ public:
 				strcat_s(msg, "!");
 				::MessageBoxA(m_hWnd, msg, "VST MIDI Driver", MB_OK | MB_ICONERROR);
 			}
-			if(!highDpiMode) SaveDwordValue(_T("HighDpiMode"),(DWORD)-5); //set DPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED as default for VST editors;
+			if(!highDpiMode) SaveDwordValue(_T("HighDpiMode"), MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED); //set as default for VST editors;
 			if(enableSinglePort32ChMode == (DWORD)-1) SaveDwordValue(_T("EnableSinglePort32ChMode"), 1);
 			if(keepDriverLoaded == (DWORD)-1) SaveDwordValue(_T("KeepDriverLoaded"), 1);
-			if(IsVistaOrNewer()) SaveDwordValue(_T("UsePrivateAsioOnly"), usePrivateAsioOnly);
+			if(IsVistaOrNewer() && usePrivateAsioOnly == (DWORD)-1) SaveDwordValue(_T("UsePrivateAsioOnly"), 0);
 			
 			delete effect;
 			effect = NULL;
@@ -978,8 +979,8 @@ public:
 	{
 		TCHAR fileversionBuff[32] = { 0 };
 		effect = NULL;
-		BASS_ASIO_INFO info = {0};		
-
+		BASS_ASIO_INFO info = {0};	
+		
 		vst_sample_format = GetDlgItem(IDC_SAMPLEFORMAT);
 		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
 		vst_buffer_size = GetDlgItem(IDC_BUFFERSIZE);
@@ -1531,7 +1532,148 @@ public:
 
 };
 
+class CView4 : public CDialogImpl<CView4>
+{
+	CButton btnHelp, chk32ch, chkPrivAsio, chkKeepDriver;
+	CComboBox cmbHighDpi;	
 
+public:
+
+	CView4() : btnHelp(), chk32ch(), chkPrivAsio(), chkKeepDriver(), cmbHighDpi() {}
+
+	~CView4() {}
+
+	enum { IDD = IDD_ADVANCED };
+
+	BEGIN_MSG_MAP(CView4)
+		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView4)
+		COMMAND_ID_HANDLER(IDC_HELPBTN, OnButtonHelp)
+		COMMAND_HANDLER(IDC_32CHMODE, BN_CLICKED, OnBnClickedMulti)
+		COMMAND_HANDLER(IDC_PRIVATEASIO, BN_CLICKED, OnBnClickedMulti)
+		COMMAND_HANDLER(IDC_KEEPDRIVER, BN_CLICKED, OnBnClickedMulti)
+		COMMAND_HANDLER(IDC_HIGHDPI, CBN_SELCHANGE, OnCbnSelchangeHighDpi)
+	END_MSG_MAP()
+
+	LRESULT OnCbnSelchangeHighDpi(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		DWORD value;
+		TCHAR tmpBuff[32];
+		cmbHighDpi.GetWindowText(tmpBuff, 32);
+		
+		if (!_tcscmp(tmpBuff, _T("System"))) value = MYDPI_AWARENESS_CONTEXT_UNAWARE;
+		else if (!_tcscmp(tmpBuff, _T("System enhanced"))) value = MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED;
+		else if (!_tcscmp(tmpBuff, _T("Application"))) value = MYDPI_AWARENESS_CONTEXT_SYSTEM_AWARE;
+
+		SaveDwordValue(_T("HighDpiMode"), value);
+
+		return 0;
+	}
+
+	LRESULT OnInitDialogView4(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+	{
+		chk32ch = GetDlgItem(IDC_32CHMODE);
+		chkPrivAsio = GetDlgItem(IDC_PRIVATEASIO);
+		chkKeepDriver = GetDlgItem(IDC_KEEPDRIVER);
+		cmbHighDpi = GetDlgItem(IDC_HIGHDPI);
+
+		cmbHighDpi.AddString(_T("System"));
+		cmbHighDpi.AddString(_T("System enhanced"));
+		cmbHighDpi.AddString(_T("Application"));
+		if (GetProcAddress(GetModuleHandle(_T("user32.dll")), "SetThreadDpiAwarenessContext"))
+		{
+			switch (highDpiMode)
+			{
+				case MYDPI_AWARENESS_CONTEXT_UNAWARE:
+					cmbHighDpi.SelectString(-1, _T("System"));
+					break;
+				case MYDPI_AWARENESS_CONTEXT_SYSTEM_AWARE:
+					cmbHighDpi.SelectString(-1, _T("Application"));
+					break;
+				case MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED:
+					cmbHighDpi.SelectString(-1, _T("System enhanced"));
+					break;
+				default:
+					cmbHighDpi.SetCurSel(1);
+					break;
+			}
+		}
+		else
+		{
+			cmbHighDpi.SetCurSel(-1);
+			cmbHighDpi.EnableWindow(false);
+			GetDlgItem(IDC_STATIC_HIGHDPI).EnableWindow(false);
+		}
+					
+		chk32ch.SetCheck(enableSinglePort32ChMode);
+		
+		if (asio2WasapiDetected)
+			chkPrivAsio.SetCheck(usePrivateAsioOnly);
+		else
+			chkPrivAsio.EnableWindow(false);
+
+		chkKeepDriver.SetCheck(keepDriverLoaded);			
+
+		return TRUE;
+	}
+
+	LRESULT OnBnClickedMulti(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		switch (wID)
+		{
+			case IDC_32CHMODE:
+			{
+				enableSinglePort32ChMode = chk32ch.GetCheck();
+				SaveDwordValue(_T("EnableSinglePort32ChMode"), enableSinglePort32ChMode);
+				break;
+			}
+			case IDC_PRIVATEASIO:
+			{
+				usePrivateAsioOnly = chkPrivAsio.GetCheck();
+				SaveDwordValue(_T("UsePrivateAsioOnly"), usePrivateAsioOnly);
+				break;
+			}
+			case IDC_KEEPDRIVER:
+			{
+				keepDriverLoaded = chkKeepDriver.GetCheck();
+				SaveDwordValue(_T("KeepDriverLoaded"), keepDriverLoaded);
+				break;
+			}
+		}
+		
+		return 0;
+	}
+
+	LRESULT OnButtonHelp(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		TCHAR tmpPath[MAX_PATH] = { 0 };
+
+		if (GetWindowsDirectory(tmpPath, MAX_PATH))
+		{
+			//hack to skip to proper anchor in html when Help button is pressed on Advanced settings tab. 
+			if (wID)
+				_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\advredir.html"));
+			else 
+				_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\Readme.html"));
+
+			if (GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
+			{
+				if (GetWindowsDirectory(tmpPath, MAX_PATH))
+				{
+					//hack to skip to proper anchor in html when Help button is pressed on Advanced settings tab.
+					if(wID)
+						_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\advredir.html"));
+					else 
+						_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\Readme.html"));
+				}
+			}
+			
+			ShellExecute(hWndCtl, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+		}
+
+		return 1;		
+	}
+
+};
 
 class CView2 : public CDialogImpl<CView2>
 {
@@ -1548,8 +1690,8 @@ public:
 		apply(),
 		groupBox() {}
 
-	enum { IDD = IDD_ADVANCED };
-	BEGIN_MSG_MAP(CView1)
+	enum { IDD = IDD_MIDI };
+	BEGIN_MSG_MAP(CView2)
 		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView2)
 		COMMAND_ID_HANDLER(IDC_SNAPPLY, OnButtonApply)
 	END_MSG_MAP()
@@ -1575,7 +1717,7 @@ public:
 
 	}
 
-	/* These only work on Windows 6.1 and older (but not on XP...) */
+	/* These only work on Windows 6.1 and older (but not on XP). Coolsoft Midi Mapper has to be installed as a workaround on Win 6.2+*/
 	void set_midisynth_mapper()
 	{
 		CRegKeyEx reg;

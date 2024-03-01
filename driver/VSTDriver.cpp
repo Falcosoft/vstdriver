@@ -479,8 +479,8 @@ bool VSTDriver::process_create()
 	TCHAR CmdLine[MAX_PATH * 2];
 	_tcscpy_s(CmdLine, _countof(CmdLine), szCmdLine.c_str());
     
-	TCHAR exe_path[MAX_PATH];
-	TCHAR exe_title[MAX_PATH / 2];
+	TCHAR exe_path[MAX_PATH] = {0};
+	TCHAR exe_title[MAX_PATH / 2] = {0};
 #ifdef WIN64
 	TCHAR bitnessStr[8] = _T(" 64-bit");
 #else

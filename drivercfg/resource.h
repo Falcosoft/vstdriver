@@ -2,7 +2,6 @@
 // Microsoft Visual C++ generated include file.
 // Used by drivercfg.rc
 //
-
 #define IDD_ADVANCED                    102
 #define IDD_MAIN                        103
 #define IDI_DRIVERCFG                   107
@@ -10,6 +9,7 @@
 #define IDR_MAINFRAME                   128
 #define IDD_MAINDLG                     130
 #define IDD_SOUND                       131
+#define IDD_MIDI                        132
 #define IDC_SYNTHLIST                   1003
 #define IDC_SFAPPLY                     1004
 #define IDC_SNAPPLY                     1005
@@ -39,6 +39,12 @@
 #define IDC_STSF                        1032
 #define IDC_GROUPBOX2                   1033
 #define IDC_UNLOAD                      1034
+#define IDC_HELPBTN                     1035
+#define IDC_32CHMODE                    1036
+#define IDC_PRIVATEASIO                 1037
+#define IDC_KEEPDRIVER                  1038
+#define IDC_HIGHDPI                     1039
+#define IDC_STATIC_HIGHDPI              1040
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
@@ -48,7 +54,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        135
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1034
+#define _APS_NEXT_CONTROL_VALUE         1041
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif
