@@ -111,7 +111,7 @@ public:
 	void setChunk( const void * in, unsigned size );
 
 	// editor
-	bool hasEditor();
+	//bool hasEditor();
 	void displayEditorModal(unsigned int uDeviceID = 255);
 	void setHighDpiMode(unsigned int modeNum = 0);
 	void setSinglePort32ChMode();

@@ -4,6 +4,7 @@
 #include "stdafx.h"
 #include <process.h>
 #include "../version.h"
+#include "resource.h"
 
 // #define LOG_EXCHANGE
 // #define LOG
@@ -121,6 +122,8 @@ static VstMidiEvent resetMidiEvents[RESET_MIDIMSG_COUNT] = { 0 };
 	static TCHAR bitnessStr[8] = _T(" 32-bit");
 #endif
 
+LPTSTR* argv = NULL;
+
 static NOTIFYICONDATA nIconData = { 0 };
 static HMENU trayMenu = NULL;
 static HMENU pluginMenu = NULL;
@@ -133,6 +136,7 @@ static volatile bool doOwnReset = false;
 static bool driverResetRequested = false;
 static bool need_idle = false;
 static bool idle_started = false;
+static bool isYamahaPlugin = false;
 
 static HINSTANCE user32 = NULL;
 static HINSTANCE kernel32 = NULL;
@@ -146,8 +150,8 @@ static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 static HANDLE highDpiMode = NULL;
 
 static HWND editorHandle[2] = { NULL };
-static HANDLE threadHandle[2] = { NULL };
 static bool isPortActive[2] = { false };
+static bool alwaysUseHostEditor[2] = { false };
 static volatile DWORD destPort = PORT_ALL;
 
 static bool isSinglePort32Ch = false;
@@ -433,6 +437,8 @@ static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned int buffSi
 	return result;
 }
 
+#pragma warning(disable:28159)
+
 static bool IsWinNT4()
 {
 	OSVERSIONINFOEX osvi;
@@ -445,6 +451,8 @@ static bool IsWinNT4()
 		return true;
 	return false;
 }
+
+#pragma warning(default:28159)
 
 void resetInputEvents()
 {
@@ -516,15 +524,21 @@ uint32_t get_code()
 }
 
 void getChunk(AEffect* pEffect, std::vector<uint8_t>& out)
-{
+{	
+	uint32_t num_programs = pEffect->numPrograms;
+	uint32_t num_params = pEffect->numParams;
+	uint32_t orgProgramIndex = (uint32_t)pEffect->dispatcher(pEffect, effGetProgram, 0, 0, NULL, 0.0);
+	
 	out.resize(0);
 	uint32_t unique_id = pEffect->uniqueID;
 	append_be(out, unique_id);
 	bool type_chunked = !!(pEffect->flags & effFlagsProgramChunks);
 	append_be(out, type_chunked);
 	if (!type_chunked)
-	{
-		uint32_t num_params = pEffect->numParams;
+	{		
+		if (num_programs > 1 && orgProgramIndex > 0)
+			pEffect->dispatcher(pEffect, effSetProgram, 0, 0, NULL, 0.0);
+
 		append_be(out, num_params);
 		for (unsigned i = 0; i < num_params; ++i)
 		{
@@ -541,6 +555,27 @@ void getChunk(AEffect* pEffect, std::vector<uint8_t>& out)
 		out.resize(chunk_size + size);
 		if (size) memcpy(&out[chunk_size], chunk, size);
 	}
+	
+	if (num_programs > 1) 
+	{
+		append_be(out, (uint32_t)'VstD'); //From now on in case of more programs we save all programs. These new markers are for file version check. 
+		append_be(out, (uint32_t)'Ver2');
+		append_be(out, num_programs);			
+		append_be(out, orgProgramIndex);
+		if (!type_chunked)
+		{			
+			for (unsigned j = 1; j < num_programs; ++j)
+			{
+				pEffect->dispatcher(pEffect, effSetProgram, 0, j, NULL, 0.0);
+				for (unsigned i = 0; i < num_params; ++i)
+				{
+					float parameter = pEffect->getParameter(pEffect, i);
+					append_be(out, parameter);
+				}
+			}
+			pEffect->dispatcher(pEffect, effSetProgram, 0, orgProgramIndex, NULL, 0.0);
+		}		
+	}
 }
 
 void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
@@ -553,6 +588,10 @@ void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
 #else
 		const uint8_t* inc = in.data();
 #endif
+		uint32_t num_programs = pEffect->numPrograms;		
+		uint32_t orgProgramIndex = (uint32_t)pEffect->dispatcher(pEffect, effGetProgram, 0, 0, NULL, 0.0);
+		uint32_t num_params;
+
 		uint32_t effect_id;
 		retrieve_be(effect_id, inc, size);
 		if (effect_id != pEffect->uniqueID) return;
@@ -560,10 +599,13 @@ void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
 		retrieve_be(type_chunked, inc, size);
 		if (type_chunked != !!(pEffect->flags & effFlagsProgramChunks)) return;
 		if (!type_chunked)
-		{
-			uint32_t num_params;
+		{			
 			retrieve_be(num_params, inc, size);
 			if (num_params != pEffect->numParams) return;
+
+			if (num_programs > 1 && orgProgramIndex > 0)
+				pEffect->dispatcher(pEffect, effSetProgram, 0, 0, NULL, 0.0);
+
 			for (unsigned i = 0; i < num_params; ++i)
 			{
 				float parameter;
@@ -577,7 +619,41 @@ void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
 			retrieve_be(chunk_size, inc, size);
 			if (chunk_size > size) return;
 			pEffect->dispatcher(pEffect, effSetChunk, 0, chunk_size, (void*)inc, 0);
+			size -= chunk_size;
+			inc += chunk_size;
 		}
+
+		if (num_programs > 1 && size >= (sizeof(uint32_t) * 4))
+		{
+			uint32_t verMarker;
+			uint32_t nPrograms;
+			uint32_t orgIndex;
+
+			retrieve_be(verMarker, inc, size);
+			if (verMarker != (uint32_t)'VstD') return;
+			retrieve_be(verMarker, inc, size);
+			if (verMarker != (uint32_t)'Ver2') return;
+			retrieve_be(nPrograms, inc, size);
+			if (nPrograms != num_programs) return;
+			retrieve_be(orgIndex, inc, size);
+
+			if (!type_chunked)
+			{				
+				for (unsigned j = 1; j < num_programs; ++j)
+				{
+					pEffect->dispatcher(pEffect, effSetProgram, 0, j, NULL, 0.0);
+					for (unsigned i = 0; i < num_params; ++i)
+					{
+						float parameter;
+						retrieve_be(parameter, inc, size);
+						pEffect->setParameter(pEffect, i, parameter);
+					}
+				}				
+			}
+
+			pEffect->dispatcher(pEffect, effSetProgram, 0, orgIndex, NULL, 0.0);
+		}
+		
 	}
 }
 
@@ -585,52 +661,29 @@ void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
 static BOOL settings_save(AEffect* pEffect)
 {
 	BOOL retResult = FALSE;
-	long lResult;
-	DWORD dwType = REG_SZ;
-	HKEY hKey;	
-	ULONG size;
-	
-	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
-	if (lResult == ERROR_SUCCESS)
+
+	TCHAR vst_path[MAX_PATH] = { 0 };
+	_tcscpy_s(vst_path, argv[1]);
+	TCHAR* chrP = _tcsrchr(vst_path, '.'); // removes extension
+	if (chrP) chrP[0] = 0;
+	_tcscat_s(vst_path, _T(".set"));
+
+	HANDLE fileHandle = CreateFile(vst_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if (fileHandle != INVALID_HANDLE_VALUE)
 	{
-		TCHAR szValueName[20] = _T("plugin");
-		DWORD selIndex = 0;
-		size = sizeof(selIndex);
-		lResult = RegQueryValueEx(hKey, _T("SelectedPlugin"), NULL, &dwType, (LPBYTE)&selIndex, &size);
-		if (lResult == ERROR_SUCCESS && selIndex)
-		{
-			TCHAR szPostfix[12] = { 0 };
-			_tcscat_s(szValueName, _itot(selIndex, szPostfix, 10));
-		}
-
-		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
-		if (lResult == ERROR_SUCCESS && dwType == REG_SZ)
-		{
-			TCHAR vst_path[MAX_PATH] = { 0 };
-			RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
-			TCHAR* chrP = _tcsrchr(vst_path, '.'); // removes extension
-			if (chrP) chrP[0] = 0;
-			_tcscat_s(vst_path, _T(".set"));
-
-			HANDLE fileHandle = CreateFile(vst_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-			if (fileHandle != INVALID_HANDLE_VALUE)
-			{
-				std::vector<uint8_t> chunk;
-				if (pEffect) getChunk(pEffect, chunk);
+		DWORD size;
+		std::vector<uint8_t> chunk;
+		if (pEffect) getChunk(pEffect, chunk);
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
 
-				if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);
+		if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);
 #else
 
-				if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
+		if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
 #endif
 
-				CloseHandle(fileHandle);
-			}
-
-		}
-		RegCloseKey(hKey);
+		CloseHandle(fileHandle);
 	}
 
 	return retResult;
@@ -844,6 +897,302 @@ static void SendOwnReset(DWORD portNum)
 	doOwnReset = false;
 }
 
+INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	AEffect* effect;
+	static VstInt16 extraHeight[2] = { 0, 0 };
+	static bool sameThread = true;
+	static HWND checkBoxWnd[2] = { NULL, NULL };
+	static HWND buttonWnd[2] = { NULL, NULL };
+	static HWND button2Wnd[2] = { NULL, NULL };
+	static HWND savedHandle[2] = { NULL, NULL };
+	static HFONT hFont[2] = { NULL, NULL };	
+	static bool alwaysOnTop[2] = { true, true };
+	static float dpiMul;
+	static int sliderMax = 1000;	
+
+	HWND parametersListBox = GetDlgItem(hwnd, IDC_LIST1);
+	HWND programsListBox = GetDlgItem(hwnd, IDC_LIST2);
+	HWND valueSlider = GetDlgItem(hwnd, IDC_SLIDER_VAL);
+	HWND valueText = GetDlgItem(hwnd, IDC_STATIC_VAL);
+
+	int portNum = 0;
+
+	switch (msg)
+	{
+	case WM_INITDIALOG:
+		{
+			effect = reinterpret_cast<AEffect*>(lParam);
+			if (effect)
+			{
+				ScopeLock<Win32Lock> scopeLock(&dialogLock);
+
+				/*
+				falco:
+				DPI adjustment for NT4/W2K/XP that do not use DPI virtualization but can use large font (125% - 120 DPI) and actually all other DPI settings.
+				96 DPI is 100%. There is no separate DPI for X/Y on Windows.
+				Since we have no DPI Aware manifest on Vista+ DPI virtualization is used.
+				It's better than setting DPI awareness to true since allmost all VST 2.0 Editors know nothing about DPI scaling. So we let modern Windows handle this.
+				*/
+				HDC screen = GetDC(0);
+				dpiMul = (float)(GetDeviceCaps(screen, LOGPIXELSY)) / 96.0f;
+				ReleaseDC(0, screen);
+
+				portNum = *(int*)effect->user;
+
+				isPortActive[portNum] = true;
+				savedHandle[portNum] = editorHandle[portNum];
+				editorHandle[portNum] = hwnd;
+
+				SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
+
+#pragma warning(disable:4838) //fake warning even after casting
+				TCHAR wText[18] = _T("VST Editor port ");
+				TCHAR intCnst[] = { 'A' + static_cast<char>(portNum) };
+#pragma warning(default:4838)
+
+				_tcsncat_s(wText, intCnst, 1);
+
+				SetWindowText(hwnd, wText);
+
+				if (GetCurrentThreadId() != MainThreadId)
+				{
+					extraHeight[portNum] = (int)(16 * dpiMul);
+					sameThread = false;
+				}
+
+				int xPos = 0xFFFFFF; //16M not likely to be real window position
+				int yPos = 0xFFFFFF;
+				getEditorPosition(portNum, xPos, yPos);
+
+				RECT eRect;
+				GetWindowRect(hwnd, &eRect);
+				int width = eRect.right - eRect.left;
+				int height = eRect.bottom - eRect.top + extraHeight[portNum];
+
+				if (xPos == 0xFFFFFF || yPos == 0xFFFFFF)
+					SetWindowPos(hwnd, HWND_TOP, 0, 0, width, height, SWP_NOMOVE);
+				else
+					SetWindowPos(hwnd, HWND_TOP, xPos, yPos, width, height, 0);
+
+				if (!sameThread)
+				{
+					LOGFONT lf = { 0 };	
+
+					GetClientRect(hwnd, &eRect);
+					width = eRect.right - eRect.left;
+					height = eRect.bottom - eRect.top;
+
+					checkBoxWnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Always on Top"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), height - (int)(23 * dpiMul), (int)(90 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+					if (alwaysOnTop[portNum]) SendMessage(checkBoxWnd[portNum], BM_SETCHECK, BST_CHECKED, 0);
+
+					buttonWnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Save Settings"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(84 * dpiMul), height - (int)(24 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+					button2Wnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Switch UI"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, (int)(100 * dpiMul), height - (int)(24 * dpiMul), (int)(68 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+					
+					GetObject(GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf);
+					hFont[portNum] = CreateFontIndirect(&lf);
+					SendMessage(checkBoxWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
+					SendMessage(buttonWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
+					SendMessage(button2Wnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
+					if (!(effect->flags & effFlagsHasEditor)) EnableWindow(button2Wnd[portNum], FALSE);
+
+					if (alwaysOnTop[portNum]) 
+						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+					else
+						SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+				}
+
+				////								
+				int numProgs = effect->numPrograms;
+				int numParams = effect->numParams;
+				int orgProgramIndex = (int)effect->dispatcher(effect, effGetProgram, 0, 0, NULL, 0.0);
+				char tmpName[48] = { 0 };							
+				
+				SetWindowTextA(GetDlgItem(hwnd, IDC_STATIC_PLUGIN), product_string);
+				
+				SendMessage(parametersListBox, WM_SETREDRAW, FALSE, 0); //speeds up ListBox drawing
+				for (int i = 0; i < numParams; i++)
+				{					
+					effect->dispatcher(effect, effGetParamName, i, 0, tmpName, 0.0);
+					
+					char tmpBuff[56] = { 0 };
+					char prefix[6] = { 0 };
+					_itoa_s(i, prefix, 10);
+					strncpy_s(tmpBuff, prefix, sizeof(prefix));
+					strncat_s(tmpBuff, ". ", 2);
+					strncat_s(tmpBuff, tmpName, sizeof(tmpName));
+					
+					SendMessageA(parametersListBox, LB_ADDSTRING, 0, (LPARAM)tmpBuff);
+				}
+				SendMessage(parametersListBox, WM_SETREDRAW, TRUE, 0);
+				
+				//////////			
+				
+				SendMessage(programsListBox, WM_SETREDRAW, FALSE, 0); //speeds up ListBox drawing
+				if (effect->dispatcher(effect, effGetProgramNameIndexed, 0, 0, tmpName, 0.0) != 0)
+				{					
+					char tmpBuff[56] = { 0 };
+					char prefix[6] = { 0 };
+
+					strncpy_s(tmpBuff, "0. ", 3);
+					strncat_s(tmpBuff, tmpName, sizeof(tmpName));
+
+					SendMessageA(programsListBox, LB_ADDSTRING, 0, (LPARAM)tmpBuff);
+
+					for (int i = 1; i < numProgs; i++)
+					{						
+						effect->dispatcher(effect, effGetProgramNameIndexed, i, 0, tmpName, 0.0);
+						_itoa_s(i, prefix, 10);
+						strncpy_s(tmpBuff, prefix, sizeof(prefix));
+						strncat_s(tmpBuff, ". ", 2);
+						strncat_s(tmpBuff, tmpName, sizeof(tmpName));
+
+						SendMessageA(programsListBox, LB_ADDSTRING, 0, (LPARAM)tmpBuff);
+					}
+				}
+				else
+				{					
+					for (int i = 0; i < numProgs; i++)
+					{
+						effect->dispatcher(effect, effSetProgram, 0, i, NULL, 0.0);
+						effect->dispatcher(effect, effGetProgramName, 0, 0, tmpName, 0.0);
+
+						char tmpBuff[56] = { 0 };
+						char prefix[6] = { 0 };
+						_itoa_s(i, prefix, 10);
+						strncpy_s(tmpBuff, prefix, sizeof(prefix));
+						strncat_s(tmpBuff, ". ", 2);
+						strncat_s(tmpBuff, tmpName, sizeof(tmpName));
+
+						SendMessageA(programsListBox, LB_ADDSTRING, 0, (LPARAM)tmpBuff);
+					}					
+				}				
+				SendMessage(programsListBox, WM_SETREDRAW, TRUE, 0);
+
+				effect->dispatcher(effect, effSetProgram, 0, orgProgramIndex, NULL, 0.0);
+				SendMessage(programsListBox, LB_SETCURSEL, orgProgramIndex, 0);
+
+				SendMessage(valueSlider, TBM_SETRANGEMIN, FALSE, 0);
+				SendMessage(valueSlider, TBM_SETRANGEMAX, FALSE, sliderMax);
+				SendMessage(valueSlider, TBM_SETTICFREQ, sliderMax / 2, 0);
+				SendMessage(valueSlider, TBM_SETLINESIZE, 0, 1);
+				SendMessage(valueSlider, TBM_SETPAGESIZE, 0, 10);
+				SendMessage(valueSlider, TBM_SETPOS, TRUE, sliderMax / 2);
+			}
+
+			SetForegroundWindow(hwnd);				
+		}
+		break;
+	case WM_VSCROLL:
+		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+		if (lParam == (LPARAM)valueSlider)
+		{
+			int selectedIndex = (int)SendMessage(parametersListBox, LB_GETCURSEL, 0, 0);
+			if (selectedIndex >= 0)
+			{
+				int selectedValue = (int)SendMessage(valueSlider, TBM_GETPOS, 0, 0);
+				effect->setParameter(effect, selectedIndex, (1000 - selectedValue) / 1000.0f);
+				PostMessage(hwnd, WM_COMMAND, LBN_SELCHANGE << 16 | 0, (LPARAM)parametersListBox);
+			}
+		}		
+
+		break;
+	case WM_COMMAND:
+		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+		portNum = *(int*)effect->user;
+
+		if (HIWORD(wParam) == LBN_SELCHANGE && lParam == (LPARAM)programsListBox)
+		{
+			int selectedIndex = (int)SendMessage(programsListBox, LB_GETCURSEL, 0, 0);
+			if (selectedIndex >= 0) 
+			{
+				effect->dispatcher(effect, effSetProgram, 0, selectedIndex, NULL, 0.0);
+				PostMessage(hwnd, WM_COMMAND, LBN_SELCHANGE << 16 | IDC_LIST1, (LPARAM)parametersListBox);
+			}
+		}
+		else if (HIWORD(wParam) == LBN_SELCHANGE && lParam == (LPARAM)parametersListBox)
+		{
+			int selectedIndex = (int)SendMessage(parametersListBox, LB_GETCURSEL, 0, 0);
+			if (selectedIndex >= 0)
+			{
+				char dispBuff[64] = { 0 };
+				char unitBuff[32] = { 0 };
+				
+				float param = effect->getParameter(effect, selectedIndex);
+				if(LOWORD(wParam) == IDC_LIST1) SendMessage(valueSlider, TBM_SETPOS, TRUE,(LPARAM)(1000 - int(param * 1000)));
+
+				effect->dispatcher(effect, effGetParamDisplay, selectedIndex, 0, (void*)dispBuff, 0.0);
+				effect->dispatcher(effect, effGetParamLabel, selectedIndex, 0, (void*)unitBuff, 0.0);
+				
+				strcat_s(dispBuff, " ");
+				strcat_s(dispBuff, unitBuff);
+				if (dispBuff[0] == '\0' || dispBuff[0] == ' ') wsprintfA(dispBuff, "%d", int(param * 1000));
+				SetWindowTextA(valueText, dispBuff);
+			}		
+
+		}
+		else if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)checkBoxWnd[portNum])
+		{
+			bool checked = SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED;
+			alwaysOnTop[portNum] = checked;
+
+			if (checkBoxWnd[portNum] && checked)
+				SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+			else
+				SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+			
+		}
+		else if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)buttonWnd[portNum])
+		{
+			if (!settings_save(effect)) MessageBox(hwnd, _T("Cannot save plugin settings!\r\nMaybe you do not have permission to write plugin's folder \r\nor the plugin has nothing to save."), _T("VST MIDI Driver"), MB_OK | MB_ICONERROR);
+			else MessageBox(hwnd, _T("Plugin settings have been saved successfully!"), _T("VST MIDI Driver"), MB_OK | MB_ICONINFORMATION);
+			
+		}
+		else if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)button2Wnd[portNum])
+		{
+			RECT rect;
+			GetWindowRect(hwnd, &rect);
+			setEditorPosition(portNum, rect.left, rect.top);			
+
+			if (hFont[portNum]) DeleteObject(hFont[portNum]);
+			editorHandle[portNum] = savedHandle[portNum];
+			EndDialog(hwnd, IDOK);
+
+			alwaysUseHostEditor[portNum] = !alwaysUseHostEditor[portNum];
+			PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)(PORT_MENU_OFFSET + portNum), 0);
+			
+		}
+		break;
+	case WM_CLOSE:
+		{
+			if ((wParam  && lParam) || sameThread) 
+			{
+				effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+				portNum = *(int*)effect->user;
+
+				RECT rect;
+				GetWindowRect(hwnd, &rect);
+				setEditorPosition(portNum, rect.left, rect.top);
+				
+				if (hFont[portNum]) DeleteObject(hFont[portNum]);
+				editorHandle[portNum] = savedHandle[portNum];
+				if (editorHandle[portNum] != NULL) SendMessageTimeout(editorHandle[portNum], WM_CLOSE, TRUE, TRUE, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
+				EndDialog(hwnd, IDOK);
+			}
+			else
+			{
+				ShowWindow(hwnd, SW_HIDE);
+				return 0;
+			}
+		}
+	case WM_DESTROY:
+		if (!sameThread) PostQuitMessage(0);
+		break;
+	}
+
+	return 0;
+}
+
 INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 
@@ -852,6 +1201,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	static bool sameThread = true;
 	static HWND checkBoxWnd[2] = { NULL, NULL };
 	static HWND buttonWnd[2] = { NULL, NULL };
+	static HWND button2Wnd[2] = { NULL, NULL };
 	static HFONT hFont[2] = { NULL, NULL };
 	static float dpiMul;
 	static int timerPeriodMS = 30;
@@ -886,8 +1236,11 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 				SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
 
+#pragma warning(disable:4838) //fake warning even after casting
 				TCHAR wText[18] = _T("VST Editor port ");
-				TCHAR intCnst[] = { 'A' + (char)portNum };
+				TCHAR intCnst[] = { 'A' + static_cast<char>(portNum) };
+#pragma warning(default:4838)
+
 				_tcsncat_s(wText, intCnst, 1);
 
 				SetWindowText(hwnd, wText);
@@ -898,7 +1251,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					sameThread = false;
 				}
 
-				SetTimer(hwnd, 1, timerPeriodMS, 0);
+				SetTimer(hwnd, 1, timerPeriodMS, NULL);
 				ERect* eRect = NULL;
 				effect->dispatcher(effect, effEditGetRect, 0, 0, &eRect, 0); // dummy call in order S-YXG50 debug panel mode to work...
 				effect->dispatcher(effect, effEditOpen, 0, 0, hwnd, 0);
@@ -908,10 +1261,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{
 					int width = eRect->right - eRect->left;
 					int height = eRect->bottom - eRect->top + extraHeight[portNum];
-					if (width < (int)(200 * dpiMul))
-						width = (int)(200 * dpiMul);
-					if (height < (int)(50 * dpiMul))
-						height = (int)(50 * dpiMul);
+					if (width < (int)(260 * dpiMul))
+						width = (int)(260 * dpiMul);
+					if (height < (int)(80 * dpiMul))
+						height = (int)(80 * dpiMul);
 					RECT wRect;
 					SetRect(&wRect, 0, 0, width, height);
 					AdjustWindowRectEx(&wRect, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
@@ -932,15 +1285,17 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					{
 						LOGFONT lf = { 0 };
 
-						checkBoxWnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Always on Top"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+						checkBoxWnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Always on Top"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(90 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 						SendMessage(checkBoxWnd[portNum], BM_SETCHECK, BST_CHECKED, 0);
 
 						buttonWnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Save Settings"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+						button2Wnd[portNum] = CreateWindowEx(NULL, _T("BUTTON"), _T("Switch UI"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, (int)(100 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(68 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 
 						GetObject(GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf);
 						hFont[portNum] = CreateFontIndirect(&lf);
 						SendMessage(checkBoxWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
 						SendMessage(buttonWnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
+						SendMessage(button2Wnd[portNum], WM_SETFONT, (WPARAM)hFont[portNum], TRUE);
 
 						SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 					}
@@ -952,7 +1307,8 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					}					
 				}
 			}
-			SetForegroundWindow(hwnd);
+			
+			SetForegroundWindow(hwnd);			
 		}
 		break;
 	case WM_SIZE: //Fixes SC-VA display bug after parts section opened/closed		
@@ -969,10 +1325,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			{
 				int width = eRect->right - eRect->left;
 				int height = eRect->bottom - eRect->top + extraHeight[portNum];
-				if (width < (int)(200 * dpiMul))
-					width = (int)(200 * dpiMul);
-				if (height < (int)(50 * dpiMul))
-					height = (int)(50 * dpiMul);
+				if (width < (int)(260 * dpiMul))
+					width = (int)(260 * dpiMul);
+				if (height < (int)(80 * dpiMul))
+					height = (int)(80 * dpiMul);
 				RECT wRect;
 				SetRect(&wRect, 0, 0, width, height);
 				AdjustWindowRectEx(&wRect, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
@@ -984,13 +1340,16 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{
 					if (checkBoxWnd[portNum])
 					{
-						SetWindowPos(checkBoxWnd[portNum], NULL, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(100 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
+						SetWindowPos(checkBoxWnd[portNum], NULL, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(90 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
 						if (SendMessage(checkBoxWnd[portNum], BM_GETCHECK, 0, 0) == BST_CHECKED)
 							SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 					}
 
 					if(buttonWnd[portNum])
 						SetWindowPos(buttonWnd[portNum], NULL, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
+					
+					if (button2Wnd[portNum])
+						SetWindowPos(button2Wnd[portNum], NULL, (int)(100 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(68 * dpiMul), (int)(20 * dpiMul), SWP_NOZORDER);
 				}
 			}			
 		}
@@ -999,7 +1358,11 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect)
 		{
-			//portNum = *(int*)effect->user;
+			portNum = *(int*)effect->user;
+
+#pragma warning(disable:6385) //false buffer alarms
+#pragma warning(disable:6386) 
+
 			if (sameThread)
 			{
 				int sampleFrames = (int)(sample_rate * timerPeriodMS * 0.001);
@@ -1021,7 +1384,11 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 			}
 
-			effect->dispatcher(effect, effEditIdle, 0, 0, 0, 0);
+#pragma warning(default:6385)  
+#pragma warning(default:6386) 
+
+			if(editorHandle[portNum])
+				effect->dispatcher(effect, effEditIdle, 0, 0, 0, 0);
 		}
 		break;
 	case WM_COMMAND:
@@ -1034,19 +1401,64 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 			else
 				SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
-
-			return 0;
+			
 		}
 		else if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)buttonWnd[portNum])
 		{
 			if (!settings_save(effect)) MessageBox(hwnd, _T("Cannot save plugin settings!\r\nMaybe you do not have permission to write plugin's folder \r\nor the plugin has nothing to save."), _T("VST MIDI Driver"), MB_OK | MB_ICONERROR);
 			else MessageBox(hwnd, _T("Plugin settings have been saved successfully!"), _T("VST MIDI Driver"), MB_OK | MB_ICONINFORMATION);
+			
+		}
+		else if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)button2Wnd[portNum])
+		{
+			BOOL IsYamahaWritten = false;
+			if (isYamahaPlugin)
+			{
+				TCHAR vst_path[MAX_PATH] = { 0 };
+				_tcscpy_s(vst_path, argv[1]);
+				TCHAR* chrP = _tcsrchr(vst_path, '.'); // removes extension
+				if (chrP) chrP[0] = 0;
+				_tcscat_s(vst_path, _T(".ini"));
 
-			return 0;
+				BOOL isDebugPanel = (BOOL)GetPrivateProfileInt(_T("SYXG50"), _T("DebugPanel"), 0, vst_path);
+				isDebugPanel = !isDebugPanel;
+				if(isDebugPanel)
+					IsYamahaWritten = WritePrivateProfileString(_T("SYXG50"), _T("DebugPanel"), _T("1"), vst_path);
+				else
+					IsYamahaWritten = WritePrivateProfileString(_T("SYXG50"), _T("DebugPanel"), _T("0"), vst_path);
+				
+				if (IsYamahaWritten) 
+				{
+					RECT rect;
+					GetWindowRect(hwnd, &rect);
+					setEditorPosition(portNum, rect.left, rect.top);
+
+					KillTimer(hwnd, 1);
+					if (effect)
+					{
+						effect->dispatcher(effect, effEditClose, 0, 0, 0, 0);
+						editorHandle[portNum] = 0;
+					}
+
+					if (hFont[portNum]) DeleteObject(hFont[portNum]);
+					EndDialog(hwnd, IDOK);
+
+					PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)(PORT_MENU_OFFSET + portNum), TRUE);
+				}
+			}
+			
+			if (!IsYamahaWritten)
+			{
+				ShowWindow(hwnd, SW_HIDE);
+
+				alwaysUseHostEditor[portNum] = !alwaysUseHostEditor[portNum];
+				PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)(PORT_MENU_OFFSET + portNum), TRUE);
+			}
+						
 		}
 		break;
 	case WM_CLOSE:		
-		if ((wParam == 66 && lParam == 66) || sameThread) //because of JUCE framework editors prevent real closing except when driver quits. 
+		if ((wParam && lParam) || sameThread) //because of JUCE framework editors prevent real closing except when driver quits. 
 		{		
 			effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 			portNum = *(int*)effect->user;
@@ -1055,20 +1467,16 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			GetWindowRect(hwnd, &rect);
 			setEditorPosition(portNum, rect.left, rect.top);
 
-			KillTimer(hwnd, 1);
-			if (effect)
-			{
-				effect->dispatcher(effect, effEditClose, 0, 0, 0, 0);
-				editorHandle[portNum] = 0;
-			}
-
+			KillTimer(hwnd, 1);				
+			editorHandle[portNum] = 0;
+			effect->dispatcher(effect, effEditClose, 0, 0, 0, 0);				
+			
 			if (hFont[portNum]) DeleteObject(hFont[portNum]);
 			EndDialog(hwnd, IDOK);
 		}
 		else 
 		{
-			ShowWindow(hwnd, SW_HIDE);
-			return 0;
+			ShowWindow(hwnd, SW_HIDE);			
 		}
 
 		break;
@@ -1184,35 +1592,43 @@ struct MyDLGTEMPLATE : DLGTEMPLATE
 };
 
 #pragma comment(lib, "Winmm")
-static unsigned __stdcall EditorThread(void* threadparam)
+static void EditorThread(void* threadparam)
 {
 	MyDLGTEMPLATE vstiEditor;
 	AEffect* pEffect = static_cast<AEffect*>(threadparam);	
+	int portNum = *(int*)pEffect->user;
 	vstiEditor.style = WS_POPUPWINDOW | WS_DLGFRAME | WS_MINIMIZEBOX | WS_SYSMENU | WS_CAPTION | DS_MODALFRAME | DS_CENTER;
 	
 	if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
 
 	HRESULT res = CoInitialize(NULL);
-	DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
+	
+	if ((pEffect->flags & effFlagsHasEditor) && !alwaysUseHostEditor[portNum])
+		DialogBoxIndirectParam(0, &vstiEditor, 0, (DLGPROC)EditorProc, (LPARAM)pEffect);
+	else 
+		DialogBoxParam(0, MAKEINTRESOURCE(IDD_GENERALVSTUI), 0, (DLGPROC)GeneralUiProc, (LPARAM)pEffect);
+	
 	if(res == S_OK) CoUninitialize();
 	
-	_endthreadex(0);
-	return 0;
+	_endthread();	
 }
 
-void showVstEditor(uint32_t portnum)
+void showVstEditor(uint32_t portnum, BOOL forceNew)
 {
-	if (editorHandle[portnum])
+	if (editorHandle[portnum] && !forceNew)
 	{
 		if (!IsWindowVisible(editorHandle[portnum]) || IsIconic(editorHandle[portnum]))
+		{
 			ShowWindow(editorHandle[portnum], SW_SHOWNORMAL);
+			SetForegroundWindow(editorHandle[portnum]);
+		}
 		else
 			ShowWindow(editorHandle[portnum], SW_HIDE); //JUCE framework editors have problems when really closed and re-opened.
 
 	}
-	else if (pEffect[portnum]->flags & VstAEffectFlags::effFlagsHasEditor)
+	else 
 	{
-		threadHandle[portnum] = (HANDLE)_beginthreadex(NULL, 16384, &EditorThread, pEffect[portnum], 0, NULL);
+		_beginthread(EditorThread, 16384, pEffect[portnum]);
 	}
 }
 
@@ -1226,12 +1642,13 @@ bool getPluginMenuItem(int itemIndex, TCHAR* result, unsigned int buffSize)
 	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
 	if (lResult == ERROR_SUCCESS)
 	{
-		TCHAR szValueName[8] = _T("plugin");
-		TCHAR szPluginNum[2] = { 0 };
+		TCHAR szValueName[12] = _T("plugin");
+		TCHAR szPluginNum[4] = { 0 };
 		
 		if (itemIndex)
 		{			
-			_tcscat_s(szValueName, _itot(itemIndex, szPluginNum, 10));
+			_itot_s(itemIndex, szPluginNum, 10);
+			_tcsncat_s(szValueName, szPluginNum, _countof(szPluginNum));
 		}
 
 		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
@@ -1241,11 +1658,12 @@ bool getPluginMenuItem(int itemIndex, TCHAR* result, unsigned int buffSize)
 			lResult =  RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
 			if (lResult == ERROR_SUCCESS) 
 			{
-				TCHAR vst_title[MAX_PATH - 4] = { 0 };
+				TCHAR vst_title[MAX_PATH - 6] = { 0 };
 				RegCloseKey(hKey);
 				
-				GetFileTitle(vst_path, vst_title, MAX_PATH - 4);				
-				_tcscpy_s(result, buffSize, _itot(itemIndex, szPluginNum, 10));
+				GetFileTitle(vst_path, vst_title, MAX_PATH - 6);
+				_itot_s(itemIndex, szPluginNum, 10);
+				_tcscpy_s(result, buffSize, szPluginNum);
 				_tcscat_s(result, buffSize, _T(". "));
 				_tcscat_s(result, buffSize, vst_title);
 				return true;
@@ -1390,12 +1808,12 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			if (wParam == WM_ICONMSG && (lParam == WM_RBUTTONDOWN || lParam == WM_LBUTTONDOWN))
 			{
 				POINT cursorPoint;
-				bool hasEditor = pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor;
+				//bool hasEditor = pEffect[0]->flags & VstAEffectFlags::effFlagsHasEditor;
 				GetCursorPos(&cursorPoint);
 				CheckMenuItem(trayMenu, PORT_MENU_OFFSET, editorHandle[0] != 0 && IsWindowVisible(editorHandle[0]) ? MF_CHECKED : MF_UNCHECKED);
 				CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, editorHandle[1] != 0 && IsWindowVisible(editorHandle[1]) ? MF_CHECKED : MF_UNCHECKED);
-				EnableMenuItem(trayMenu, PORT_MENU_OFFSET,  isPortActive[0] && hasEditor ? MF_ENABLED : MF_GRAYED);
-				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, isPortActive[1] && hasEditor ? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, PORT_MENU_OFFSET,  isPortActive[0] /* && hasEditor */? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, isPortActive[1] /* && hasEditor*/ ? MF_ENABLED : MF_GRAYED);
 				EnableMenuItem(trayMenu, 3, isPortActive[0] || isPortActive[1] ?  MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
 
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
@@ -1445,7 +1863,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			{			
 			case PORT_MENU_OFFSET:
 			case PORT_MENU_OFFSET + 1:
-				showVstEditor((uint32_t)wParam - PORT_MENU_OFFSET);
+				showVstEditor((uint32_t)wParam - PORT_MENU_OFFSET, (BOOL)lParam);
 				return 0;
 			
 			case RESET_MENU_OFFSET + 1:			
@@ -1508,7 +1926,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 }
 
-static unsigned __stdcall TrayThread(void* threadparam)
+static void TrayThread(void* threadparam)
 {
 	MSG message;
 	WNDCLASS windowClass = { 0 };
@@ -1528,8 +1946,7 @@ static unsigned __stdcall TrayThread(void* threadparam)
 		DispatchMessage(&message);
 	}
 
-	_endthreadex(0);
-	return 0;
+	_endthread();	
 }
 
 int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
@@ -1538,10 +1955,10 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	int argc = __argc;
 
 #ifdef UNICODE 
-	//LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-	LPTSTR* argv = __wargv;
+	//argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	argv = __wargv;
 #else
-	LPTSTR* argv = __argv;
+	argv = __argv;
 #endif		
 
 	if (argv == NULL || argc != 6) return Error::InvalidCommandLineArguments;
@@ -1669,6 +2086,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		goto exit;
 	}
 
+	
 	pEffect[0]->user = &effectData[0];
 
 	pEffect[0]->dispatcher(pEffect[0], effOpen, 0, 0, 0, 0);
@@ -1678,7 +2096,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	{
 		code = Response::VstiIsNotAMidiSynth;
 		goto exit;
-	}
+	}		
 
 	pEffect[1] = pMain(&audioMaster);
 	if (!pEffect[1])
@@ -1709,6 +2127,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		product_string_length = (uint32_t)strlen(product_string);
 		vendor_version = (uint32_t)pEffect[0]->dispatcher(pEffect[0], effGetVendorVersion, 0, 0, 0, 0);
 		unique_id = pEffect[0]->uniqueID;
+		isYamahaPlugin = (unique_id == (uint32_t)'xg50') || (unique_id == (uint32_t)'YMF7') || (unique_id == (uint32_t)'S-TY');
 
 		if (!vendor_string_length) 
 		{
@@ -1764,7 +2183,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	for (;;)
 	{
 		uint32_t command = get_code();
-		if (!command) break;
+		if (!command) break;		
 
 		Log(_T("Processing command %d\n"), (int)command);
 
@@ -1801,6 +2220,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			}
 			break;
 
+		/*
 		case Command::HasEditor: // Has Editor
 			{
 				uint32_t has_editor = (pEffect[0]->flags & effFlagsHasEditor) ? 1 : 0;
@@ -1809,18 +2229,23 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 				put_code(has_editor);
 			}
 			break;
+		*/
 
 		case Command::DisplayEditorModal: // Display Editor Modal
 			{
-				if (pEffect[0]->flags & effFlagsHasEditor)
+				//if (pEffect[0]->flags & effFlagsHasEditor)
 				{
 					MyDLGTEMPLATE t;
 					t.style = WS_POPUPWINDOW | WS_DLGFRAME | DS_MODALFRAME | DS_CENTER;
 					t.dwExtendedStyle = WS_EX_TOPMOST;
 
-					if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
+					if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);					
 
-					DialogBoxIndirectParam(0, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)(pEffect[0]));
+					if (pEffect[0]->flags & effFlagsHasEditor)
+						DialogBoxIndirectParam(0, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)(pEffect[0]));
+					else
+						DialogBoxParam(0, MAKEINTRESOURCE(IDD_GENERALVSTUI), 0, (DLGPROC)GeneralUiProc, (LPARAM)pEffect[0]);
+
 					//getChunk(pEffect[0], chunk);
 					//setChunk(pEffect[1], chunk);
 
@@ -1856,7 +2281,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 
 		case Command::InitSysTray:
 			{
-				_beginthreadex(NULL, 16384, &TrayThread, pEffect, 0, NULL);				
+				_beginthread(TrayThread, 16384, pEffect);				
 
 				InitSimpleResetEvents();
 				lastUsedSysEx = getSelectedSysExIndex();
@@ -2351,22 +2776,21 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	}
 
 exit:
-	if (editorHandle[0] != NULL) SendMessageTimeout(editorHandle[0], WM_CLOSE, 66, 66, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
-	if (editorHandle[1] != NULL) SendMessageTimeout(editorHandle[1], WM_CLOSE, 66, 66, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
+	if (editorHandle[0] != NULL) SendMessageTimeout(editorHandle[0], WM_CLOSE, TRUE, TRUE, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
+	if (editorHandle[1] != NULL) SendMessageTimeout(editorHandle[1], WM_CLOSE, TRUE, TRUE, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
 	if (trayWndHandle != NULL) SendMessageTimeout(trayWndHandle, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
-
-	if (threadHandle[0] != NULL) CloseHandle(threadHandle[0]);
-	if (threadHandle[1] != NULL) CloseHandle(threadHandle[1]);	
-	
+			
 	if (pEffect[1])
 	{
 		if (blState.size()) pEffect[1]->dispatcher(pEffect[1], effStopProcess, 0, 0, 0, 0);
 		pEffect[1]->dispatcher(pEffect[1], effClose, 0, 0, 0, 0);
+		pEffect[1] = NULL;
 	}
 	if (pEffect[0])
 	{
 		if (blState.size()) pEffect[0]->dispatcher(pEffect[0], effStopProcess, 0, 0, 0, 0);
 		pEffect[0]->dispatcher(pEffect[0], effClose, 0, 0, 0, 0);
+		pEffect[0] = NULL;
 	}
 	resetInputEvents();
 	if (hDll) FreeLibrary(hDll);

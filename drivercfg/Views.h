@@ -178,7 +178,8 @@ static BOOL settings_load(VSTDriver * effect)
 		if (SelectedPluginIndex)		
 		{
 			TCHAR szPostfix[4] = { 0 };
-			_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+			_itot_s(SelectedPluginIndex, szPostfix, 10);
+			_tcsncat_s(szValueName, szPostfix, _countof(szPostfix));
 		}
 		lResult = reg.QueryStringValue(szValueName, NULL, &size);
 		if (lResult == ERROR_SUCCESS) {
@@ -232,7 +233,8 @@ static BOOL settings_save(VSTDriver * effect)
 		if (SelectedPluginIndex)
 		{
 			TCHAR szPostfix[4] = { 0 };
-			_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+			_itot_s(SelectedPluginIndex, szPostfix, 10);
+			_tcsncat_s(szValueName, szPostfix, _countof(szPostfix));
 		}		
 		lResult = reg.QueryStringValue(szValueName, NULL, &size);
 		
@@ -375,11 +377,12 @@ public:
 		if (lResult == ERROR_SUCCESS){
 
 			for (int i = 0; i < MAX_PLUGINS; i++) {
-				TCHAR szValueName[8] = _T("plugin");
+				TCHAR szValueName[12] = _T("plugin");
 				if (i)
 				{
-					TCHAR szPostfix[2] = { 0 };
-					_tcscat_s(szValueName, _itot(i, szPostfix, 10));
+					TCHAR szPostfix[4] = { 0 };
+					_itot_s(i, szPostfix, 10);
+					_tcsncat_s(szValueName, szPostfix, _countof(szPostfix));
 				}
 				lResult = reg.QueryStringValue(szValueName, NULL, &size);
 				if (lResult == ERROR_SUCCESS && size > 2) {
@@ -455,7 +458,7 @@ public:
 			load_vst(vst_path, false);
 			if (effect)
 			{
-				vst_configure.EnableWindow(effect->hasEditor());
+				vst_configure.EnableWindow(true);
 				vst_unload.EnableWindow(true);
 			}
 			else
@@ -507,7 +510,8 @@ public:
 			if (SelectedPluginIndex)
 			{
 				TCHAR szPostfix[4] = { 0 };
-				_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+				_itot(SelectedPluginIndex, szPostfix, 10);
+				_tcsncat_s(szValueName, szPostfix, _countof(szPostfix));
 			}
 			reg.SetStringValue(szValueName, _T(""));
 			reg.Close();
@@ -552,13 +556,14 @@ public:
 					if (SelectedPluginIndex)
 					{
 						TCHAR szPostfix[4] = { 0 };
-						_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+						_itot_s(SelectedPluginIndex, szPostfix, 10);
+						_tcsncat_s(szValueName, szPostfix, _countof(szPostfix));
 					}
 					reg.SetStringValue(szValueName, szFileName);
 					reg.Close();
 				}				
 							
-				vst_configure.EnableWindow(effect->hasEditor());
+				vst_configure.EnableWindow(true);
 				vst_unload.EnableWindow(true);
 
 				BOOL dummy;
@@ -577,7 +582,8 @@ public:
 					if (SelectedPluginIndex)
 					{
 						TCHAR szPostfix[4] = { 0 };
-						_tcscat_s(szValueName, _itot(SelectedPluginIndex, szPostfix, 10));
+						_itot_s(SelectedPluginIndex, szPostfix, 10);
+						_tcsncat_s(szValueName, szPostfix, _countof(szPostfix));
 					}
 					reg.SetStringValue(szValueName, _T(""));
 					reg.Close();
@@ -651,7 +657,7 @@ public:
 				reg.SetDWORDValue(_T("SelectedPlugin"), selIndex);
 				reg.Close();
 			}
-			vst_configure.EnableWindow(effect->hasEditor());
+			vst_configure.EnableWindow(true);
 			vst_unload.EnableWindow(true);
 		}
 		else
@@ -705,7 +711,7 @@ public:
 
 	LRESULT OnButtonConfig(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/ )
 	{
-		if(effect && effect->hasEditor())
+		if(effect)
 		{
 			HWND hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
 			::EnableWindow(hWnd, FALSE);

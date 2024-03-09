@@ -14,6 +14,9 @@
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#pragma warning(disable:6255) 
+#pragma warning(disable:26812)
+
 #include "VSTDriver.h"
 #include <commdlg.h>
 
@@ -68,7 +71,7 @@ UINT GetWaveOutDeviceId() {
 	return WAVE_MAPPER;
 
 }
-
+#pragma warning(disable:28159)
 bool IsWinNT4() 
 {
 	OSVERSIONINFOEX osvi;
@@ -94,6 +97,7 @@ bool IsVistaOrNewer()
 		return TRUE;
 	return FALSE;
 }
+#pragma warning(default:28159)
 
 bool UseAsio()
 {
@@ -178,7 +182,7 @@ namespace Command {
 		Exit = 0,
 		GetChunkData = 1,
 		SetChunkData = 2,
-		HasEditor = 3,
+		//HasEditor = 3,
 		DisplayEditorModal = 4,
 		SetSampleRate = 5,
 		Reset = 6,
@@ -262,7 +266,7 @@ void VSTDriver::load_settings(TCHAR * szPath) {
 	DWORD dwSize = 0;
 	DWORD selIndex = 0;
 	
-	if ( szPath || RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"),0,KEY_READ,&hKey) == ERROR_SUCCESS )
+	if ( szPath || RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"),0,KEY_READ, &hKey) == ERROR_SUCCESS )
 	{
 		long lResult = 0;
 		TCHAR szValueName[20] = _T("plugin");
@@ -273,7 +277,8 @@ void VSTDriver::load_settings(TCHAR * szPath) {
 			if (lResult == ERROR_SUCCESS && selIndex)
 			{
 				TCHAR szPostfix[12] = { 0 };
-				_tcscat_s(szValueName, _itot(selIndex, szPostfix, 10));
+				_itot_s(selIndex, szPostfix, 10);
+				_tcsncat_s(szValueName, szPostfix, _countof(szPostfix));
 			}
 			lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &dwSize);
 		}
@@ -717,7 +722,7 @@ void VSTDriver::setChunk( const void * in, unsigned size )
 	if ( code != NoError ) process_terminate();
 }
 
-bool VSTDriver::hasEditor()
+/*bool VSTDriver::hasEditor()
 {
 	process_write_code( Command::HasEditor );
 	uint32_t code = process_read_code();
@@ -728,7 +733,7 @@ bool VSTDriver::hasEditor()
 	}
 	code = process_read_code();
 	return code != 0;
-}
+}*/
 
 void VSTDriver::setHighDpiMode(unsigned int modeNum) 
 {
@@ -908,6 +913,9 @@ uint32_t VSTDriver::RenderFloat(float* samples, int len, float volume, WORD chan
 
 uint32_t VSTDriver::Render(short * samples, int len, float volume, WORD channels)
 {
+#pragma warning(disable:6385) //false buffer alarms
+#pragma warning(disable:6386) 
+
 	float * float_out = (float *) _alloca((UINT64)(BUFFER_SIZE / 8) * uNumOutputs * channels / 2 * sizeof(*float_out) );
 	while ( len > 0 )
 	{
@@ -926,4 +934,7 @@ uint32_t VSTDriver::Render(short * samples, int len, float volume, WORD channels
 	}
 
 	return 0;
+
+#pragma warning(default:6385)  
+#pragma warning(default:6386)
 }

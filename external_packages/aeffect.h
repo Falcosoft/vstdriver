@@ -284,7 +284,7 @@ enum VstStringConstants
 {
 //-------------------------------------------------------------------------------------------------------
 	kVstMaxProgNameLen   = 24,	///< used for #effGetProgramName, #effSetProgramName, #effGetProgramNameIndexed
-	kVstMaxParamStrLen   = 8,	///< used for #effGetParamLabel, #effGetParamDisplay, #effGetParamName
+	kVstMaxParamStrLen   = 24,	///< used for #effGetParamLabel, #effGetParamDisplay, #effGetParamName
 	kVstMaxVendorStrLen  = 64,	///< used for #effGetVendorString, #audioMasterGetVendorString
 	kVstMaxProductStrLen = 64,	///< used for #effGetProductString, #audioMasterGetProductString
 	kVstMaxEffectNameLen = 32	///< used for #effGetEffectName

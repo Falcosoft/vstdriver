@@ -14,6 +14,8 @@
 
 //Wrapper class for Win32 SRWLock on Win Vista and later else for standard Win32 CriticalSection 
 //Be aware that SRWLock does not support re-entrance. If you need it use alwaysUseCriticalSection in constructor.  
+
+#pragma warning(disable:28125) 
 class Win32Lock {
 	
 	typedef struct _MYLOCK {
