@@ -1,4 +1,5 @@
-//falco: utility classes for various Win32 locks (SRWLock/CriticalSection/custom spin locks)
+//utility classes for various Win32 locks (SRWLock/CriticalSection/custom spin locks)
+//Copyright (C) 2023 Zoltan Bacsko - Falcosoft
 
 //#define DEBUG_LOCKS
 
@@ -30,15 +31,15 @@ private:
 	void WIN32DEF(ReleaseSRWLockExclusive)(PMYLOCK Lock);
 
 public:
-	Win32Lock(bool alwaysUseCriticalSection = false) :
+	explicit Win32Lock(bool alwaysUseCriticalSection = false) :
 		_lock(/* Initializing to 0 means the same as SRWLOCK_INIT or using InitializeSRWLock() */) {
 		AcquireSRWLockExclusive = ReleaseSRWLockExclusive = NULL;
 		
 		if (!alwaysUseCriticalSection) {		
-			HMODULE kernel32;
-			if ((kernel32 = GetModuleHandle(_T("kernel32.dll"))) != NULL) {				
-				*((void**)&AcquireSRWLockExclusive) = GetProcAddress(kernel32, "AcquireSRWLockExclusive");
-				*((void**)&ReleaseSRWLockExclusive) = GetProcAddress(kernel32, "ReleaseSRWLockExclusive");
+			HMODULE krnl32;
+			if ((krnl32 = GetModuleHandle(_T("kernel32.dll"))) != NULL) {
+				*((void**)&AcquireSRWLockExclusive) = GetProcAddress(krnl32, "AcquireSRWLockExclusive");
+				*((void**)&ReleaseSRWLockExclusive) = GetProcAddress(krnl32, "ReleaseSRWLockExclusive");
 			}
 		}
 

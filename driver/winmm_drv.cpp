@@ -1,5 +1,6 @@
 /* Copyright (C) 2003, 2004, 2005 Dean Beeler, Jerome Fisher
 * Copyright (C) 2011, 2012 Dean Beeler, Jerome Fisher, Sergey V. Mikayev
+* Copyright (C) 2023 Zoltan Bacsko - Falcosoft
 *
 *  This program is free software: you can redistribute it and/or modify
 *  it under the terms of the GNU Lesser General Public License as published by
@@ -19,7 +20,7 @@
 #include <math.h>
 #include <commdlg.h>
 
-extern "C" { HINSTANCE hinst_vst_driver = 0; }
+extern "C" { HINSTANCE hinst_vst_driver = NULL; }
 
 #define MAX_DRIVERS 2
 #define MAX_CLIENTS 8 // Per driver
@@ -167,14 +168,14 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 	MIDIOUTCAPS2A * myCaps2A;
 	MIDIOUTCAPS2W * myCaps2W;
 
-	CHAR synthName[] = "VST MIDI Synth\0";
-	WCHAR synthNameW[] = L"VST MIDI Synth\0";
+	const CHAR synthName[] = "VST MIDI Synth\0";
+	const WCHAR synthNameW[] = L"VST MIDI Synth\0";
 
-	CHAR synthPortA[] = " (port A)\0";
-	WCHAR synthPortAW[] = L" (port A)\0";
+	const CHAR synthPortA[] = " (port A)\0";
+	const WCHAR synthPortAW[] = L" (port A)\0";
 
-	CHAR synthPortB[] = " (port B)\0";
-	WCHAR synthPortBW[] = L" (port B)\0";
+	const CHAR synthPortB[] = " (port B)\0";
+	const WCHAR synthPortBW[] = L" (port B)\0";
 
 	switch (capsSize) {
 	case (sizeof(MIDIOUTCAPSA)):

@@ -1,4 +1,5 @@
 /* Copyright (C) 2011 Chris Moeller, Brad Miller
+*  Copyright (C) 2023 Zoltan Bacsko - Falcosoft
 *
 *  This program is free software: you can redistribute it and/or modify
 *  it under the terms of the GNU Lesser General Public License as published by
@@ -54,7 +55,7 @@ private:
 
 	bool         bInitialized;
 	bool         bInitializedOtherModel;
-	bool		 IsSCVA;
+	bool         IsSCVA;
 	HANDLE       hProcess;
 	HANDLE       hThread;
 	HANDLE       hReadEvent;

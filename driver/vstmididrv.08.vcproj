@@ -365,6 +365,10 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath=".\AudioDrivers.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\MidiSynth.cpp"
 				>
 			</File>
@@ -396,6 +400,10 @@
 			</File>
 			<File
 				RelativePath="..\external_packages\audiodefs.h"
+				>
+			</File>
+			<File
+				RelativePath=".\AudioDrivers.h"
 				>
 			</File>
 			<File

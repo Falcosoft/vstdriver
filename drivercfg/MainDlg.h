@@ -1,5 +1,8 @@
-// MainDlg.h : interface of the CMainDlg class
-//
+/// MainDlg.h : interface of the CMainDlg class
+
+///Copyright (C) 2011 Chris Moeller, Brad Miller
+///Copyright (C) 2023 Zoltan Bacsko - Falcosoft
+
 /////////////////////////////////////////////////////////////////////////////
 #include <atlframe.h>
 #include <atlctrls.h>
@@ -9,7 +12,6 @@
 #include "DlgTabCtrl.h"
 #include "Views.h"
 
-
 #pragma once
 
 static void InvalidParamHandler(const wchar_t* expression, const wchar_t* function, const wchar_t* file, unsigned int line, uintptr_t pReserved)
@@ -18,6 +20,7 @@ static void InvalidParamHandler(const wchar_t* expression, const wchar_t* functi
 		TerminateProcess(GetCurrentProcess(), 1);
 }
 
+#pragma warning(disable:28159)
 BOOL IsWin8OrNewer()
 {
 	OSVERSIONINFOEX osvi;
@@ -48,6 +51,7 @@ BOOL IsWinVistaOrWin7()
 		return TRUE;
 	return FALSE;
 }
+#pragma warning(default:28159)
 
 BOOL IsCoolSoftMidiMapperInstalled() 
 {
@@ -73,6 +77,12 @@ public:
 	CView3 m_view3;
 	CView4 m_view4;
 	CButton alwaysOnTop;
+	HANDLE dialogMutex;
+
+	CMainDlg()
+	{
+		dialogMutex = NULL;
+	}
 
 	virtual BOOL PreTranslateMessage(MSG* pMsg)
 	{
@@ -118,10 +128,10 @@ public:
 		//only 1 instance of a kind		
 #ifdef WIN64		
 		SetWindowText(windowName);
-		CreateMutex(NULL, true, _T("vstmididrvcfg64"));		
+		dialogMutex = CreateMutex(NULL, true, _T("vstmididrvcfg64"));
 #else	
 		
-		CreateMutex(NULL, true, _T("vstmididrvcfg32"));
+		dialogMutex = CreateMutex(NULL, true, _T("vstmididrvcfg32"));
 #endif	
 				
 		if(GetLastError() == ERROR_ALREADY_EXISTS) 
@@ -134,8 +144,8 @@ public:
 				m_hWnd = winHandle; //hacky but works...
 				CenterWindow();
 				::SetForegroundWindow(winHandle);				
-			}
-				
+			}		
+			
 			ExitProcess(0);
 		}	
 		
@@ -202,7 +212,7 @@ public:
 			BOOL dummy;
 			m_view1.ResetDriverSettings();
 			m_view1.OnCbnSelchangeBuffersize(0, 0, 0, dummy);
-			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);
+			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);			
 			m_view3.SetDriverChanged(false);
 		}
 		else if (m_ctrlTab.GetCurSel() == 1)
@@ -221,6 +231,7 @@ public:
 		ATLASSERT(pLoop != NULL);
 		pLoop->RemoveMessageFilter(this);
 		pLoop->RemoveIdleHandler(this);
+		if (dialogMutex) CloseHandle(dialogMutex);
 
 		return 0;
 	}

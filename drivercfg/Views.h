@@ -1,3 +1,6 @@
+///Copyright (C) 2011 Chris Moeller, Brad Miller
+///Copyright (C) 2023 Zoltan Bacsko - Falcosoft
+
 #if !defined(AFX_VIEWS_H__20020629_8D64_963C_A351_0080AD509054__INCLUDED_)
 #define AFX_VIEWS_H__20020629_8D64_963C_A351_0080AD509054__INCLUDED_
 
@@ -28,10 +31,10 @@
 #define MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED    ((DWORD)-5)
 
 #ifdef WIN64
-	TCHAR windowName[32] = _T("VSTi Driver Configuration (x64)");
+	const TCHAR windowName[] = _T("VSTi Driver Configuration (x64)");
 #else	
 	#include <intrin.h>
-	TCHAR windowName[32] = _T("VSTi Driver Configuration");	
+	const TCHAR windowName[] = _T("VSTi Driver Configuration");	
 #endif	
 
 #include "../external_packages/bassasio.h"
@@ -44,8 +47,7 @@ static INT_PTR CALLBACK EditorProc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 // for VSTDriver
 extern "C" HINSTANCE hinst_vst_driver = NULL;
 
-static HINSTANCE bassasio = NULL;       // bassasio handle  
-
+static HINSTANCE bassasio = NULL;       // bassasio handle
 static BOOL isASIO = FALSE;
 static bool usingASIO = false;  
 static bool is4chMode = false;
@@ -58,7 +60,7 @@ static DWORD enableSinglePort32ChMode = (DWORD)-1;
 static DWORD keepDriverLoaded = (DWORD)-1;
 static unsigned char SelectedPluginIndex = 0;
 
-
+#pragma region Utility_Functions
 static bool IsWaveFormatSupported(UINT sampleRate, UINT deviceId)
 {
 	PCMWAVEFORMAT wFormatLegacy = { 0 };
@@ -95,10 +97,11 @@ static bool IsWaveFormatSupported(UINT sampleRate, UINT deviceId)
 
 static BOOL IsASIO() 
 {
-	TCHAR installpath[MAX_PATH];        
-	TCHAR bassasiopath[MAX_PATH];	
+	TCHAR installpath[MAX_PATH] = { 0 };
+	TCHAR bassasiopath[MAX_PATH] = { 0 };
 
 	GetModuleFileName(hinst_vst_driver, installpath, MAX_PATH);
+	installpath[MAX_PATH - 1] = _T('\0');
 	//PathRemoveFileSpec(installpath);
 	TCHAR *chrP = _tcsrchr(installpath, '\\'); //removes SHLWAPI dependency for WIN NT4
 	if(chrP) chrP[0] = 0;
@@ -107,6 +110,7 @@ static BOOL IsASIO()
 	// Load Bass Asio
 	_tcscpy_s(bassasiopath, installpath);
 	_tcscat_s(bassasiopath, _T("\\bassasio_vstdrv.dll"));
+	bassasiopath[MAX_PATH - 1] = _T('\0');
 	bassasio = LoadLibrary(bassasiopath);        
 
 	if (bassasio)
@@ -138,9 +142,10 @@ static BOOL IsASIO()
 		LOADBASSASIOFUNCTION(BASS_ASIO_ControlPanel);
 		LOADBASSASIOFUNCTION(BASS_ASIO_CheckRate);
 				
-		TCHAR asio2WasapiPath[MAX_PATH];
+		TCHAR asio2WasapiPath[MAX_PATH] = { 0 };
 		_tcscpy_s(asio2WasapiPath, installpath);
 		_tcscat_s(asio2WasapiPath, _T("\\ASIO2WASAPI_vstdrv.dll"));
+		asio2WasapiPath[MAX_PATH - 1] = _T('\0');
 		if (IsVistaOrNewer() && GetFileAttributes(asio2WasapiPath) != INVALID_FILE_ATTRIBUTES)
 		{
 			
@@ -149,7 +154,7 @@ static BOOL IsASIO()
 
 			char asio2WasapiAnsiPath[MAX_PATH] = { 0 };
 #ifdef UNICODE  
-			WideCharToMultiByte(CP_ACP, 0, (LPCWSTR)asio2WasapiPath, -1, (char*)asio2WasapiAnsiPath, MAX_PATH, NULL, NULL);
+			WideCharToMultiByte(CP_ACP, NULL, (LPCWSTR)asio2WasapiPath, -1, (char*)asio2WasapiAnsiPath, MAX_PATH, NULL, NULL);
 #else
 			strcpy_s(asio2WasapiAnsiPath, asio2WasapiPath);
 #endif	
@@ -169,7 +174,7 @@ static BOOL settings_load(VSTDriver * effect)
 {
 	BOOL retResult = FALSE;
 	long lResult;	
-	ULONG size;
+	ULONG size = 0;
 	CRegKeyEx reg;
 
 	lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_READ | KEY_WRITE);
@@ -223,7 +228,7 @@ static BOOL settings_save(VSTDriver * effect)
 {
 	BOOL retResult = FALSE;
 	long lResult;	
-	ULONG size;
+	ULONG size = 0;
 	CRegKeyEx reg;
 
 	lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, 0, KEY_READ | KEY_WRITE); // falco fix: otherwise reg.QueryStringValue gets back an ACCESS_DENIED(5) error.
@@ -302,15 +307,15 @@ static void SaveDwordValue(LPCTSTR key, DWORD value)
 		reg.Close();
 	}		   
 }
-
+#pragma endregion utility functions
 
 #if _MSC_VER > 1000
 #pragma once
 #endif // _MSC_VER > 1000
 
+#pragma region CView1
 class CView1 : public CDialogImpl<CView1>
 {
-
 	CComboBox vst_info;
 	CComboBox vst_buffer_size, vst_sample_rate, vst_sample_format;
 	CButton vst_load, vst_configure, vst_showvst, vst_4chmode, vst_unload;
@@ -371,7 +376,7 @@ public:
 	{
 		long lResult;
 		vst_path[0] = 0;
-		ULONG size;		
+		ULONG size = 0;		
 		CRegKeyEx reg;
 		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"));
 		if (lResult == ERROR_SUCCESS){
@@ -603,8 +608,12 @@ public:
 		return 0;
 	}
 
-	LRESULT OnBnClickedUse4ch(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	LRESULT OnBnClickedUse4ch(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
 	{   
+		if (!wNotifyCode && !wID && !hWndCtl)
+		{
+			vst_4chmode.SetCheck((int)is4chMode);
+		}
 		SaveDwordValue(_T("Use4ChannelMode"), vst_4chmode.GetCheck());
 		is4chMode = vst_4chmode.GetCheck() !=  BST_UNCHECKED;
 
@@ -908,10 +917,20 @@ public:
 			unsigned int realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
 			_stprintf_s(tmpBuff, 64, _T("4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %u/%u)"), selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
 			vst_4chmode.SetWindowText(tmpBuff);
+			bool cantdo4ch = selectedOutputChannelInt == (int)realOffset;
+			if (cantdo4ch)
+			{
+				is4chMode = false;
+				BOOL dummy;
+				OnBnClickedUse4ch(0, 0, 0, dummy);
+			}
+			vst_4chmode.EnableWindow(!cantdo4ch);
 
 		}
 		else
 		{
+			vst_4chmode.EnableWindow(true);
+
 			vst_buffer_size.AddString(_T("40"));
 			vst_buffer_size.AddString(_T("60"));
 			vst_buffer_size.AddString(_T("80"));
@@ -1112,10 +1131,18 @@ public:
 
 		TCHAR tmpBuff[64];
 		if (usingASIO) 
-		{			
+		{		
 			unsigned int realOffset = !info.outputs ? selectedOutputChannelInt + portBOffsetVal : (selectedOutputChannelInt + portBOffsetVal) % info.outputs;
 			_stprintf_s(tmpBuff, 64, _T("4 channel mode (port A: ASIO Ch %d/%d; port B: ASIO Ch %u/%u)"), selectedOutputChannelInt, selectedOutputChannelInt + 1, realOffset, realOffset + 1);
-			vst_4chmode.SetWindowText(tmpBuff);				
+			vst_4chmode.SetWindowText(tmpBuff);
+			bool cantdo4ch = selectedOutputChannelInt == (int)realOffset;			
+			if (cantdo4ch)
+			{
+				is4chMode = false;
+				BOOL dummy;
+				OnBnClickedUse4ch(0, 0, 0, dummy);
+			}
+			vst_4chmode.EnableWindow(!cantdo4ch);
 		}
 		
 		vst_sample_rate.GetWindowText(tmpBuff, 8); //list of valid sample rates could change.   
@@ -1130,7 +1157,110 @@ public:
 		return TRUE;
 	}
 };
+#pragma endregion CView1 - VST settings tab
 
+#pragma region CView2
+class CView2 : public CDialogImpl<CView2>
+{
+	CComboBox synthlist;
+	CButton apply;
+	CStatic groupBox;
+
+	//typedef DWORD(STDAPICALLTYPE * pmodMessage)(UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
+
+public:
+
+	CView2() :
+		synthlist(),
+		apply(),
+		groupBox() {}
+
+	enum { IDD = IDD_MIDI };
+	BEGIN_MSG_MAP(CView2)
+		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView2)
+		COMMAND_ID_HANDLER(IDC_SNAPPLY, OnButtonApply)
+	END_MSG_MAP()
+
+	void SetGroupBoxCaption(TCHAR* caption)
+	{
+		groupBox.SetWindowText(caption);
+	}
+
+	LRESULT OnInitDialogView2(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+	{
+		synthlist = GetDlgItem(IDC_SYNTHLIST);
+		apply = GetDlgItem(IDC_SNAPPLY);
+		groupBox = GetDlgItem(IDC_GROUPBOX2);
+		load_midisynths_mapper();
+		return TRUE;
+	}
+
+	LRESULT OnButtonApply(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		set_midisynth_mapper();
+		return 0;
+
+	}
+
+	/* These only work on Windows 6.1 and older (but not on XP). Coolsoft Midi Mapper has to be installed as a workaround on Win 6.2+*/
+	void set_midisynth_mapper()
+	{
+		CRegKeyEx reg;
+		CRegKeyEx subkey;
+		CString device_name;
+		long lRet;
+		int selection = synthlist.GetCurSel();
+		int n = synthlist.GetLBTextLen(selection);
+		synthlist.GetLBText(selection, device_name.GetBuffer(max(n, 1)));
+		device_name.ReleaseBuffer(n);
+		lRet = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
+		if (lRet == ERROR_SUCCESS) lRet = reg.DeleteSubKey(_T("MIDIMap"));
+		if (lRet == ERROR_SUCCESS) lRet = subkey.Create(reg, _T("MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
+		if (lRet == ERROR_SUCCESS) lRet = subkey.SetStringValue(_T("szPname"), device_name);
+		if (lRet == ERROR_SUCCESS)
+		{
+			MessageBox(_T("MIDI synth set!"), _T("VST MIDI Driver"), MB_ICONINFORMATION);
+		}
+		else
+		{
+			MessageBox(_T("Can't set MIDI registry key!"), _T("VST MIDI Driver"), MB_ICONSTOP);
+		}
+		subkey.Close();
+		reg.Close();
+	}
+
+	void load_midisynths_mapper()
+	{
+		LONG lResult;
+		CRegKeyEx reg;
+		CString device_name = _T("");
+
+		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia\\MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_READ);
+		if (lResult == ERROR_SUCCESS)
+		{
+			ULONG size = 128;
+			lResult = reg.QueryStringValue(_T("szPname"), device_name.GetBuffer(size), &size);
+			reg.Close();
+			if (lResult == ERROR_SUCCESS) device_name.ReleaseBuffer(size);
+		}
+		int device_count = midiOutGetNumDevs();
+		for (int i = 0; i < device_count; ++i) {
+			MIDIOUTCAPS Caps;
+			ZeroMemory(&Caps, sizeof(Caps));
+			MMRESULT Error = midiOutGetDevCaps(i, &Caps, sizeof(Caps));
+			if (Error != MMSYSERR_NOERROR)
+				continue;
+			if (_tcscmp(Caps.szPname, _T("CoolSoft MIDIMapper"))) synthlist.AddString(Caps.szPname);
+		}
+		int index = 0;
+		index = synthlist.FindStringExact(-1, device_name);
+		if (index == CB_ERR) index = 0;
+		synthlist.SetCurSel(index);
+	}
+};
+#pragma endregion CView2 - MIDI tab
+
+#pragma region CView3
 class CView3 : public CDialogImpl<CView3>
 {
 	CListBox playbackDevices;
@@ -1263,7 +1393,7 @@ public:
 		char firstDriverName[24] = { 0 };
 		for (int deviceId = 0; BASS_ASIO_GetDeviceInfo(deviceId, &asioDeviceInfo); ++deviceId)
 		{			
-			if (!deviceId) lstrcpynA(firstDriverName, asioDeviceInfo.name, 23);
+			if (!deviceId) strncpy_s(firstDriverName, asioDeviceInfo.name, 23);
 			if (usePrivateAsioOnly && IsVistaOrNewer() && deviceId && !strcmp(firstDriverName,"VSTDriver-ASIO2WASAPI")) break;
 			if (!BASS_ASIO_Init(deviceId, 0)) continue;
 
@@ -1275,7 +1405,7 @@ public:
 
 			for (unsigned int channel = 0; BASS_ASIO_ChannelGetInfo(FALSE, channel, &channelInfo); ++channel)
 			{
-				deviceItem.Format(_T("%02d.%02u - %s %s"), deviceId, channel, deviceName, CString(channelInfo.name));
+				deviceItem.Format(_T("%02d.%02u - %s %s"), deviceId, channel, deviceName.GetString(), CString(channelInfo.name).GetString());
 
 				//if (playbackDevices.FindStringExact(0, deviceItem) == LB_ERR)
 				{
@@ -1299,6 +1429,7 @@ public:
 		if (drvId >= drvChArr.size()) return;
 
 		unsigned int portCount = drvChArr[drvId];
+		if (portCount < 4) is4chMode = false;
 		portbOffset.ResetContent();
 		TCHAR tmpBuff[8];
 		for (unsigned int i = 1; i < portCount / 2; i++)
@@ -1404,6 +1535,7 @@ public:
 				BASS_ASIO_Free();
 
 				drvChArr[0] = info.outputs;
+				if (info.outputs < 4) is4chMode = false;
 				portbOffset.ResetContent();
 				TCHAR tmpBuff[8];
 				for (unsigned int i = 1; i < info.outputs / 2; i++)
@@ -1493,6 +1625,7 @@ public:
 					DWORD drvId = _ttoi(selectedOutputDriver.Left(2));
 					if (drvId >= drvChArr.size()) return 0;
 					unsigned int portCount = drvChArr[drvId];
+					if (portCount < 4) is4chMode = false;
 					portbOffset.ResetContent();
 					TCHAR tmpBuff[8];
 					for (unsigned int i = 1; i < portCount / 2; i++)
@@ -1537,7 +1670,9 @@ public:
 	}
 
 };
+#pragma endregion CView3 - Audio devices tab
 
+#pragma region CView4
 class CView4 : public CDialogImpl<CView4>
 {
 	CButton btnHelp, chk32ch, chkPrivAsio, chkKeepDriver;
@@ -1562,13 +1697,13 @@ public:
 
 	LRESULT OnCbnSelchangeHighDpi(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
-		DWORD value;
+		DWORD value = MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED;
 		TCHAR tmpBuff[32];
 		cmbHighDpi.GetWindowText(tmpBuff, 32);
 		
 		if (!_tcscmp(tmpBuff, _T("System"))) value = MYDPI_AWARENESS_CONTEXT_UNAWARE;
 		else if (!_tcscmp(tmpBuff, _T("System enhanced"))) value = MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED;
-		else if (!_tcscmp(tmpBuff, _T("Application"))) value = MYDPI_AWARENESS_CONTEXT_SYSTEM_AWARE;
+		else if (!_tcscmp(tmpBuff, _T("Application"))) value = MYDPI_AWARENESS_CONTEXT_SYSTEM_AWARE;	
 
 		SaveDwordValue(_T("HighDpiMode"), value);
 
@@ -1585,7 +1720,8 @@ public:
 		cmbHighDpi.AddString(_T("System"));
 		cmbHighDpi.AddString(_T("System enhanced"));
 		cmbHighDpi.AddString(_T("Application"));
-		if (GetProcAddress(GetModuleHandle(_T("user32.dll")), "SetThreadDpiAwarenessContext"))
+		HMODULE usr32 = GetModuleHandle(_T("user32.dll"));
+		if (usr32 && GetProcAddress(usr32, "SetThreadDpiAwarenessContext"))
 		{
 			switch (highDpiMode)
 			{
@@ -1680,105 +1816,7 @@ public:
 	}
 
 };
-
-class CView2 : public CDialogImpl<CView2>
-{
-	CComboBox synthlist;
-	CButton apply;
-	CStatic groupBox;
-
-	//typedef DWORD(STDAPICALLTYPE * pmodMessage)(UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2);
-
-public:
-
-	CView2() :
-		synthlist(),
-		apply(),
-		groupBox() {}
-
-	enum { IDD = IDD_MIDI };
-	BEGIN_MSG_MAP(CView2)
-		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView2)
-		COMMAND_ID_HANDLER(IDC_SNAPPLY, OnButtonApply)
-	END_MSG_MAP()
-
-	void SetGroupBoxCaption(TCHAR* caption) 
-	{
-		groupBox.SetWindowText(caption);
-	}
-
-	LRESULT OnInitDialogView2(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
-	{
-		synthlist = GetDlgItem(IDC_SYNTHLIST);
-		apply = GetDlgItem(IDC_SNAPPLY);
-		groupBox = GetDlgItem(IDC_GROUPBOX2);
-		load_midisynths_mapper();
-		return TRUE;
-	}
-
-	LRESULT OnButtonApply(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-	{
-		set_midisynth_mapper();
-		return 0;
-
-	}
-
-	/* These only work on Windows 6.1 and older (but not on XP). Coolsoft Midi Mapper has to be installed as a workaround on Win 6.2+*/
-	void set_midisynth_mapper()
-	{
-		CRegKeyEx reg;
-		CRegKeyEx subkey;
-		CString device_name;
-		long lRet;
-		int selection = synthlist.GetCurSel();
-		int n = synthlist.GetLBTextLen(selection);
-		synthlist.GetLBText(selection, device_name.GetBuffer(max(n, 1)));
-		device_name.ReleaseBuffer(n);
-		lRet = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
-		if (lRet == ERROR_SUCCESS) lRet = reg.DeleteSubKey(_T("MIDIMap"));
-		if (lRet == ERROR_SUCCESS) lRet = subkey.Create(reg, _T("MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_WRITE);
-		if (lRet == ERROR_SUCCESS) lRet = subkey.SetStringValue(_T("szPname"), device_name);
-		if (lRet == ERROR_SUCCESS)
-		{
-			MessageBox(_T("MIDI synth set!"), _T("VST MIDI Driver"), MB_ICONINFORMATION);
-		}
-		else
-		{
-			MessageBox(_T("Can't set MIDI registry key!"), _T("VST MIDI Driver"), MB_ICONSTOP);
-		}
-		subkey.Close();
-		reg.Close();
-	}
-
-	void load_midisynths_mapper()
-	{
-		LONG lResult;
-		CRegKeyEx reg;
-		CString device_name = _T("");
-		
-		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia\\MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_READ);
-		if (lResult == ERROR_SUCCESS)
-		{
-			ULONG size = 128;
-			lResult =  reg.QueryStringValue(_T("szPname"), device_name.GetBuffer(size), &size);
-			reg.Close();
-			if (lResult == ERROR_SUCCESS) device_name.ReleaseBuffer(size);
-		}		
-		int device_count = midiOutGetNumDevs();
-		for (int i = 0; i < device_count; ++i) {
-			MIDIOUTCAPS Caps;
-			ZeroMemory(&Caps, sizeof(Caps));
-			MMRESULT Error = midiOutGetDevCaps(i, &Caps, sizeof(Caps));
-			if (Error != MMSYSERR_NOERROR)
-				continue;
-			if(_tcscmp(Caps.szPname, _T("CoolSoft MIDIMapper"))) synthlist.AddString(Caps.szPname);
-		}
-		int index = 0;
-		index = synthlist.FindStringExact(-1, device_name);
-		if (index == CB_ERR) index = 0;
-		synthlist.SetCurSel(index);
-	}
-};
+#pragma endregion CView4 - Advanced tab
 
 
 #endif // !defined(AFX_VIEWS_H__20020629_8D64_963C_A351_0080AD509054__INCLUDED_)

@@ -1,4 +1,5 @@
 /* Copyright (C) 2011 Chris Moeller, Brad Miller
+*  Copyright (C) 2023 Zoltan Bacsko - Falcosoft
 *
 *  This program is free software: you can redistribute it and/or modify
 *  it under the terms of the GNU Lesser General Public License as published by
@@ -14,13 +15,12 @@
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#pragma warning(disable:6255) 
-#pragma warning(disable:26812)
-
 #include "VSTDriver.h"
 #include <commdlg.h>
-
 #include <assert.h>
+
+#pragma warning(disable:6255) 
+#pragma warning(disable:26812)
 
 enum
 {
@@ -79,7 +79,7 @@ bool IsWinNT4()
 	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-	if (bOsVersionInfoEx == FALSE) return FALSE;
+	if (bOsVersionInfoEx == FALSE) return false;
 	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion == 4)
 		return true;
 	return false;
@@ -92,10 +92,10 @@ bool IsVistaOrNewer()
 	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-	if (bOsVersionInfoEx == FALSE) return FALSE;
+	if (bOsVersionInfoEx == FALSE) return false;
 	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion > 5)		
-		return TRUE;
-	return FALSE;
+		return true;
+	return false;
 }
 #pragma warning(default:28159)
 
@@ -487,9 +487,9 @@ bool VSTDriver::process_create()
 	TCHAR exe_path[MAX_PATH] = {0};
 	TCHAR exe_title[MAX_PATH / 2] = {0};
 #ifdef WIN64
-	TCHAR bitnessStr[8] = _T(" 64-bit");
+	const TCHAR bitnessStr[] = _T(" 64-bit");
 #else
-	TCHAR bitnessStr[8] = _T(" 32-bit");
+	const TCHAR bitnessStr[] = _T(" 32-bit");
 #endif	
 
 	GetModuleFileName(NULL, exe_path, _countof(exe_path));

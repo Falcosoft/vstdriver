@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="AudioDrivers.cpp" />
     <ClCompile Include="MidiSynth.cpp" />
     <ClCompile Include="VSTDriver.cpp" />
     <ClCompile Include="winmm_drv.cpp" />
@@ -33,6 +34,7 @@
     <ClInclude Include="..\external_packages\comdecl.h" />
     <ClInclude Include="..\external_packages\mmddk.h" />
     <ClInclude Include="..\external_packages\win32lock.h" />
+    <ClInclude Include="AudioDrivers.h" />
     <ClInclude Include="MidiSynth.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
@@ -46,7 +48,7 @@
     <ProjectName>vstmidi_win32drv</ProjectName>
     <ProjectGuid>{4666F6D4-704E-4223-B3A0-D27A4486C6A0}</ProjectGuid>
     <RootNamespace>vstmidi_win32drv</RootNamespace>
-    <Keyword>AtlProj</Keyword>    
+    <Keyword>AtlProj</Keyword>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -54,26 +56,26 @@
     <UseOfMfc>false</UseOfMfc>
     <UseOfAtl>Static</UseOfAtl>
     <CharacterSet>Unicode</CharacterSet>
-    <WholeProgramOptimization>true</WholeProgramOptimization>    
+    <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <UseOfAtl>Static</UseOfAtl>
     <CharacterSet>Unicode</CharacterSet>
-    <WholeProgramOptimization>true</WholeProgramOptimization>    
+    <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <UseOfAtl>Static</UseOfAtl>
-    <CharacterSet>Unicode</CharacterSet>    
+    <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseOfMfc>false</UseOfMfc>
     <UseOfAtl>Static</UseOfAtl>
-    <CharacterSet>Unicode</CharacterSet>    
+    <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
