@@ -8,6 +8,9 @@
 #include "../external_packages/audiodefs.h"
 #include "../driver/VSTDriver.h"
 
+#define WIN32DEF(f) (WINAPI *f)
+static BOOL WIN32DEF(DynAllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
+
 /// Define BASSASIO functions as pointers
 #define BASSASIODEF(f) (WINAPI *f)
 #define LOADBASSASIOFUNCTION(f) *((void**)&f)=GetProcAddress(bassasio,#f)
@@ -18,6 +21,8 @@
 	#define     GA_PARENT       1
 	#define     GA_ROOT         2
 	#define     GA_ROOTOWNER    3
+	
+	#define ASFW_ANY    ((DWORD)-1)
 	
 	// Actually this is supported by Win NT4 SP6 but built-in headers only contain these definitions if _WIN32_WINNT >= 0x0500	
 	extern "C" {
@@ -722,14 +727,15 @@ public:
 	{
 		if(effect)
 		{
-			HWND hWnd = GetAncestor(this->m_hWnd, GA_ROOT);
-			::EnableWindow(hWnd, FALSE);
+			HWND hWnd = GetAncestor(this->m_hWnd, GA_ROOT);			
 			effect->setHighDpiMode(highDpiMode);
 
 			TCHAR tmpBuff[8];
 			vst_sample_rate.GetWindowText(tmpBuff, 8);	      
 			effect->setSampleRate(_ttoi(tmpBuff));
 			
+			if (DynAllowSetForegroundWindow) DynAllowSetForegroundWindow(ASFW_ANY); //allows modal dialog to set focus
+			::EnableWindow(hWnd, FALSE);
 			effect->displayEditorModal();
 			::EnableWindow(hWnd, TRUE);
 			::SetForegroundWindow(this->m_hWnd); //Gets back focus after editor is closed. AllowSetForegroundWindow has to be called by vsthost.			
@@ -1001,11 +1007,15 @@ public:
 	}
 
 	LRESULT OnInitDialogView1(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
-	{
+	{		
 		TCHAR fileversionBuff[32] = { 0 };
 		effect = NULL;
 		BASS_ASIO_INFO info = {0};	
-		
+	
+		HINSTANCE user32 = GetModuleHandle(_T("user32.dll"));
+		if (user32)
+			*((void**)&DynAllowSetForegroundWindow) = GetProcAddress(user32, "AllowSetForegroundWindow");		
+
 		vst_sample_format = GetDlgItem(IDC_SAMPLEFORMAT);
 		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
 		vst_buffer_size = GetDlgItem(IDC_BUFFERSIZE);

@@ -182,10 +182,10 @@ void MiniDump(EXCEPTION_POINTERS* ExceptionInfo)
 #define LOADUSER32FUNCTION(f) *((void**)&f)=GetProcAddress(user32,#f)
 
 static BOOL WIN32DEF(DynGetModuleHandleEx)(DWORD dwFlags, LPCTSTR lpModuleName, HMODULE* phModule) = NULL;
+static BOOL WIN32DEF(DynAllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
 static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 
-#if(_WIN32_WINNT < 0x0500) 
-static BOOL WIN32DEF(AllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
+#if(_WIN32_WINNT < 0x0500)
 #define SM_CXVIRTUALSCREEN  78
 #define SM_CYVIRTUALSCREEN  79
 #define ASFW_ANY    ((DWORD)-1)
@@ -1256,7 +1256,6 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 	switch (msg)
 	{
 	case WM_INITDIALOG:
-	{
 		effect = reinterpret_cast<AEffect*>(lParam);
 		if (effect)
 		{
@@ -1278,17 +1277,7 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 			portState[portNum].isPortActive = true;
 			dialogState[portNum].savedHandle = portState[portNum].editorHandle;
 			portState[portNum].editorHandle = hwnd;
-
 			SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
-
-#pragma warning(disable:4838) //fake warning even after casting
-			TCHAR wText[18] = _T("VST Editor port ");
-			TCHAR intCnst[] = { 'A' + static_cast<char>(portNum) };
-#pragma warning(default:4838)
-
-			_tcsncat_s(wText, intCnst, 1);
-
-			SetWindowText(hwnd, wText);
 
 			VstInt16 extraHeight = 0;
 			if (GetCurrentThreadId() != MainThreadId)
@@ -1296,6 +1285,23 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 				extraHeight = (int)(16 * dpiMul);
 				sameThread = false;
 			}
+
+			TCHAR wText[28] = { 0 };
+			if (sameThread)
+			{
+				SetWindowLongPtr(hwnd, GWL_STYLE, WS_POPUPWINDOW | WS_DLGFRAME | DS_MODALFRAME | DS_CENTER);
+				_tcscpy_s(wText, _T("VST General Editor"));
+			}
+			else
+			{
+#pragma warning(disable:4838) //fake warning even after casting
+				TCHAR portSign[] = {'A' + static_cast<char>(portNum) };
+#pragma warning(default:4838)
+				_tcscpy_s(wText, _T("VST General Editor port "));				
+				_tcsncat_s(wText, portSign, 1);
+			}			
+
+			SetWindowText(hwnd, wText);					
 
 			int xPos = 0xFFFFFF; //16M not likely to be real window position
 			int yPos = 0xFFFFFF;
@@ -1410,17 +1416,15 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 			SendMessage(valueSlider, TBM_SETPAGESIZE, 0, 10);
 			SendMessage(valueSlider, TBM_SETPOS, TRUE, sliderMax / 2);
 		}
-
-		SetForegroundWindow(hwnd);
-	}
-	break;
+		return TRUE;			
 	case WM_SHOWWINDOW:
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect && wParam)
 		{
 			portNum = *(int*)effect->user;
-			SendMessage(dialogState[portNum].checkBoxWnd, BM_SETCHECK, portState[portNum].alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
+			if (dialogState[portNum].checkBoxWnd) SendMessage(dialogState[portNum].checkBoxWnd, BM_SETCHECK, portState[portNum].alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
 			SetWindowPos(hwnd, portState[portNum].alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+			SetForegroundWindow(hwnd);
 		}
 		break;
 	case WM_VSCROLL:
@@ -1439,10 +1443,16 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 
 		break;
 	case WM_COMMAND:
+		if (wParam == IDCANCEL)
+		{
+			PostMessage(hwnd, WM_CLOSE, 0, 0);
+			return TRUE;
+		}
+
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect)
 		{
-			portNum = *(int*)effect->user;
+			portNum = *(int*)effect->user;			
 
 			if (HIWORD(wParam) == LBN_SELCHANGE && lParam == (LPARAM)programsListBox)
 			{
@@ -1474,7 +1484,10 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 				}
 
 			}
-			else if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)dialogState[portNum].checkBoxWnd)
+
+			if (sameThread) break;
+
+			if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)dialogState[portNum].checkBoxWnd)
 			{
 				bool checked = SendMessage(dialogState[portNum].checkBoxWnd, BM_GETCHECK, 0, 0) == BST_CHECKED;
 				portState[portNum].alwaysOnTop = checked;
@@ -1502,8 +1515,7 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 			}
 		}
 		break;
-	case WM_CLOSE:
-	{
+	case WM_CLOSE:	
 		if ((wParam && lParam) || sameThread)
 		{
 			effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
@@ -1523,16 +1535,18 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 		else
 		{
-			ShowWindow(hwnd, SW_HIDE);
-			return 0;
+			ShowWindow(hwnd, SW_HIDE);			
 		}
-	}
+
+		return TRUE;
+
+		break;
 	case WM_DESTROY:
 		if (!sameThread) PostQuitMessage(0);
 		break;
 	}
 
-	return 0;
+	return FALSE;
 }
 
 INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -1549,9 +1563,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch (msg)
 	{
 	case WM_INITDIALOG:
-	{
 		effect = reinterpret_cast<AEffect*>(lParam);
-
 		if (effect)
 		{
 			ScopeLock<Win32Lock> scopeLock(&dialogLock);
@@ -1574,20 +1586,28 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 			SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
 
-#pragma warning(disable:4838) //fake warning even after casting
-			TCHAR wText[18] = _T("VST Editor port ");
-			TCHAR intCnst[] = { 'A' + static_cast<char>(portNum) };
-#pragma warning(default:4838)
-
-			_tcsncat_s(wText, intCnst, 1);
-
-			SetWindowText(hwnd, wText);
-
+			
 			if (GetCurrentThreadId() != MainThreadId)
 			{
 				extraHeight = (int)(24 * dpiMul);
 				sameThread = false;
 			}
+
+			TCHAR wText[20] = { 0 };
+			if (sameThread)
+			{
+				_tcscpy_s(wText, _T("VST Editor"));
+			}
+			else
+			{
+#pragma warning(disable:4838) //fake warning even after casting
+				TCHAR portSign[] = { 'A' + static_cast<char>(portNum) };
+#pragma warning(default:4838)
+				_tcscpy_s(wText, _T("VST Editor port "));
+				_tcsncat_s(wText, portSign, 1);
+			}
+
+			SetWindowText(hwnd, wText);			
 
 			SetTimer(hwnd, 1, timerPeriodMS, NULL);
 			ERect* eRect = NULL;
@@ -1641,18 +1661,16 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					sample_pos = 0;
 				}
 			}
-		}
-
-		SetForegroundWindow(hwnd);
-	}
-	break;
+		}		
+		return TRUE;
 	case WM_SHOWWINDOW:
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect && wParam)
 		{
 			portNum = *(int*)effect->user;
-			SendMessage(dialogState[portNum].checkBoxWnd, BM_SETCHECK, portState[portNum].alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
+			if(dialogState[portNum].checkBoxWnd) SendMessage(dialogState[portNum].checkBoxWnd, BM_SETCHECK, portState[portNum].alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
 			SetWindowPos(hwnd, portState[portNum].alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+			SetForegroundWindow(hwnd);
 		}
 		break;
 	case WM_SIZE: //Fixes SC-VA display bug after parts section opened/closed		
@@ -1734,10 +1752,18 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	case WM_COMMAND:
+		if (wParam == IDCANCEL)
+		{
+			PostMessage(hwnd, WM_CLOSE, 0, 0);
+			return TRUE;
+		}
+
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect)
 		{
-			portNum = *(int*)effect->user;
+			portNum = *(int*)effect->user;		
+
+			if (sameThread) break;
 
 			if (HIWORD(wParam) == BN_CLICKED && lParam == (LPARAM)dialogState[portNum].checkBoxWnd)
 			{
@@ -1831,13 +1857,15 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			ShowWindow(hwnd, SW_HIDE);
 		}
 
+		return TRUE;
+
 		break;
 	case WM_DESTROY:
 		if (!sameThread) PostQuitMessage(0);
 		break;
 	}
 
-	return 0;
+	return FALSE;
 }
 
 #pragma comment(lib, "Winmm")
@@ -1853,9 +1881,9 @@ static void EditorThread(void* threadparam)
 	HRESULT res = CoInitialize(NULL);
 
 	if ((peffect->flags & effFlagsHasEditor) && !portState[portNum].alwaysUseHostEditor)
-		DialogBoxIndirectParam(NULL, &vstiEditor, trayWndHandle, (DLGPROC)EditorProc, (LPARAM)peffect);
+		DialogBoxIndirectParam(NULL, &vstiEditor, NULL, (DLGPROC)EditorProc, (LPARAM)peffect);
 	else
-		DialogBoxParam(NULL, MAKEINTRESOURCE(IDD_GENERALVSTUI), trayWndHandle, (DLGPROC)GeneralUiProc, (LPARAM)peffect);
+		DialogBoxParam(NULL, MAKEINTRESOURCE(IDD_GENERALVSTUI), NULL, (DLGPROC)GeneralUiProc, (LPARAM)peffect);
 
 	if (res == S_OK) CoUninitialize();
 
@@ -1896,194 +1924,190 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 	switch (msg)
 	{
-	case WM_CREATE:
-	{
-		TCHAR tmpPath[MAX_PATH] = { 0 };
-		TCHAR trayTip[MAX_PATH] = { 0 };
-		HMENU pluginMenu = CreatePopupMenu();
-
-		_tcsncpy_s(midiClient, argv[3], _countof(midiClient));
-		_tcsncpy_s(clientBitnessStr, argv[4], _countof(clientBitnessStr));
-		_tcsncpy_s(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _countof(outputModeStr));
-
-		for (int i = 0; i < MAX_PLUGINS; i++)
-			if (getPluginMenuItem(i, tmpPath, MAX_PATH)) {
-				if (getSelectedPluginIndex() == i)
-					AppendMenu(pluginMenu, MF_STRING | MF_ENABLED | MF_CHECKED, i, tmpPath);
-				else
-					AppendMenu(pluginMenu, MF_STRING | MF_ENABLED, i, tmpPath);
-			}
-
-		trayMenu = CreatePopupMenu();
-		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET, _T("Port A VST Dialog"));
-		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET + 1, _T("Port B VST Dialog"));
-		AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-		AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
-		AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
-		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
-		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 3, _T("Send XG Reset"));
-		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 4, _T("Send GM2 Reset"));
-		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 5, _T("All Notes/CC Off"));
-		AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 2 * RESET_MENU_OFFSET + 1, _T("Info..."));
-
-
-		nIconData.cbSize = sizeof(NOTIFYICONDATA);
-		nIconData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-		nIconData.hWnd = hwnd;
-		nIconData.uID = WM_ICONMSG;
-		nIconData.uCallbackMessage = WM_ICONMSG;
-		nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
-
-		if (IsWinNT4())
-			_tcscpy_s(trayTip, _T("VST Midi Synth - "));
-		else
-			_tcscpy_s(trayTip, _T("VST Midi Synth \r\n"));
-
-		_tcsncat_s(trayTip, argv[3], _countof(trayTip) - _tcslen(trayTip));
-
-		_tcsncpy_s(nIconData.szTip, trayTip, _countof(nIconData.szTip));
-		Shell_NotifyIcon(NIM_ADD, &nIconData);
-
-		return 0;
-	}
-	break;
-
-	case WM_DESTROY:
-	{
-		setSelectedSysExIndex(lastUsedSysEx);
-
-		Shell_NotifyIcon(NIM_DELETE, &nIconData);
-		DestroyMenu(trayMenu);
-		trayMenu = NULL;
-		trayWndHandle = NULL;
-		PostQuitMessage(0);
-		return 0;
-	}
-	break;
-
-	case WM_ICONMSG:
-	{
-		if (wParam == WM_ICONMSG && (lParam == WM_RBUTTONDOWN || lParam == WM_LBUTTONDOWN))
+		case WM_CREATE:
 		{
-			POINT cursorPoint;
-			//bool hasEditor = portState[0].pEffect->flags & VstAEffectFlags::effFlagsHasEditor;
-			GetCursorPos(&cursorPoint);
-			CheckMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].editorHandle != NULL && IsWindowVisible(portState[0].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
-			CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].editorHandle != NULL && IsWindowVisible(portState[1].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
-			EnableMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].isPortActive /* && hasEditor */ ? MF_ENABLED : MF_GRAYED);
-			EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].isPortActive /* && hasEditor*/ ? MF_ENABLED : MF_GRAYED);
-			EnableMenuItem(trayMenu, 3, portState[0].isPortActive || portState[1].isPortActive ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
+			TCHAR tmpPath[MAX_PATH] = { 0 };
+			TCHAR trayTip[MAX_PATH] = { 0 };
+			HMENU pluginMenu = CreatePopupMenu();
 
-			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
-			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
-			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 3, lastUsedSysEx == RESET_MENU_OFFSET + 3 ? MF_CHECKED : MF_UNCHECKED);
-			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 4, lastUsedSysEx == RESET_MENU_OFFSET + 4 ? MF_CHECKED : MF_UNCHECKED);
-			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 5, lastUsedSysEx == RESET_MENU_OFFSET + 5 ? MF_CHECKED : MF_UNCHECKED);
+			_tcsncpy_s(midiClient, argv[3], _countof(midiClient));
+			_tcsncpy_s(clientBitnessStr, argv[4], _countof(clientBitnessStr));
+			_tcsncpy_s(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _countof(outputModeStr));
 
-			SetForegroundWindow(hwnd);
-			TrackPopupMenu(trayMenu, TPM_RIGHTBUTTON | (GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN), cursorPoint.x, cursorPoint.y, 0, hwnd, NULL);
-			PostMessage(hwnd, WM_NULL, 0, 0);
+			for (int i = 0; i < MAX_PLUGINS; i++)
+				if (getPluginMenuItem(i, tmpPath, MAX_PATH)) {
+					if (getSelectedPluginIndex() == i)
+						AppendMenu(pluginMenu, MF_STRING | MF_ENABLED | MF_CHECKED, i, tmpPath);
+					else
+						AppendMenu(pluginMenu, MF_STRING | MF_ENABLED, i, tmpPath);
+				}
+
+			trayMenu = CreatePopupMenu();
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET, _T("Port A VST Dialog"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET + 1, _T("Port B VST Dialog"));
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+			AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 3, _T("Send XG Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 4, _T("Send GM2 Reset"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 5, _T("All Notes/CC Off"));
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 2 * RESET_MENU_OFFSET + 1, _T("Info..."));
+
+
+			nIconData.cbSize = sizeof(NOTIFYICONDATA);
+			nIconData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+			nIconData.hWnd = hwnd;
+			nIconData.uID = WM_ICONMSG;
+			nIconData.uCallbackMessage = WM_ICONMSG;
+			nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
+
+			if (IsWinNT4())
+				_tcscpy_s(trayTip, _T("VST Midi Synth - "));
+			else
+				_tcscpy_s(trayTip, _T("VST Midi Synth \r\n"));
+
+			_tcsncat_s(trayTip, argv[3], _countof(trayTip) - _tcslen(trayTip));
+
+			_tcsncpy_s(nIconData.szTip, trayTip, _countof(nIconData.szTip));
+			Shell_NotifyIcon(NIM_ADD, &nIconData);
+
+			return 0;
 		}
+		break;
 
-		return 0;
-	}
-	break;
-	case WM_HELP:
-	{
-		TCHAR tmpPath[MAX_PATH] = { 0 };
-
-		if (GetWindowsDirectory(tmpPath, MAX_PATH))
+		case WM_DESTROY:
 		{
-			_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\Readme.html"));
-			if (GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
+			setSelectedSysExIndex(lastUsedSysEx);
+
+			Shell_NotifyIcon(NIM_DELETE, &nIconData);
+			DestroyMenu(trayMenu);
+			trayMenu = NULL;
+			trayWndHandle = NULL;
+			PostQuitMessage(0);
+			return 0;
+		}
+		break;
+
+		case WM_ICONMSG:
+		{
+			if (wParam == WM_ICONMSG && (lParam == WM_RBUTTONDOWN || lParam == WM_LBUTTONDOWN))
 			{
-				if (GetWindowsDirectory(tmpPath, MAX_PATH))
-					_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\Readme.html"));
+				POINT cursorPoint;
+				//bool hasEditor = portState[0].pEffect->flags & VstAEffectFlags::effFlagsHasEditor;
+				GetCursorPos(&cursorPoint);
+				CheckMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].editorHandle != NULL && IsWindowVisible(portState[0].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].editorHandle != NULL && IsWindowVisible(portState[1].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
+				EnableMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].isPortActive /* && hasEditor */ ? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].isPortActive /* && hasEditor*/ ? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, 3, portState[0].isPortActive || portState[1].isPortActive ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
+
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 3, lastUsedSysEx == RESET_MENU_OFFSET + 3 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 4, lastUsedSysEx == RESET_MENU_OFFSET + 4 ? MF_CHECKED : MF_UNCHECKED);
+				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 5, lastUsedSysEx == RESET_MENU_OFFSET + 5 ? MF_CHECKED : MF_UNCHECKED);
+
+				SetForegroundWindow(hwnd);
+				TrackPopupMenu(trayMenu, TPM_RIGHTBUTTON | (GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN), cursorPoint.x, cursorPoint.y, 0, hwnd, NULL);
+				PostMessage(hwnd, WM_NULL, 0, 0);
+				return 0;
+			}		
+		}
+		break;
+		case WM_HELP:
+		{
+			TCHAR tmpPath[MAX_PATH] = { 0 };
+
+			if (GetWindowsDirectory(tmpPath, MAX_PATH))
+			{
+				_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\Readme.html"));
+				if (GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
+				{
+					if (GetWindowsDirectory(tmpPath, MAX_PATH))
+						_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\Readme.html"));
+				}
+
+				ShellExecute(hwnd, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+				return 0;
+			}
+		}
+		break;
+		case WM_COMMAND:
+		{
+			static volatile int aboutBoxResult = 0;
+			TCHAR tempBuff[MAX_PATH] = { 0 };
+			TCHAR versionBuff[MAX_PATH] = _T("MIDI client: ");
+			MSGBOXPARAMS params = { 0 };
+
+			if ((int)wParam >= 0 && wParam < MAX_PLUGINS)
+			{
+				setSelectedPluginIndex((int)wParam);
+				return 0;
 			}
 
-			ShellExecute(hwnd, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+			switch (wParam)
+			{
+			case PORT_MENU_OFFSET:
+			case PORT_MENU_OFFSET + 1:
+				showVstEditor((uint32_t)wParam - PORT_MENU_OFFSET, (BOOL)lParam);
+				return 0;
+
+			case RESET_MENU_OFFSET + 1:
+			case RESET_MENU_OFFSET + 2:
+			case RESET_MENU_OFFSET + 3:
+			case RESET_MENU_OFFSET + 4:
+			case RESET_MENU_OFFSET + 5:
+				lastUsedSysEx = (int)wParam;
+				destPort = PORT_ALL;
+				doOwnReset = true;
+				return 0;
+
+			case 2 * RESET_MENU_OFFSET + 1:
+				if (aboutBoxResult == STILLRUNNING) return 0;
+				_tcscat_s(versionBuff, midiClient);
+				_tcscat_s(versionBuff, _T(" "));
+				_tcscat_s(versionBuff, clientBitnessStr);
+				_tcscat_s(versionBuff, _T("\r\nPlugin: "));
+	#ifdef UNICODE  
+				MultiByteToWideChar(CP_ACP, 0, product_string, 64, tempBuff, 64);
+				_tcscat_s(versionBuff, tempBuff);
+	#else
+				strncat_s(versionBuff, product_string, 64);
+	#endif			
+				_tcscat_s(versionBuff, bitnessStr);
+				_tcscat_s(versionBuff, _T("\r\nDriver mode: "));
+				_tcscat_s(versionBuff, outputModeStr);
+
+				_tcscat_s(versionBuff, _T("\r\n \r\n"));
+
+				_tcscat_s(versionBuff, _T("Synth driver "));
+				GetSystemDirectory(tempBuff, MAX_PATH);
+				_tcscat_s(tempBuff, _T("\\vstmididrv.dll"));
+				GetFileVersion(tempBuff, versionBuff, _countof(versionBuff));
+
+				_tcscat_s(versionBuff, _T("\r\nHost bridge "));
+				GetFileVersion(NULL, versionBuff, _countof(versionBuff));
+
+				params.cbSize = sizeof(params);
+				params.dwStyle = MB_OK | MB_USERICON | MB_TOPMOST | MB_HELP;
+				params.hInstance = GetModuleHandle(NULL);
+				params.hwndOwner = hwnd;
+				params.lpszCaption = _T("VST MIDI Synth (Falcomod)");
+				params.lpszText = versionBuff;
+				params.lpszIcon = MAKEINTRESOURCE(32512);
+
+				aboutBoxResult = STILLRUNNING;
+				aboutBoxResult = MessageBoxIndirect(&params);
+				return 0;
+			}
 		}
+		break;		
 	}
-	break;
-	case WM_COMMAND:
-	{
-		static volatile int aboutBoxResult = 0;
-		TCHAR tempBuff[MAX_PATH] = { 0 };
-		TCHAR versionBuff[MAX_PATH] = _T("MIDI client: ");
-		MSGBOXPARAMS params = { 0 };
 
-		if ((int)wParam >= 0 && wParam < MAX_PLUGINS)
-		{
-			setSelectedPluginIndex((int)wParam);
-			return 0;
-		}
-
-		switch (wParam)
-		{
-		case PORT_MENU_OFFSET:
-		case PORT_MENU_OFFSET + 1:
-			showVstEditor((uint32_t)wParam - PORT_MENU_OFFSET, (BOOL)lParam);
-			return 0;
-
-		case RESET_MENU_OFFSET + 1:
-		case RESET_MENU_OFFSET + 2:
-		case RESET_MENU_OFFSET + 3:
-		case RESET_MENU_OFFSET + 4:
-		case RESET_MENU_OFFSET + 5:
-			lastUsedSysEx = (int)wParam;
-			destPort = PORT_ALL;
-			doOwnReset = true;
-			return 0;
-
-		case 2 * RESET_MENU_OFFSET + 1:
-			if (aboutBoxResult == STILLRUNNING) return 0;
-			_tcscat_s(versionBuff, midiClient);
-			_tcscat_s(versionBuff, _T(" "));
-			_tcscat_s(versionBuff, clientBitnessStr);
-			_tcscat_s(versionBuff, _T("\r\nPlugin: "));
-#ifdef UNICODE  
-			MultiByteToWideChar(CP_ACP, 0, product_string, 64, tempBuff, 64);
-			_tcscat_s(versionBuff, tempBuff);
-#else
-			strncat_s(versionBuff, product_string, 64);
-#endif			
-			_tcscat_s(versionBuff, bitnessStr);
-			_tcscat_s(versionBuff, _T("\r\nDriver mode: "));
-			_tcscat_s(versionBuff, outputModeStr);
-
-			_tcscat_s(versionBuff, _T("\r\n \r\n"));
-
-			_tcscat_s(versionBuff, _T("Synth driver "));
-			GetSystemDirectory(tempBuff, MAX_PATH);
-			_tcscat_s(tempBuff, _T("\\vstmididrv.dll"));
-			GetFileVersion(tempBuff, versionBuff, _countof(versionBuff));
-
-			_tcscat_s(versionBuff, _T("\r\nHost bridge "));
-			GetFileVersion(NULL, versionBuff, _countof(versionBuff));
-
-			params.cbSize = sizeof(params);
-			params.dwStyle = MB_OK | MB_USERICON | MB_TOPMOST | MB_HELP;
-			params.hInstance = GetModuleHandle(NULL);
-			params.hwndOwner = hwnd;
-			params.lpszCaption = _T("VST MIDI Synth (Falcomod)");
-			params.lpszText = versionBuff;
-			params.lpszIcon = MAKEINTRESOURCE(32512);
-
-			aboutBoxResult = STILLRUNNING;
-			aboutBoxResult = MessageBoxIndirect(&params);
-
-			return 0;
-		}
-	}
-	break;
-
-	default:
-		return DefWindowProc(hwnd, msg, wParam, lParam);
-	}
-	return 0;
-
+	return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
 static void TrayThread(void* threadparam)
@@ -2249,10 +2273,11 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 	MainThreadId = GetCurrentThreadId();
 
 	HINSTANCE user32 = GetModuleHandle(_T("user32.dll"));
-	if (user32)	LOADUSER32FUNCTION(SetThreadDpiAwarenessContext);
-#if(_WIN32_WINNT < 0x0500) 
-	if (user32)	LOADUSER32FUNCTION(AllowSetForegroundWindow);
-#endif	
+	if (user32)
+	{
+		LOADUSER32FUNCTION(SetThreadDpiAwarenessContext);
+		*((void**)&DynAllowSetForegroundWindow) = GetProcAddress(user32, "AllowSetForegroundWindow");
+	}	
 
 	HINSTANCE kernel32 = GetModuleHandle(_T("kernel32.dll"));
 #ifdef UNICODE  
@@ -2473,23 +2498,20 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 			{
 				MyDLGTEMPLATE t;
 				t.style = WS_POPUPWINDOW | WS_DLGFRAME | DS_MODALFRAME | DS_CENTER;
-				t.dwExtendedStyle = WS_EX_TOPMOST;
+				//t.dwExtendedStyle = WS_EX_TOOLWINDOW;
 
 				if (highDpiMode && SetThreadDpiAwarenessContext) SetThreadDpiAwarenessContext(highDpiMode);
 
 				if (portState[0].pEffect->flags & effFlagsHasEditor)
-					DialogBoxIndirectParam(NULL, &t, GetDesktopWindow(), (DLGPROC)EditorProc, (LPARAM)(portState[0].pEffect));
+					DialogBoxIndirectParam(NULL, &t, NULL, (DLGPROC)EditorProc, (LPARAM)(portState[0].pEffect));
 				else
-					DialogBoxParam(NULL, MAKEINTRESOURCE(IDD_GENERALVSTUI), GetDesktopWindow(), (DLGPROC)GeneralUiProc, (LPARAM)portState[0].pEffect);
+					DialogBoxParam(NULL, MAKEINTRESOURCE(IDD_GENERALVSTUI), NULL, (DLGPROC)GeneralUiProc, (LPARAM)portState[0].pEffect);
 
 				//getChunk(portState[0].pEffect, chunk);
 				//setChunk(portState[1].pEffect, chunk);
 
-#if(_WIN32_WINNT < 0x0500) 
-				if (AllowSetForegroundWindow) AllowSetForegroundWindow(ASFW_ANY); //allows drivercfg to get back focus 
-#else	
-				::AllowSetForegroundWindow(ASFW_ANY); //allows drivercfg to get back focus 
-#endif
+				if (DynAllowSetForegroundWindow) DynAllowSetForegroundWindow(ASFW_ANY); //allows drivercfg to get back focus 
+
 			}
 			put_code(Response::NoError);
 		}
