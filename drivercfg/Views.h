@@ -7,6 +7,7 @@
 #include "../external_packages/mmddk.h"
 #include "../external_packages/audiodefs.h"
 #include "../driver/VSTDriver.h"
+#include "../version.h"
 
 #define WIN32DEF(f) (WINAPI *f)
 static BOOL WIN32DEF(DynAllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
@@ -43,6 +44,7 @@ static BOOL WIN32DEF(DynAllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
 #endif	
 
 #include "../external_packages/bassasio.h"
+
 
 using namespace std;
 
@@ -804,48 +806,19 @@ public:
 		return TRUE;
 	}
 
-#pragma comment(lib,"Version.lib") 
 	TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
-	{
-		DWORD               dwSize = 0;
-		BYTE* pVersionInfo = NULL;
-		VS_FIXEDFILEINFO* pFileInfo = NULL;
-		UINT                pLenFileInfo = 0;
-		TCHAR tmpBuff[MAX_PATH];
-
-		GetModuleFileName(NULL, tmpBuff, MAX_PATH);
-
-		dwSize = GetFileVersionInfoSize(tmpBuff, NULL);
-		if (dwSize == 0)
-		{           
-			return NULL;
-		}
-
-		pVersionInfo = new BYTE[dwSize]; 
-
-		if (!GetFileVersionInfo(tmpBuff, 0, dwSize, pVersionInfo))
-		{           
-			delete[] pVersionInfo;
-			return NULL;
-		}
-
-		if (!VerQueryValue(pVersionInfo, TEXT("\\"), (LPVOID*)&pFileInfo, &pLenFileInfo))
-		{            
-			delete[] pVersionInfo;
-			return NULL;
-		}      
+	{		
+		TCHAR tmpBuff[12] = { 0 };
 
 		_tcscat_s(result, buffSize, _T("version: "));
-		_ultot_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
+		_ultot_s(VERSION_MAJOR, tmpBuff, _countof(tmpBuff), 10);
 		_tcscat_s(result, buffSize, tmpBuff);
 		_tcscat_s(result, buffSize, _T("."));
-		_ultot_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
+		_ultot_s(VERSION_MINOR, tmpBuff, _countof(tmpBuff), 10);
 		_tcscat_s(result, buffSize, tmpBuff);
 		_tcscat_s(result, buffSize, _T("."));
-		_ultot_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-		_tcscat_s(result, buffSize, tmpBuff);
-		//_tcscat_s(result, buffSize, _T("."));
-		//_tcscat_s(result, buffSize, _ultot((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
+		_ultot_s(VERSION_PATCH, tmpBuff, _countof(tmpBuff), 10);
+		_tcscat_s(result, buffSize, tmpBuff);		
 
 		return result;
 	}
@@ -1187,12 +1160,12 @@ public:
 
 	enum { IDD = IDD_MIDI };
 	BEGIN_MSG_MAP(CView2)
-		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView2)
+		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView2)		
 		COMMAND_ID_HANDLER(IDC_SNAPPLY, OnButtonApply)
 	END_MSG_MAP()
 
 	void SetGroupBoxCaption(TCHAR* caption)
-	{
+	{		
 		groupBox.SetWindowText(caption);
 	}
 
@@ -1200,7 +1173,12 @@ public:
 	{
 		synthlist = GetDlgItem(IDC_SYNTHLIST);
 		apply = GetDlgItem(IDC_SNAPPLY);
-		groupBox = GetDlgItem(IDC_GROUPBOX2);
+		groupBox = GetDlgItem(IDC_GROUPBOX2);		
+		return TRUE;
+	}
+
+	LRESULT OnShowDialogView2(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+	{		
 		load_midisynths_mapper();
 		return TRUE;
 	}
@@ -1245,6 +1223,8 @@ public:
 		CRegKeyEx reg;
 		CString device_name = _T("");
 
+		synthlist.ResetContent();
+		
 		lResult = reg.Create(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Multimedia\\MIDIMap"), REG_NONE, REG_OPTION_NON_VOLATILE, KEY_READ);
 		if (lResult == ERROR_SUCCESS)
 		{
@@ -1255,8 +1235,7 @@ public:
 		}
 		int device_count = midiOutGetNumDevs();
 		for (int i = 0; i < device_count; ++i) {
-			MIDIOUTCAPS Caps;
-			ZeroMemory(&Caps, sizeof(Caps));
+			MIDIOUTCAPS Caps = { 0 };
 			MMRESULT Error = midiOutGetDevCaps(i, &Caps, sizeof(Caps));
 			if (Error != MMSYSERR_NOERROR)
 				continue;
@@ -1685,12 +1664,12 @@ public:
 #pragma region CView4
 class CView4 : public CDialogImpl<CView4>
 {
-	CButton btnHelp, chk32ch, chkPrivAsio, chkKeepDriver;
+	CButton btnHelp, btnProxy, chk32ch, chkPrivAsio, chkKeepDriver;
 	CComboBox cmbHighDpi;	
 
 public:
 
-	CView4() : btnHelp(), chk32ch(), chkPrivAsio(), chkKeepDriver(), cmbHighDpi() {}
+	CView4() : btnHelp(), btnProxy(), chk32ch(), chkPrivAsio(), chkKeepDriver(), cmbHighDpi() {}
 
 	~CView4() {}
 
@@ -1699,6 +1678,7 @@ public:
 	BEGIN_MSG_MAP(CView4)
 		MESSAGE_HANDLER(WM_INITDIALOG, OnInitDialogView4)
 		COMMAND_ID_HANDLER(IDC_HELPBTN, OnButtonHelp)
+		COMMAND_ID_HANDLER(IDC_PROXY, OnButtonProxy)
 		COMMAND_HANDLER(IDC_32CHMODE, BN_CLICKED, OnBnClickedMulti)
 		COMMAND_HANDLER(IDC_PRIVATEASIO, BN_CLICKED, OnBnClickedMulti)
 		COMMAND_HANDLER(IDC_KEEPDRIVER, BN_CLICKED, OnBnClickedMulti)
@@ -1823,6 +1803,28 @@ public:
 		}
 
 		return 1;		
+	}
+
+	LRESULT OnButtonProxy(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
+	{
+		TCHAR tmpPath[MAX_PATH] = { 0 };
+
+		if (GetWindowsDirectory(tmpPath, MAX_PATH))
+		{			
+			_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\vstmidiproxy.exe"));
+
+			if (GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
+			{
+				if (GetWindowsDirectory(tmpPath, MAX_PATH))
+				{					
+					_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\vstmidiproxy.exe"));
+				}
+			}
+
+			ShellExecute(NULL, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+		}
+
+		return 1;
 	}
 
 };

@@ -21,6 +21,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ummidiplg", "ummidiplg\ummi
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cplwrapper", "cplwrapper\cplwrapper.vcxproj", "{21817C19-DA31-4413-A92D-3DEE89C88F0F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vstmidiproxy", "vstmidiproxy\vstmidiproxy.vcxproj", "{DCE7F97D-2197-4DE5-B643-A624EEB2168B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -119,6 +121,12 @@ Global
 		{21817C19-DA31-4413-A92D-3DEE89C88F0F}.ReleaseUnicode|Win32.Build.0 = Release|Win32
 		{21817C19-DA31-4413-A92D-3DEE89C88F0F}.ReleaseUnicode|x64.ActiveCfg = Release|Win32
 		{21817C19-DA31-4413-A92D-3DEE89C88F0F}.ReleaseUnicode|x64.Build.0 = Release|Win32
+		{DCE7F97D-2197-4DE5-B643-A624EEB2168B}.Debug|Win32.ActiveCfg = Debug|Win32
+		{DCE7F97D-2197-4DE5-B643-A624EEB2168B}.Debug|Win32.Build.0 = Debug|Win32
+		{DCE7F97D-2197-4DE5-B643-A624EEB2168B}.Debug|x64.ActiveCfg = Debug|Win32
+		{DCE7F97D-2197-4DE5-B643-A624EEB2168B}.Release|Win32.ActiveCfg = Release|Win32
+		{DCE7F97D-2197-4DE5-B643-A624EEB2168B}.Release|Win32.Build.0 = Release|Win32
+		{DCE7F97D-2197-4DE5-B643-A624EEB2168B}.Release|x64.ActiveCfg = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

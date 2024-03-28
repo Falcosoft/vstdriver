@@ -2,9 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="8,00"
-	Name="cplwrapper"
-	ProjectGUID="{21817C19-DA31-4413-A92D-3DEE89C88F0F}"
-	RootNamespace="cplwrapper"
+	Name="vstmidiproxy"
+	ProjectGUID="{BD7615A9-6E0B-401F-B0FC-EC998BCA7085}"
+	RootNamespace="vstmidiproxy"
 	Keyword="Win32Proj"
 	>
 	<Platforms>
@@ -19,7 +19,7 @@
 			Name="Debug|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
-			ConfigurationType="2"
+			ConfigurationType="1"
 			CharacterSet="1"
 			>
 			<Tool
@@ -40,12 +40,11 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;CPLWRAPPER_EXPORTS"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="0"
-				BufferSecurityCheck="false"
-				UsePrecompiledHeader="2"
+				RuntimeLibrary="1"
+				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				Detect64BitPortabilityProblems="true"
 				DebugInformationFormat="4"
@@ -61,9 +60,10 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				OutputFile="$(OutDir)\vstmididrvcfg.cpl"
-				LinkIncremental="1"
-				ModuleDefinitionFile="cplwrapper.def"
+				AdditionalOptions="/ignore:4254"
+				AdditionalDependencies="winmm.lib comctl32.lib psapi.lib"
+				LinkIncremental="2"
+				GenerateManifest="false"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="1"
@@ -97,7 +97,7 @@
 			Name="Release|Win32"
 			OutputDirectory="..\output"
 			IntermediateDirectory="$(ConfigurationName)"
-			ConfigurationType="2"
+			ConfigurationType="1"
 			CharacterSet="1"
 			WholeProgramOptimization="1"
 			>
@@ -118,13 +118,14 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				Optimization="1"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;CPLWRAPPER_EXPORTS"
+				Optimization="2"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS"
 				RuntimeLibrary="2"
 				BufferSecurityCheck="false"
+				EnableFunctionLevelLinking="true"
 				FloatingPointModel="2"
+				UsePrecompiledHeader="0"
 				WarningLevel="3"
-				Detect64BitPortabilityProblems="true"
 				DebugInformationFormat="3"
 			/>
 			<Tool
@@ -139,15 +140,14 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions="/ignore:4254"
-				AdditionalDependencies="..\external_packages\lib\msvcrt.lib"
-				OutputFile="$(OutDir)\vstmididrvcfg.cpl"
-				LinkIncremental="1"
+				AdditionalDependencies="winmm.lib comctl32.lib psapi.lib ..\external_packages\lib\msvcrt.lib"
 				GenerateManifest="false"
 				IgnoreAllDefaultLibraries="true"
-				ModuleDefinitionFile="cplwrapper.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
-				OptimizeReferences="2"							
+				OptimizeReferences="2"
+				EnableCOMDATFolding="2"
+				OptimizeForWindows98="1"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -185,28 +185,8 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath=".\cplwrapper.cpp"
+				RelativePath=".\vstmidiproxy.cpp"
 				>
-			</File>
-			<File
-				RelativePath=".\stdafx.cpp"
-				>
-				<FileConfiguration
-					Name="Debug|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="1"
-					/>
-				</FileConfiguration>
-				<FileConfiguration
-					Name="Release|Win32"
-					>
-					<Tool
-						Name="VCCLCompilerTool"
-						UsePrecompiledHeader="1"
-					/>
-				</FileConfiguration>
 			</File>
 		</Filter>
 		<Filter
@@ -215,15 +195,19 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath=".\cplwrapper.h"
-				>
-			</File>
-			<File
 				RelativePath=".\resource.h"
 				>
 			</File>
 			<File
 				RelativePath=".\stdafx.h"
+				>
+			</File>
+			<File
+				RelativePath=".\targetver.h"
+				>
+			</File>
+			<File
+				RelativePath=".\vstmidiproxy.h"
 				>
 			</File>
 		</Filter>
@@ -233,7 +217,7 @@
 			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
 			>
 			<File
-				RelativePath=".\cplwrapper.rc"
+				RelativePath=".\vstmidiproxy.rc"
 				>
 			</File>
 		</Filter>

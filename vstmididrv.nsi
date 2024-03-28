@@ -105,6 +105,7 @@ Section "Core components (required)" instsect1
     SetOutPath "$WINDIR\SysWow64\vstmididrv"  
     File output\vstmididrvcfg.exe
     File output\vstbridgeapp32.exe
+    File output\vstmidiproxy.exe
     ${If} ${AtLeastWinVista}
       File output\cpltasks64.xml
     ${Endif}
@@ -156,6 +157,11 @@ Section "Core components (required)" instsect1
     ${If} ${AtLeastWinVista}
       File output\cpltasks32.xml
     ${Endif}
+    ${If} ${IsWinXP}
+    ${AndIf} ${AtLeastServicePack} 2
+    ${OrIf} ${AtLeastWinVista}
+      File output\vstmidiproxy.exe
+    ${Endif}
     File output\vstbridgeapp32.exe    
 !ifndef INNER
     File $%TEMP%\vstmididrvuninstall.exe
@@ -204,6 +210,7 @@ Section "Core components (required)" instsect1
     SetOutPath "$WINDIR\SysWow64\vstmididrv"
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Uninstall.lnk" "$WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe" "" "$WINDIR\SysWow64\vstmididrvuninstall.exe" 0
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe" 0
+    CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\VST MIDI Driver Global Proxy.lnk" "$WINDIR\SysWow64\vstmididrv\vstmidiproxy.exe" "" "$WINDIR\SysWow64\vstmididrv\vstmidiproxy.exe" 0
     SetOutPath "$WINDIR\System32\vstmididrv" 
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver (x64).lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
     SetOutPath "$WINDIR\SysNative\vstmididrv" 
@@ -224,6 +231,11 @@ Section "Core components (required)" instsect1
     SetOutPath "$WINDIR\System32\vstmididrv\Help"
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\ReadMe.lnk" "$WINDIR\System32\vstmididrv\Help\Readme.html" "" "$WINDIR\System32\vstmididrv\Help\Readme.html" 0
     SetOutPath "$WINDIR\System32\vstmididrv"
+    ${If} ${IsWinXP}
+    ${AndIf} ${AtLeastServicePack} 2
+    ${OrIf} ${AtLeastWinVista}
+      CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\VST MIDI Driver Global Proxy.lnk" "$WINDIR\System32\vstmididrv\vstmidiproxy.exe" "" "$WINDIR\System32\vstmididrv\vstmidiproxy.exe" 0
+    ${Endif}
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Uninstall.lnk" "$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvuninstall.exe" 0
     CreateShortCut "$SMPROGRAMS\VST MIDI System Synth\Configure VST MIDI Driver.lnk" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" "" "$WINDIR\System32\vstmididrv\vstmididrvcfg.exe" 0
   ${EndIf}  
@@ -412,6 +424,7 @@ Section "un.Driver files/settings" uninstsect2
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv.dll     
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmididrvcfg.exe
+     ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstmidiproxy.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstbridgeapp32.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\vstbridgeapp64.exe
      ${DeleteOnReboot} $WINDIR\SysWow64\vstmididrv\bassasio_vstdrv.dll 
@@ -437,6 +450,7 @@ Section "un.Driver files/settings" uninstsect2
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv.dll     
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvuninstall.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmididrvcfg.exe
+     ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstmidiproxy.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\vstbridgeapp32.exe
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\bassasio_vstdrv.dll 
      ${DeleteOnReboot} $WINDIR\System32\vstmididrv\ASIO2WASAPI_vstdrv.dll 

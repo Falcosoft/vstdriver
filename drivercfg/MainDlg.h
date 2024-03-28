@@ -55,8 +55,7 @@ BOOL IsWinVistaOrWin7()
 
 BOOL IsCoolSoftMidiMapperInstalled() 
 {
-	MIDIOUTCAPS Caps;
-	ZeroMemory(&Caps, sizeof(Caps));
+	MIDIOUTCAPS Caps = { 0 };
 	MMRESULT result = midiOutGetDevCaps(0, &Caps, sizeof(Caps));
 	if (result != MMSYSERR_NOERROR)
 		return FALSE;
@@ -207,9 +206,10 @@ public:
 
 	LRESULT OnTcnSelchangeTab(int idCtrl, LPNMHDR pNMHDR, BOOL& bHandled)
 	{		
+		BOOL dummy;
 		if(m_ctrlTab.GetCurSel() == 0 && m_view3.GetDriverChanged())
 		{
-			BOOL dummy;
+			
 			m_view1.ResetDriverSettings();
 			m_view1.OnCbnSelchangeBuffersize(0, 0, 0, dummy);
 			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);			
@@ -218,6 +218,10 @@ public:
 		else if (m_ctrlTab.GetCurSel() == 1)
 		{			
 			m_view3.ShowPortBControls(usingASIO && is4chMode);	
+		}
+		else if (m_ctrlTab.GetCurSel() == 3)
+		{
+			m_view2.OnShowDialogView2(WM_INITDIALOG, 0, 0, dummy);
 		}
 
 		bHandled = false;

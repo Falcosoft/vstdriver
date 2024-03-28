@@ -17,6 +17,7 @@
 */
 
 #include "stdafx.h"
+#include "../version.h"
 #include <math.h>
 #include <commdlg.h>
 
@@ -29,6 +30,23 @@ static VSTMIDIDRV::MidiSynth& midiSynth = VSTMIDIDRV::MidiSynth::getInstance();
 static bool synthOpened = false;
 //static HWND hwnd = NULL;
 static int driverCount;
+
+static TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
+{
+	TCHAR tmpBuff[12] = { 0 };
+
+	_tcscat_s(result, buffSize, _T("version: "));
+	_ultot_s(VERSION_MAJOR, tmpBuff, _countof(tmpBuff), 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+	_tcscat_s(result, buffSize, _T("."));
+	_ultot_s(VERSION_MINOR, tmpBuff, _countof(tmpBuff), 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+	_tcscat_s(result, buffSize, _T("."));
+	_ultot_s(VERSION_PATCH, tmpBuff, _countof(tmpBuff), 10);
+	_tcscat_s(result, buffSize, tmpBuff);
+
+	return result;
+}
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ){
 	if (fdwReason == DLL_PROCESS_ATTACH){
@@ -55,53 +73,6 @@ struct Driver {
 		DWORD synth_instance;
 	} clients[MAX_CLIENTS];
 } drivers[MAX_DRIVERS];
-
-#pragma comment(lib,"Version.lib") 
-static TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
-{
-	DWORD               dwSize = 0;
-	BYTE* pVersionInfo = NULL;
-	VS_FIXEDFILEINFO* pFileInfo = NULL;
-	UINT                pLenFileInfo = 0;
-	TCHAR tmpBuff[MAX_PATH];
-
-	GetModuleFileName(hinst_vst_driver, tmpBuff, MAX_PATH);
-
-	dwSize = GetFileVersionInfoSize(tmpBuff, NULL);
-	if (dwSize == 0)
-	{           
-		return NULL;
-	}
-
-	pVersionInfo = new BYTE[dwSize]; 
-
-	if (!GetFileVersionInfo(tmpBuff, 0, dwSize, pVersionInfo))
-	{           
-		delete[] pVersionInfo;
-		return NULL;
-	}
-
-	if (!VerQueryValue(pVersionInfo, TEXT("\\"), (LPVOID*)&pFileInfo, &pLenFileInfo))
-	{            
-		delete[] pVersionInfo;
-		return NULL;
-	}      
-
-	_tcscat_s(result, buffSize, _T("version: "));
-	_ultot_s((pFileInfo->dwFileVersionMS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-	_tcscat_s(result, buffSize, tmpBuff);
-	_tcscat_s(result, buffSize, _T("."));
-	_ultot_s((pFileInfo->dwFileVersionMS) & 0xffff, tmpBuff, MAX_PATH, 10);
-	_tcscat_s(result, buffSize, tmpBuff);
-	_tcscat_s(result, buffSize, _T("."));
-	_ultot_s((pFileInfo->dwFileVersionLS >> 16) & 0xffff, tmpBuff, MAX_PATH, 10);
-	_tcscat_s(result, buffSize, tmpBuff);
-	//_tcscat_s(result, buffSize, _T("."));
-	//_tcscat_s(result, buffSize, _ultot((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
-
-	return result;
-}
-
 
 EXTERN_C LRESULT WINAPI DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage, DWORD dwParam1, DWORD dwParam2) {
 
@@ -163,80 +134,37 @@ EXTERN_C LRESULT WINAPI DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage,
 
 
 HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
-	MIDIOUTCAPSA * myCapsA;
-	MIDIOUTCAPSW * myCapsW;
-	MIDIOUTCAPS2A * myCaps2A;
-	MIDIOUTCAPS2W * myCaps2W;
-
-	const CHAR synthName[] = "VST MIDI Synth\0";
-	const WCHAR synthNameW[] = L"VST MIDI Synth\0";
-
-	const CHAR synthPortA[] = " (port A)\0";
-	const WCHAR synthPortAW[] = L" (port A)\0";
-
-	const CHAR synthPortB[] = " (port B)\0";
-	const WCHAR synthPortBW[] = L" (port B)\0";
-
-	switch (capsSize) {
-	case (sizeof(MIDIOUTCAPSA)):
-		myCapsA = (MIDIOUTCAPSA *)capsPtr;
-		myCapsA->wMid = MM_UNMAPPED;
-		myCapsA->wPid = MM_MPU401_MIDIOUT;
-		memcpy(myCapsA->szPname, synthName, sizeof(synthName));
-		memcpy(myCapsA->szPname + strlen(synthName), uDeviceID ? synthPortB : synthPortA, sizeof(synthPortA));
-		myCapsA->wTechnology = MOD_MIDIPORT;
-		myCapsA->vDriverVersion = 0x0090;
-		myCapsA->wVoices = 0;
-		myCapsA->wNotes = 0;
-		myCapsA->wChannelMask = 0xffff;
-		myCapsA->dwSupport = MIDICAPS_VOLUME;
-		return MMSYSERR_NOERROR;
-
-	case (sizeof(MIDIOUTCAPSW)):
-		myCapsW = (MIDIOUTCAPSW *)capsPtr;
-		myCapsW->wMid = MM_UNMAPPED;
-		myCapsW->wPid = MM_MPU401_MIDIOUT;
-		memcpy(myCapsW->szPname, synthNameW, sizeof(synthNameW));
-		memcpy(myCapsW->szPname + wcslen(synthNameW), uDeviceID ? synthPortBW : synthPortAW, sizeof(synthPortAW));
-		myCapsW->wTechnology = MOD_MIDIPORT;
-		myCapsW->vDriverVersion = 0x0090;
-		myCapsW->wVoices = 0;
-		myCapsW->wNotes = 0;
-		myCapsW->wChannelMask = 0xffff;
-		myCapsW->dwSupport = MIDICAPS_VOLUME;
-		return MMSYSERR_NOERROR;
-
-	case (sizeof(MIDIOUTCAPS2A)):
-		myCaps2A = (MIDIOUTCAPS2A *)capsPtr;
-		myCaps2A->wMid = MM_UNMAPPED;
-		myCaps2A->wPid = MM_MPU401_MIDIOUT;
-		memcpy(myCaps2A->szPname, synthName, sizeof(synthName));
-		memcpy(myCaps2A->szPname + strlen(synthName), uDeviceID ? synthPortB : synthPortA, sizeof(synthPortA));
-		myCaps2A->wTechnology = MOD_MIDIPORT;
-		myCaps2A->vDriverVersion = 0x0090;
-		myCaps2A->wVoices = 0;
-		myCaps2A->wNotes = 0;
-		myCaps2A->wChannelMask = 0xffff;
-		myCaps2A->dwSupport = MIDICAPS_VOLUME;
-		return MMSYSERR_NOERROR;
-
-	case (sizeof(MIDIOUTCAPS2W)):
-		myCaps2W = (MIDIOUTCAPS2W *)capsPtr;
-		myCaps2W->wMid = MM_UNMAPPED;
-		myCaps2W->wPid = MM_MPU401_MIDIOUT;
-		memcpy(myCaps2W->szPname, synthNameW, sizeof(synthNameW));
-		memcpy(myCaps2W->szPname + wcslen(synthNameW), uDeviceID ? synthPortBW : synthPortAW, sizeof(synthPortAW));
-		myCaps2W->wTechnology = MOD_MIDIPORT;
-		myCaps2W->vDriverVersion = 0x0090;
-		myCaps2W->wVoices = 0;
-		myCaps2W->wNotes = 0;
-		myCaps2W->wChannelMask = 0xffff;
-		myCaps2W->dwSupport = MIDICAPS_VOLUME;
-		return MMSYSERR_NOERROR;
-
-	default:
-		return MMSYSERR_ERROR;
+	
+	//Rewritten to give unique GUIDs for vstmidiproxy and to fix Winamp Midi plugin 3.x ANSI/Unicode bug:
+	//It seems under unicode WinNT you never get a real ANSI request even form ANSI Midi clients. WinMM handles conversion internally.
+	//If capsSize accidentally equals an ANSI structure size (MIDIOUTCAPSA, MIDIOUTCAPS2A) the request still expects wide strings. 
+	
+	static MIDIOUTCAPS2 myCaps2[MAX_DRIVERS] = { 0 };	
+	static const TCHAR synthName[] = _T("VST MIDI Synth (port X)");	
+		
+	if (!myCaps2[uDeviceID].wMid)
+	{
+		myCaps2[uDeviceID].wMid = MM_UNMAPPED;
+		myCaps2[uDeviceID].wPid = MM_MPU401_MIDIOUT;
+		myCaps2[uDeviceID].wTechnology = MOD_MIDIPORT;
+		myCaps2[uDeviceID].vDriverVersion = VERSION_MAJOR << 8 | VERSION_MINOR;
+		myCaps2[uDeviceID].wVoices = 0;
+		myCaps2[uDeviceID].wNotes = 0;
+		myCaps2[uDeviceID].wChannelMask = 0xffff;
+		myCaps2[uDeviceID].dwSupport = MIDICAPS_VOLUME;
+		
+		_tcscpy_s(myCaps2[uDeviceID].szPname, synthName);
+		unsigned portCharPos = (unsigned)(_tcschr(synthName, 'X') - synthName);
+		myCaps2[uDeviceID].szPname[portCharPos] = _T('A') + static_cast<TCHAR>(uDeviceID);
+	  
+		//MIDIOUTCAPS2 extra
+		myCaps2[uDeviceID].ManufacturerGuid = VSTMidiDrvManufacturerGuid;
+		myCaps2[uDeviceID].ProductGuid = uDeviceID ? VSTMidiDrvPortBGuid : VSTMidiDrvPortAGuid;
 	}
+
+	memcpy(capsPtr, &myCaps2[uDeviceID], min(sizeof(MIDIOUTCAPS2), capsSize));
+	return MMSYSERR_NOERROR;	
+	
 }
 
 void DoCallback(int driverNum, DWORD_PTR clientNum, DWORD msg, DWORD_PTR param1, DWORD_PTR param2) {
@@ -281,10 +209,14 @@ LONG CloseDriver(Driver *driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DW
 }
 
 EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
+	
+	if (uDeviceID >= MAX_DRIVERS) return MMSYSERR_BADDEVICEID;
+
 	MIDIHDR *midiHdr;
 	Driver *driver = &drivers[uDeviceID];
 	DWORD instance;
 	DWORD res;
+	
 	switch (uMsg) {
 	case MODM_OPEN:
 		if (!synthOpened) {
@@ -332,13 +264,7 @@ EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, 
 			}		
 
 		}
-		return res;
-
-	case MODM_PREPARE:
-		return MMSYSERR_NOTSUPPORTED;
-
-	case MODM_UNPREPARE:
-		return MMSYSERR_NOTSUPPORTED;
+		return res;	
 
 	case MODM_GETDEVCAPS:
 		return modGetCaps(uDeviceID, (PVOID)dwParam1, (DWORD)dwParam2);
@@ -390,6 +316,18 @@ EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, 
 
 	case MODM_GETNUMDEVS:
 		return MAX_DRIVERS;
+
+	case MODM_PREPARE:
+		return MMSYSERR_NOTSUPPORTED;
+
+	case MODM_UNPREPARE:
+		return MMSYSERR_NOTSUPPORTED;
+
+	case MODM_CACHEPATCHES:
+		return MMSYSERR_NOTSUPPORTED;
+
+	case MODM_CACHEDRUMPATCHES:
+		return MMSYSERR_NOTSUPPORTED;
 
 	default:
 		

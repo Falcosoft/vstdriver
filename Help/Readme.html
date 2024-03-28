@@ -176,7 +176,13 @@ This  is useful if you have problems with your standard ASIO driver(s) but you s
 		    <em>Application</em>:  Plugin scaling. This is the least compatible option. Since VST2 editors cannot do
 		    scaling in 90% of cases this option most likely results in tiny editors on high DPI screens.		  </p>
 	    </li>
-		</ol>
+	  </ol>
+      <p><strong>VST Midi Driver Global Proxy:</strong></p>
+      <p>VST Midi driver is a user mode  driver and every Midi client opens its own instance of the driver. This has the advantage that you can use as many Midi clients at once with VST Midi driver as you   want. Each Midi client can open its own instance  (provided   the driver is not set to use exclusive mode ASIO/WASAPI audio output).   In this respect VST Midi driver is fully multi-client and does not have   such restrictions as traditional Midi Out ports/drivers.<br>
+      But sometimes you may want to use the same driver instance with multiple clients. E.g. one client to play some Midi files and another client/controller to alter Midi controller values real-time on the same instance that is also used for playback. You may also want a global instance so that your heavy plugin (e.g. SC-VA) never closes and stays ready all the time.<br>
+        The solution for the above scenarios is VST Midi Driver Global Proxy. It creates 2 new global ports named VST MIDI Synth Global (port A / B). Every Midi client that uses one of these ports can use the same instance of the driver. <br>
+        For this the proxy uses <a href="https://www.tobias-erichsen.de/software.html" target="_blank">Tobias Erichsen's virtualMIDI driver</a> that is also used by loopMIDI and rtpMIDI. You have to install either loopMIDI or rtpMIDI to use the global proxy. Download links can be found on the main dialog of the proxy. On the main dialog you can also select the 'Autostart with Windows' option. When no problem happens at startup the proxy is automatically loaded to the system tray. Clicking on the system tray icon opens the main dialog of the global proxy. <br>
+      Since Tobias Erichsen's virtualMIDI driver requires at least Win XP SP2 this is also true for the global proxy. </p>
       <p>&nbsp;</p>
       <p>        
         <strong>Storage of settings:</strong>

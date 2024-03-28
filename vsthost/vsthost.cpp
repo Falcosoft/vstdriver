@@ -392,6 +392,7 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 	}
 }
 
+
 #pragma comment(lib,"Version.lib") 
 static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned buffSize)
 {
@@ -1295,7 +1296,7 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 			else
 			{
 #pragma warning(disable:4838) //fake warning even after casting
-				TCHAR portSign[] = {'A' + static_cast<char>(portNum) };
+				TCHAR portSign[] = { _T('A') + static_cast<TCHAR>(portNum) };
 #pragma warning(default:4838)
 				_tcscpy_s(wText, _T("VST General Editor port "));				
 				_tcsncat_s(wText, portSign, 1);
@@ -1601,7 +1602,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			else
 			{
 #pragma warning(disable:4838) //fake warning even after casting
-				TCHAR portSign[] = { 'A' + static_cast<char>(portNum) };
+				TCHAR portSign[] = { _T('A') + static_cast<TCHAR>(portNum) };
 #pragma warning(default:4838)
 				_tcscpy_s(wText, _T("VST Editor port "));
 				_tcsncat_s(wText, portSign, 1);

@@ -72,6 +72,7 @@ $(TARGET): vstmididrv.mak \
         output\cpltasks32.xml \
         output\cpltasks64.xml \
         output\vstmididrvcfg.cpl \
+        output\vstmidiproxy.exe \
         output\64\vstmididrv.dll \
         output\64\bassasio_vstdrv.dll \
         output\64\ASIO2WASAPI_vstdrv.dll \
