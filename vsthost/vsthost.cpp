@@ -2,7 +2,6 @@
 // Copyright (C) 2011 Chris Moeller, Brad Miller
 // Copyright (C) 2023 Zoltan Bacsko - Falcosoft
 
-#include <string>
 #include "stdafx.h"
 #include <process.h>
 #include "../version.h"
@@ -413,17 +412,18 @@ static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned buffSize)
 		return NULL;
 	}
 
-	pVersionInfo = new BYTE[dwSize];
+	pVersionInfo = (BYTE*)calloc(dwSize, sizeof(BYTE));
+	if (!pVersionInfo) return NULL;
 
 	if (!GetFileVersionInfo(tmpBuff, 0, dwSize, pVersionInfo))
 	{
-		delete[] pVersionInfo;
+		free(pVersionInfo);
 		return NULL;
 	}
 
 	if (!VerQueryValue(pVersionInfo, TEXT("\\"), (LPVOID*)&pFileInfo, &pLenFileInfo))
 	{
-		delete[] pVersionInfo;
+		free(pVersionInfo);
 		return NULL;
 	}
 
@@ -439,6 +439,7 @@ static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned buffSize)
 	//_tcscat_s(result, buffSize, _T("."));
 	//_tcscat_s(result, buffSize, _ultot((pFileInfo->dwFileVersionLS) & 0xffff, tmpBuff, 10));
 
+	free(pVersionInfo);
 	return result;
 }
 

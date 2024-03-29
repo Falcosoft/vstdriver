@@ -254,6 +254,16 @@ namespace VSTMIDIDRV {
 			delete waveOut;
 			waveOut = NULL;
 		}
+
+		if (bufferf) {
+			delete[] bufferf;
+			bufferf = NULL;
+		}
+		if (buffer) {
+			delete[] buffer;
+			buffer = NULL;
+		}
+
 		if (bassAsioOut) {
 			delete bassAsioOut;
 			bassAsioOut = NULL;
@@ -334,9 +344,13 @@ namespace VSTMIDIDRV {
 			if (!waveOut) waveOut = new WaveOutWin32(this);
 
 			if (usingFloat)
-				bufferf = new float[channels * bufferSize];
+			{
+				if (!bufferf) bufferf = new float[channels * bufferSize];
+			}
 			else
-				buffer = new short[channels * bufferSize];
+			{
+				if (!buffer) buffer = new short[channels * bufferSize];
+			}
 						
 			wResult = waveOut->Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, sampleRate, usingFloat, channels);
 		}
@@ -373,7 +387,8 @@ namespace VSTMIDIDRV {
 			wResult = bassAsioOut->Start();
 			if (wResult) bassAsioOut->Close();
 		}
-		else {
+		else 
+		{
 			if (usingFloat)
 				memset(bufferf, 0, bufferSize * sizeof(float) * channels);
 			else
