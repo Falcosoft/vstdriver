@@ -5,8 +5,13 @@
 
 #include "stdafx.h"
 #include "vstmidiproxy.h"
-#include "../driver/VSTDriver.h"
 #include "../version.h"
+
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
 
 HMODULE TeVirtualMIDI32 = NULL; // TeVirtualMIDI handle	
 
@@ -59,20 +64,9 @@ static void CALLBACK teVMCallback(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes,
 	}
 }
 
-TCHAR* GetFileVersionString(TCHAR* result, unsigned int buffSize)
-{
-	TCHAR tmpBuff[12] = { 0 };
-
-	_tcscat(result, _T("version: "));
-	_ultot(VERSION_MAJOR, tmpBuff, 10);
-	_tcscat(result, tmpBuff);
-	_tcscat(result, _T("."));
-	_ultot(VERSION_MINOR, tmpBuff, 10);
-	_tcscat(result, tmpBuff);
-	_tcscat(result, _T("."));
-	_ultot(VERSION_PATCH, tmpBuff, 10);
-	_tcscat(result, tmpBuff);
-
+TCHAR* GetFileVersionString(TCHAR* result)
+{	
+	_tcscat(result, _T("version: ") _T(stringify(VERSION_MAJOR)) _T(".") _T(stringify(VERSION_MINOR)) _T(".") _T(stringify(VERSION_PATCH)));
 	return result;
 }
 
@@ -178,6 +172,12 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 
 int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nCmdShow)
 {
+#ifdef _DEBUG
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_WNDW);
+	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_WNDW);
+#endif
+
 	if (!Initialize(hInstance, nCmdShow))
 	{
 		return FALSE;
@@ -429,7 +429,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			SendMessage(autostartCtl, BM_SETCHECK, getAutoStart() ? BST_CHECKED : BST_UNCHECKED, 0);
 
 			TCHAR fileversionBuff[64] = _T("VST Midi Proxy ");
-			SetWindowText(versionCtl, GetFileVersionString(fileversionBuff, _countof(fileversionBuff)));
+			SetWindowText(versionCtl, GetFileVersionString(fileversionBuff));
 
 			_tcscpy(fileversionBuff, _T("TeVirtualMIDI version: "));
 			if (virtualMIDIGetVersion) _tcscat(fileversionBuff, virtualMIDIGetVersion(NULL, NULL, NULL, NULL));

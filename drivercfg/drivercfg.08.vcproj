@@ -65,6 +65,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="winmm.lib"
 				OutputFile="$(OutDir)\vstmididrvcfg.exe"
+				GenerateManifest="false"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="1"
@@ -144,6 +145,7 @@
 				AdditionalDependencies="winmm.lib"
 				OutputFile="$(OutDir)\vstmididrvcfg.exe"
 				GenerateDebugInformation="true"
+				GenerateManifest="false"
 				SubSystem="2"
 				TargetMachine="17"
 			/>

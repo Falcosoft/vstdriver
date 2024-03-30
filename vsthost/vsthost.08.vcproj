@@ -64,6 +64,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="comctl32.lib"
 				OutputFile="$(OutDir)\vstbridgeapp32.exe"
+				GenerateManifest="false"
 				GenerateDebugInformation="true"
 				TargetMachine="1"
 			/>
@@ -142,6 +143,7 @@
 				AdditionalDependencies="comctl32.lib"
 				OutputFile="$(OutDir)\vstbridgeapp64.exe"
 				GenerateDebugInformation="true"
+				GenerateManifest="false"
 				TargetMachine="17"
 			/>
 			<Tool

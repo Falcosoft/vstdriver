@@ -33,18 +33,7 @@ static int driverCount;
 
 static TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
 {
-	TCHAR tmpBuff[12] = { 0 };
-
-	_tcscat_s(result, buffSize, _T("version: "));
-	_ultot_s(VERSION_MAJOR, tmpBuff, _countof(tmpBuff), 10);
-	_tcscat_s(result, buffSize, tmpBuff);
-	_tcscat_s(result, buffSize, _T("."));
-	_ultot_s(VERSION_MINOR, tmpBuff, _countof(tmpBuff), 10);
-	_tcscat_s(result, buffSize, tmpBuff);
-	_tcscat_s(result, buffSize, _T("."));
-	_ultot_s(VERSION_PATCH, tmpBuff, _countof(tmpBuff), 10);
-	_tcscat_s(result, buffSize, tmpBuff);
-
+	_tcscat_s(result, buffSize, _T("version: ") _T(stringify(VERSION_MAJOR)) _T(".") _T(stringify(VERSION_MINOR)) _T(".") _T(stringify(VERSION_PATCH)));
 	return result;
 }
 

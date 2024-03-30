@@ -7,6 +7,12 @@
 #include "../version.h"
 #include "resource.h"
 
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
 #pragma region Log_Functions
 // #define LOG_EXCHANGE
 // #define LOG
@@ -2238,7 +2244,14 @@ static VstIntPtr VSTCALLBACK audioMaster(AEffect* effect, VstInt32 opcode, VstIn
 #pragma region WinMain_Init
 int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd)
 {
+#ifdef _DEBUG
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_WNDW);
+	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_WNDW);
+#endif
+
 	_set_invalid_parameter_handler(InvalidParamHandler);
+
 	int argc = __argc;
 
 #ifdef UNICODE 

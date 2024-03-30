@@ -1296,7 +1296,7 @@ public:
 			}
 			else if(!bRet)
 			{
-				ATLTRACE2(atlTraceUI, 0, _T("CMessageLoop::Run - exiting\n"));
+				//ATLTRACE2(atlTraceUI, 0, _T("CMessageLoop::Run - exiting\n"));
 				break;   // WM_QUIT, exit message loop
 			}
 

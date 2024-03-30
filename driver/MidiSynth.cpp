@@ -22,6 +22,12 @@
 #include <string>
 #include <math.h>
 
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
 #undef GetMessage
 
 namespace VSTMIDIDRV {
@@ -247,7 +253,13 @@ namespace VSTMIDIDRV {
 		bufferSize(),
 		bufferSizeMS(),
 		bufferf(),
-		buffer() {}
+		buffer() 
+	{
+#ifdef _DEBUG
+		_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_WNDW);
+		_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_WNDW);
+#endif
+	}
 
 	MidiSynth::~MidiSynth() {
 		if (waveOut) {
@@ -272,6 +284,10 @@ namespace VSTMIDIDRV {
 			delete midiStream;
 			midiStream = NULL;
 		}
+
+#ifdef _DEBUG
+		_CrtDumpMemoryLeaks();
+#endif
 	}
 
 	MidiSynth& MidiSynth::getInstance() {

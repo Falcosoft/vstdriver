@@ -9,6 +9,12 @@
 #include "../driver/VSTDriver.h"
 #include "../version.h"
 
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
 #define WIN32DEF(f) (WINAPI *f)
 static BOOL WIN32DEF(DynAllowSetForegroundWindow)(DWORD dwProcessId) = NULL;
 
@@ -344,6 +350,11 @@ public:
 		origDropdownWidth(),
 		effect()
 	{		
+#ifdef _DEBUG
+		_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+		_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_WNDW);
+		_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_WNDW);
+#endif
 		isWinNT4 = IsWinNT4();
 		isASIO = IsASIO();
 		usingASIO = isASIO && LoadOutputDriver(_T("Driver Mode")).CompareNoCase(_T("Bass ASIO")) == 0;
@@ -808,18 +819,7 @@ public:
 
 	TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
 	{		
-		TCHAR tmpBuff[12] = { 0 };
-
-		_tcscat_s(result, buffSize, _T("version: "));
-		_ultot_s(VERSION_MAJOR, tmpBuff, _countof(tmpBuff), 10);
-		_tcscat_s(result, buffSize, tmpBuff);
-		_tcscat_s(result, buffSize, _T("."));
-		_ultot_s(VERSION_MINOR, tmpBuff, _countof(tmpBuff), 10);
-		_tcscat_s(result, buffSize, tmpBuff);
-		_tcscat_s(result, buffSize, _T("."));
-		_ultot_s(VERSION_PATCH, tmpBuff, _countof(tmpBuff), 10);
-		_tcscat_s(result, buffSize, tmpBuff);		
-
+		_tcscat_s(result, buffSize, _T("version: ") _T(stringify(VERSION_MAJOR)) _T(".") _T(stringify(VERSION_MINOR)) _T(".") _T(stringify(VERSION_PATCH)));
 		return result;
 	}
 
