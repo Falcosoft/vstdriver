@@ -1,4 +1,4 @@
-[submodule "external_packages/ASIO2WASAPI"]
-	path = external_packages/ASIO2WASAPI
+[submodule "external_packages/ASIO2WASAPI_VSTDRIVER"]
+	path = external_packages/ASIO2WASAPI_VSTDRIVER
 	url = https://github.com/Falcosoft/ASIO2WASAPI.git
 	branch = VST-Midi-Driver-private-plugin
