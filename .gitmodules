@@ -1,0 +1,3 @@
+[submodule "external_packages/ASIO2WASAPI"]
+	path = external_packages/ASIO2WASAPI
+	url = https://github.com/Falcosoft/ASIO2WASAPI/tree/VST-Midi-Driver-private-plugin
