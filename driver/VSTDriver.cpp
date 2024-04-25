@@ -595,7 +595,10 @@ bool VSTDriver::process_running()
 static void ProcessPendingMessages()
 {
 	MSG msg = {};
-	while ( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) ) DispatchMessage( &msg );
+	while (PeekMessage(&msg, (HWND)-1, 0, 0, PM_REMOVE))
+	{
+		DispatchMessage(&msg);
+	}
 }
 
 uint32_t VSTDriver::process_read_bytes_pass( void * out, uint32_t size )
@@ -613,7 +616,7 @@ uint32_t VSTDriver::process_read_bytes_pass( void * out, uint32_t size )
 	DWORD state;
 	for (;;)
 	{
-		state = MsgWaitForMultipleObjects( _countof( handles ), handles, FALSE, INFINITE, QS_ALLEVENTS );
+		state = MsgWaitForMultipleObjects( _countof( handles ), handles, FALSE, 5000, QS_ALLEVENTS );
 		if ( state == WAIT_OBJECT_0 + _countof( handles ) ) ProcessPendingMessages();
 		else break;
 	}
