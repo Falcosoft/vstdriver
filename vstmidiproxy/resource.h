@@ -2,12 +2,6 @@
 // Microsoft Visual C++ generated include file.
 // Used by vstmidiproxy.rc
 //
-#define VERSION_PATCH                   0
-#define VERSION_BUILD                   1
-#define IDC_MYICON                      2
-#define IDEXIT                          2
-#define VERSION_MAJOR                   2
-#define VERSION_MINOR                   4
 #define IDD_VSTMIDIPROXY_DIALOG         102
 #define IDI_VSTMIDIPROXY                107
 #define IDI_SMALL                       108

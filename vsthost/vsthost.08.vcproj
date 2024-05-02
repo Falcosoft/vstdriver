@@ -387,6 +387,10 @@
 				RelativePath=".\vsthost.rc"
 				>
 			</File>
+			<File
+				RelativePath=".\wavewriter.cpp"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
@@ -399,6 +403,10 @@
 			</File>
 			<File
 				RelativePath=".\targetver.h"
+				>
+			</File>
+			<File
+				RelativePath=".\wavewriter.h"
 				>
 			</File>
 			<File

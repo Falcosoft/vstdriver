@@ -6,6 +6,7 @@
 #include <process.h>
 #include "../version.h"
 #include "resource.h"
+#include "wavewriter.h"
 
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
@@ -43,9 +44,9 @@ void Log(LPCTSTR szFormat, ...)
 	}
 	va_end(l);
 }
-#else
-void NoLog(LPCTSTR szFormat, ...) {}
-#define Log while(0) NoLog
+//#else
+//void NoLog(LPCTSTR szFormat, ...) {}
+//#define Log while(0) NoLog
 #endif
 
 #ifdef MINIDUMP
@@ -201,6 +202,7 @@ static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 #define MAX_OUTPUTS 2
 #define MAX_PLUGINS 10
 #define RESET_MENU_OFFSET 10
+#define OTHER_MENU_OFFSET 20
 #define PORT_MENU_OFFSET 100
 #define RESET_MIDIMSG_COUNT 64 //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
 #define BUFFER_SIZE 4800  //matches better for typical 48/96/192 kHz
@@ -315,6 +317,8 @@ static struct PortState
 
 LPTSTR* argv = NULL;
 
+static WaveWriter waveWriter;
+
 static NOTIFYICONDATA nIconData = { 0 };
 static HMENU trayMenu = NULL;
 
@@ -323,6 +327,9 @@ static volatile bool doOwnReset = false;
 static bool driverResetRequested = false;
 static bool need_idle = false;
 static bool isYamahaPlugin = false;
+
+static volatile bool is4channelMode = false;
+static volatile bool isRecordingStarted = false;
 
 static HANDLE highDpiMode = NULL;
 
@@ -448,21 +455,6 @@ static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned buffSize)
 	free(pVersionInfo);
 	return result;
 }
-
-#pragma warning(disable:28159)
-static bool IsWinNT4()
-{
-	OSVERSIONINFOEX osvi;
-	BOOL bOsVersionInfoEx;
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
-	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-	if (bOsVersionInfoEx == FALSE) return false;
-	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion == 4)
-		return true;
-	return false;
-}
-#pragma warning(default:28159)
 
 void resetInputEvents()
 {
@@ -1210,12 +1202,24 @@ void renderAudiosamples(int channelCount)
 				}
 			}
 		}
-
+		uint32_t byteSize = count_to_do * sizeof(float) * MAX_OUTPUTS * channelMult;
+        
 #if (defined(_MSC_VER) && (_MSC_VER < 1600))
-		put_bytes(&sample_buffer.front(), count_to_do * sizeof(float) * MAX_OUTPUTS * channelMult);
+		put_bytes(&sample_buffer.front(), byteSize);
+		
+		if (isRecordingStarted)
+		{			
+			if (waveWriter.WriteData(&sample_buffer.front(), byteSize) == WaveResponse::WriteError) PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)OTHER_MENU_OFFSET + 2, 0);
+		}
 #else
-		put_bytes(sample_buffer.data(), count_to_do * sizeof(float) * MAX_OUTPUTS * channelMult);
+		put_bytes(sample_buffer.data(), byteSize);
+
+		if (isRecordingStarted)
+		{			
+			if (waveWriter.WriteData(sample_buffer.data(), byteSize) == WaveResponse::WriteError) PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)OTHER_MENU_OFFSET + 2, 0);
+		}
 #endif
+				
 		count -= count_to_do;
 	}
 }
@@ -1956,13 +1960,15 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, OTHER_MENU_OFFSET + 1, _T("Start Audio Recording"));
+			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 3, _T("Send XG Reset"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 4, _T("Send GM2 Reset"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 5, _T("All Notes/CC Off"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, 2 * RESET_MENU_OFFSET + 1, _T("Info..."));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, OTHER_MENU_OFFSET + 3, _T("Info..."));
 
 
 			nIconData.cbSize = sizeof(NOTIFYICONDATA);
@@ -2010,7 +2016,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].editorHandle != NULL && IsWindowVisible(portState[1].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
 				EnableMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].isPortActive /* && hasEditor */ ? MF_ENABLED : MF_GRAYED);
 				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].isPortActive /* && hasEditor*/ ? MF_ENABLED : MF_GRAYED);
-				EnableMenuItem(trayMenu, 3, portState[0].isPortActive || portState[1].isPortActive ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
+				EnableMenuItem(trayMenu, 3, (portState[0].isPortActive || portState[1].isPortActive) && !isRecordingStarted ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
+				EnableMenuItem(trayMenu, OTHER_MENU_OFFSET + 1, portState[0].isPortActive || portState[1].isPortActive || isRecordingStarted ? MF_ENABLED : MF_GRAYED);
 
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
@@ -2073,7 +2080,44 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				doOwnReset = true;
 				return 0;
 
-			case 2 * RESET_MENU_OFFSET + 1:
+			case OTHER_MENU_OFFSET + 1:				
+				if (!isRecordingStarted)
+				{					
+					uint32_t response = waveWriter.Init(is4channelMode ? 4 : 2, sample_rate);
+					isRecordingStarted = response == WaveResponse::Success;
+					if (response == WaveResponse::CannotCreate) 
+					{
+						MessageBox(hwnd, _T("Wave file cannot be created.\r\nCheck write permission."), _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
+					}
+				}
+				else
+				{
+					isRecordingStarted = false;
+					Sleep(10);
+					waveWriter.Close();					
+				}
+
+				ModifyMenu(trayMenu, (UINT)wParam, MF_STRING, wParam, isRecordingStarted ? _T("Stop Audio Recording") : _T("Start Audio Recording"));		
+				nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(isRecordingStarted ? 32513 : 32512));
+				Shell_NotifyIcon(NIM_MODIFY, &nIconData);
+				return 0;
+
+			case OTHER_MENU_OFFSET + 2:	
+				if (isRecordingStarted)
+				{
+					isRecordingStarted = false;
+					Sleep(10);
+					waveWriter.Close();
+
+					ModifyMenu(trayMenu, OTHER_MENU_OFFSET + 1, MF_STRING, OTHER_MENU_OFFSET + 1, _T("Start Audio Recording"));
+					nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
+					Shell_NotifyIcon(NIM_MODIFY, &nIconData);
+
+					MessageBox(hwnd, _T("Wave file cannot be written or maximum size has been reached.\r\nWave recording is stopped."), _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
+				}
+				return 0;
+
+			case OTHER_MENU_OFFSET + 3:
 				if (aboutBoxResult == STILLRUNNING) return 0;
 				_tcscat_s(versionBuff, midiClient);
 				_tcscat_s(versionBuff, _T(" "));
@@ -2461,7 +2505,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		uint32_t command = get_code();
 		if (!command) break;
 
+#ifdef LOG
 		Log(_T("Processing command %d\n"), (int)command);
+#endif
 
 		switch (command)
 		{
@@ -2692,6 +2738,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 
 		case Command::RenderAudioSamples: // Render Samples
 		{
+			is4channelMode = false;
 			renderAudiosamples(2);			
 			resetInputEvents();
 			break;
@@ -2699,6 +2746,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 
 		case Command::RenderAudioSamples4channel: // Render Samples for 4 channel mode
 		{
+			is4channelMode = true;
 			renderAudiosamples(4);
 			resetInputEvents();
 			break;
@@ -2710,13 +2758,18 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 			break;
 		}
 
+#ifdef LOG
 		Log(_T("Command %d done\n"), (int)command);
+#endif
 	}
 
 #pragma endregion Main message handling loop
 
 #pragma region WinMain_Finish
 	exit :
+	
+	waveWriter.Close();
+
 	if (portState[0].editorHandle != NULL) SendMessageTimeout(portState[0].editorHandle, WM_CLOSE, TRUE, TRUE, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
 	if (portState[1].editorHandle != NULL) SendMessageTimeout(portState[1].editorHandle, WM_CLOSE, TRUE, TRUE, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
 	if (trayWndHandle != NULL) SendMessageTimeout(trayWndHandle, WM_CLOSE, 0, 0, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);
@@ -2751,7 +2804,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		SetStdHandle(STD_OUTPUT_HANDLE, pipe_out);
 	}
 
+#ifdef LOG
 	Log(_T("Exit with code %d\n"), code);
+#endif
 
 	return code;
 }
