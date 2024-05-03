@@ -329,7 +329,6 @@ static bool need_idle = false;
 static bool isYamahaPlugin = false;
 
 static volatile bool is4channelMode = false;
-static volatile bool isRecordingStarted = false;
 
 static HANDLE highDpiMode = NULL;
 
@@ -581,11 +580,8 @@ void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
 	unsigned size = (unsigned)in.size();
 	if (pEffect && size)
 	{
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
 		const uint8_t* inc = &in.front();
-#else
-		const uint8_t* inc = in.data();
-#endif
+		
 		uint32_t num_programs = pEffect->numPrograms;
 		uint32_t orgProgramIndex = (uint32_t)pEffect->dispatcher(pEffect, effGetProgram, 0, 0, NULL, 0.0);
 		uint32_t num_params;
@@ -672,13 +668,8 @@ BOOL settings_save(AEffect* pEffect)
 		DWORD size;
 		std::vector<uint8_t> chunk;
 		if (pEffect) getChunk(pEffect, chunk);
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
 
 		if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);
-#else
-
-		if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
-#endif
 
 		CloseHandle(fileHandle);
 	}
@@ -1033,11 +1024,8 @@ void renderAudiosamples(int channelCount)
 
 		blState.resize(buffer_size);
 
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
 		float_list_in = (float**)(blState.size() ? &blState.front() : NULL);
-#else
-		float_list_in = (float**)blState.data();
-#endif
+
 		float_list_out = float_list_in + portState[0].pEffect->numInputs;
 		float_null = (float*)(float_list_out + portState[0].pEffect->numOutputs * channelCount);
 		float_out = float_null + BUFFER_SIZE;
@@ -1137,11 +1125,8 @@ void renderAudiosamples(int channelCount)
 		portState[0].pEffect->processReplacing(portState[0].pEffect, float_list_in, float_list_out, count_to_do);
 		portState[1].pEffect->processReplacing(portState[1].pEffect, float_list_in, float_list_out + num_outputs, count_to_do);
 
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
 		float* out = &sample_buffer.front();
-#else
-		float* out = sample_buffer.data();
-#endif
+
 		if (channelCount == 2)
 		{
 			if (num_outputs == 2)
@@ -1202,23 +1187,15 @@ void renderAudiosamples(int channelCount)
 				}
 			}
 		}
-		uint32_t byteSize = count_to_do * sizeof(float) * MAX_OUTPUTS * channelMult;
-        
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+
+		uint32_t byteSize = count_to_do * sizeof(float) * MAX_OUTPUTS * channelMult;        
+
 		put_bytes(&sample_buffer.front(), byteSize);
 		
-		if (isRecordingStarted)
+		if (waveWriter.getIsRecordingStarted())
 		{			
 			if (waveWriter.WriteData(&sample_buffer.front(), byteSize) == WaveResponse::WriteError) PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)OTHER_MENU_OFFSET + 2, 0);
 		}
-#else
-		put_bytes(sample_buffer.data(), byteSize);
-
-		if (isRecordingStarted)
-		{			
-			if (waveWriter.WriteData(sample_buffer.data(), byteSize) == WaveResponse::WriteError) PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)OTHER_MENU_OFFSET + 2, 0);
-		}
-#endif
 				
 		count -= count_to_do;
 	}
@@ -2016,8 +1993,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].editorHandle != NULL && IsWindowVisible(portState[1].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
 				EnableMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].isPortActive /* && hasEditor */ ? MF_ENABLED : MF_GRAYED);
 				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].isPortActive /* && hasEditor*/ ? MF_ENABLED : MF_GRAYED);
-				EnableMenuItem(trayMenu, 3, (portState[0].isPortActive || portState[1].isPortActive) && !isRecordingStarted ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
-				EnableMenuItem(trayMenu, OTHER_MENU_OFFSET + 1, portState[0].isPortActive || portState[1].isPortActive || isRecordingStarted ? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, 3, (portState[0].isPortActive || portState[1].isPortActive) && !waveWriter.getIsRecordingStarted() ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
+				EnableMenuItem(trayMenu, OTHER_MENU_OFFSET + 1, portState[0].isPortActive || portState[1].isPortActive || waveWriter.getIsRecordingStarted() ? MF_ENABLED : MF_GRAYED);
 
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
@@ -2080,34 +2057,34 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				doOwnReset = true;
 				return 0;
 
-			case OTHER_MENU_OFFSET + 1:				
-				if (!isRecordingStarted)
-				{					
-					uint32_t response = waveWriter.Init(is4channelMode ? 4 : 2, sample_rate);
-					isRecordingStarted = response == WaveResponse::Success;
-					if (response == WaveResponse::CannotCreate) 
+			case OTHER_MENU_OFFSET + 1:
+			{
+				bool isRecStarted;
+				if (!waveWriter.getIsRecordingStarted())
+				{
+					uint32_t response = waveWriter.Init(is4channelMode ? 4 : 2, sample_rate, portState[0].editorHandle ? portState[0].editorHandle : portState[1].editorHandle ? portState[1].editorHandle : hwnd);
+					isRecStarted = response == WaveResponse::Success;
+					if (response == WaveResponse::CannotCreate)
 					{
 						MessageBox(hwnd, _T("Wave file cannot be created.\r\nCheck write permission."), _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
 					}
 				}
 				else
 				{
-					isRecordingStarted = false;
-					Sleep(10);
-					waveWriter.Close();					
+					waveWriter.CloseRequest();
+					isRecStarted = false;
 				}
 
-				ModifyMenu(trayMenu, (UINT)wParam, MF_STRING, wParam, isRecordingStarted ? _T("Stop Audio Recording") : _T("Start Audio Recording"));		
-				nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(isRecordingStarted ? 32513 : 32512));
+				ModifyMenu(trayMenu, (UINT)wParam, MF_STRING, wParam, isRecStarted ? _T("Stop Audio Recording") : _T("Start Audio Recording"));
+				nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(isRecStarted ? 32513 : 32512));
 				Shell_NotifyIcon(NIM_MODIFY, &nIconData);
 				return 0;
+			}
 
 			case OTHER_MENU_OFFSET + 2:	
-				if (isRecordingStarted)
-				{
-					isRecordingStarted = false;
-					Sleep(10);
-					waveWriter.Close();
+				if (waveWriter.getIsRecordingStarted())
+				{					
+					waveWriter.CloseRequest();
 
 					ModifyMenu(trayMenu, OTHER_MENU_OFFSET + 1, MF_STRING, OTHER_MENU_OFFSET + 1, _T("Start Audio Recording"));
 					nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
@@ -2514,14 +2491,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::GetChunkData: // Get Chunk
 		{
 			getChunk(portState[0].pEffect, chunk);
-
 			put_code(Response::NoError);
 			put_code((uint32_t)chunk.size());
-#if	(defined(_MSC_VER) && (_MSC_VER < 1600))
 			if (chunk.size()) put_bytes(&chunk.front(), (uint32_t)chunk.size());
-#else
-			if (chunk.size()) put_bytes(chunk.data(), (uint32_t)chunk.size());
-#endif
 		}
 		break;
 
@@ -2529,12 +2501,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		{
 			uint32_t size = get_code();
 			chunk.resize(size);
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
 			if (size) get_bytes(&chunk.front(), size);
-#else
-			if (size) get_bytes(chunk.data(), size);
-#endif
-
 			setChunk(portState[0].pEffect, chunk);
 			setChunk(portState[1].pEffect, chunk);
 

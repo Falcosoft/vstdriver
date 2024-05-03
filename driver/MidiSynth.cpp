@@ -113,13 +113,15 @@ namespace VSTMIDIDRV {
 		return keepDriverLoaded != FALSE;
 	}
 
-	inline DWORD DwordMin(DWORD a, DWORD b) //min macro calls bassAsioOut->GetPos() 2 times that can cause problems...
+	template <typename T>
+	inline T Min(T a, T b) //min macro calls bassAsioOut->GetPos() 2 times that can cause problems...
 	{
 		if (a < b) return a;
 		return b;
 	}
 
-	inline DWORD DwordMax(DWORD a, DWORD b)
+	template <typename T>
+	inline T Max(T a, T b)
 	{
 		if (a > b) return a;
 		return b;
@@ -594,7 +596,7 @@ namespace VSTMIDIDRV {
 		if (midiVol[uDeviceID] != 1.0f) {
 			if ((msg & 0xF0) == 0x90) {
 				unsigned char velocity = ((unsigned char*)&msg)[2];
-				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : (unsigned char)DwordMax(DWORD(velocity * midiVol[uDeviceID]), 1);
+				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : (unsigned char)Max<DWORD>(DWORD(velocity * midiVol[uDeviceID]), 1);
 				((unsigned char*)&msg)[2] = velocity;
 			}
 		}
@@ -632,7 +634,7 @@ namespace VSTMIDIDRV {
 		if (!PreprocessMIDI(uDeviceID, msg))
 			return;
 
-		DWORD tmpTimestamp = useAsio ? DwordMin(bassAsioOut->GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut->GetPos(channels) + midiLatency) % bufferSize);
+		DWORD tmpTimestamp = useAsio ? Min<DWORD>(bassAsioOut->GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut->GetPos(channels) + midiLatency) % bufferSize);
 		midiStream->PutMessage(uDeviceID, msg, tmpTimestamp);
 	}
 
@@ -646,7 +648,7 @@ namespace VSTMIDIDRV {
 			for (DWORD i = 0; i < len; i++) {
 				if (bufpos[i] > 0x7F || i == len - 1) {					
 					DWORD shortMsg = 0;
-					memcpy(&shortMsg, &bufpos[startPos], DwordMin(i - startPos + 1, 3));
+					memcpy(&shortMsg, &bufpos[startPos], Min<DWORD>(i - startPos + 1, 3));
 					PushMIDI(uDeviceID, shortMsg);
 					startPos = i;
 				}
@@ -659,7 +661,7 @@ namespace VSTMIDIDRV {
 		if (!PreprocessSysEx(uDeviceID, bufpos, len))
 			return;
 
-		DWORD tmpTimestamp = useAsio ? DwordMin(bassAsioOut->GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut->GetPos(channels) + midiLatency) % bufferSize);
+		DWORD tmpTimestamp = useAsio ? Min<DWORD>(bassAsioOut->GetPos() + midiLatency, bufferSize - 1) : (DWORD)((waveOut->GetPos(channels) + midiLatency) % bufferSize);
 		midiStream->PutSysEx(uDeviceID, bufpos, len, tmpTimestamp);
 	}
 

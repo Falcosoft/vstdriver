@@ -214,18 +214,12 @@ static BOOL settings_load(VSTDriver * effect)
 				{
 					vector<uint8_t> chunk;
 					chunk.resize( chunk_size );
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
+
 					if (chunk_size) {
 						retResult = ReadFile(fileHandle, (char*) &chunk.front(), (DWORD)chunk_size, &size, NULL);
 						if (effect) effect->setChunk( &chunk.front(), (unsigned int)chunk_size);
 					}
-#else
-					if (chunk_size) {
-						retResult = ReadFile(fileHandle, (char*) chunk.data(), (DWORD)chunk_size, &size, NULL);					
-						if (effect) effect->setChunk( chunk.data(), (unsigned int)chunk_size );
-					}
 
-#endif
 				}				
 				CloseHandle(fileHandle);
 			}
@@ -267,13 +261,9 @@ static BOOL settings_save(VSTDriver * effect)
 			{
 				vector<uint8_t> chunk;
 				if (effect) effect->getChunk( chunk );
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
 
 				if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL); 
-#else
-				if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, chunk.data(), (DWORD)chunk.size(), &size, NULL);
 
-#endif
 				CloseHandle(fileHandle);
 			}
 

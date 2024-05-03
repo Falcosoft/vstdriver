@@ -84,17 +84,22 @@ namespace WaveResponse {
 
 class WaveWriter
 {
-public:  
+public: 
     WaveWriter();
-    uint32_t Init(int chCount, DWORD sampleRate);
+    uint32_t Init(int chCount, DWORD sampleRate, HWND owner);
     uint32_t WriteData(const void* data, DWORD size);
-    void Close();   
+    void Close();
+    void CloseRequest();
+    inline bool getIsRecordingStarted() { return isRecordingStarted; }   
 
 private:
-    FILE* fileHandle;
+    volatile bool isRecordingStarted;
+    volatile bool isCloseRequested;
     DWORD bytesWritten;
+    FILE* fileHandle;
     int channelCount;   
     TCHAR fileName[MAX_PATH];   
     WaveWriter(const WaveWriter& that);
     WaveWriter& operator=(const WaveWriter& that); 
 };
+

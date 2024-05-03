@@ -74,9 +74,8 @@ UINT GetWaveOutDeviceId() {
 #pragma warning(disable:28159)
 bool IsWinNT4() 
 {
-	OSVERSIONINFOEX osvi;
-	BOOL bOsVersionInfoEx;
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	OSVERSIONINFOEX osvi = { 0 };
+	BOOL bOsVersionInfoEx;	
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
 	if (bOsVersionInfoEx == FALSE) return false;
@@ -87,9 +86,8 @@ bool IsWinNT4()
 
 bool IsVistaOrNewer()
 {
-	OSVERSIONINFOEX osvi;
-	BOOL bOsVersionInfoEx;
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	OSVERSIONINFOEX osvi = { 0 };
+	BOOL bOsVersionInfoEx;	
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
 	if (bOsVersionInfoEx == FALSE) return false;
@@ -307,11 +305,7 @@ void VSTDriver::load_settings(TCHAR * szPath) {
 					size_t chunk_size = ftell(f);
 					fseek(f, 0, SEEK_SET);
 					blChunk.resize(chunk_size);
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
 					if (chunk_size) fread(&blChunk.front(), 1, chunk_size, f);
-#else
-					if (chunk_size) fread(blChunk.data(), 1, chunk_size, f);
-#endif
 					fclose(f);
 				}
 			}
@@ -830,11 +824,7 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 		if (blChunk.size()) {
 			process_write_code( Command::SetChunkData );
 			process_write_code( (uint32_t)blChunk.size() );
-#if (defined(_MSC_VER) && (_MSC_VER < 1600))
 			if (blChunk.size()) process_write_bytes( &blChunk.front(), (uint32_t)blChunk.size() );
-#else
-			if (blChunk.size()) process_write_bytes( blChunk.data(), (uint32_t)blChunk.size() );
-#endif
 			code = process_read_code();
 			if ( code != NoError ) {
 				process_terminate();

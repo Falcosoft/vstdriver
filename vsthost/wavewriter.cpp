@@ -10,9 +10,8 @@
 #pragma warning(disable:28159)
 bool IsWinNT4()
 {
-    OSVERSIONINFOEX osvi;
-    BOOL bOsVersionInfoEx;
-    ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+    OSVERSIONINFOEX osvi = { 0 };
+    BOOL bOsVersionInfoEx;   
     osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
     bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
     if (bOsVersionInfoEx == FALSE) return false;
@@ -35,18 +34,18 @@ bool IsWinNT4()
 WaveWriter::WaveWriter() :
     fileHandle(),
     bytesWritten(),
-    channelCount()
+    channelCount(),
+    isRecordingStarted(),
+    isCloseRequested()
 {
     _tcscpy_s(fileName, L"VSTiCapture.wav");
 }
 
-uint32_t WaveWriter::Init(int chCount, DWORD sampleRate)
-{	   
-    channelCount = chCount;
-
+uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND owner)
+{	  
     OPENFILENAME ofn = { 0 };
     ofn.lStructSize = IsWinNT4() ? OPENFILENAME_SIZE_VERSION_400 : sizeof(ofn);
-    ofn.hwndOwner = NULL;
+    ofn.hwndOwner = owner;
     ofn.lpstrFilter = L"Wave Files (*.wav)\0*.wav\0All Files (*.*)\0*.*\0";
     ofn.lpstrFile = fileName;
     ofn.nMaxFile = MAX_PATH;
@@ -55,32 +54,16 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate)
  
     if (GetSaveFileName(&ofn))
     {
+        channelCount = chCount;
+        isCloseRequested = false;
+
         bytesWritten = 0;
         fileHandle = _tfopen(fileName, L"wbS");
         if (!fileHandle) return WaveResponse::CannotCreate;
         
-        setvbuf(fileHandle, NULL, _IOFBF, 8192);
+        setvbuf(fileHandle, NULL, _IOFBF, 16384);
 
-        if (channelCount == 2)
-        {
-            WaveHeaderEx waveHeaderEx = { 0 };
-            strncpy(waveHeaderEx.riffHeader, "RIFF", 4);
-            strncpy(waveHeaderEx.waveHeader, "WAVE", 4);
-            strncpy(waveHeaderEx.fmtHeader, "fmt ", 4);
-            strncpy(waveHeaderEx.factHeader, "fact", 4);
-            strncpy(waveHeaderEx.dataHeader, "data", 4);
-            waveHeaderEx.fmtChunkSize = 18;
-            waveHeaderEx.wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
-            waveHeaderEx.nChannels = channelCount;
-            waveHeaderEx.nSamplesPerSec = sampleRate;
-            waveHeaderEx.wBitsPerSample = 32;
-            waveHeaderEx.nBlockAlign = waveHeaderEx.nChannels * waveHeaderEx.wBitsPerSample / 8;
-            waveHeaderEx.nAvgBytesPerSec = waveHeaderEx.nBlockAlign * waveHeaderEx.nSamplesPerSec;
-            waveHeaderEx.factSize = 4;     
-                     
-            WriteData(&waveHeaderEx, sizeof(waveHeaderEx));     
-        }
-        else if (channelCount == 4)
+        if (channelCount == 4)
         {
             WaveHeaderExtensible waveHeaderEx = { 0 };
             strncpy(waveHeaderEx.riffHeader, "RIFF", 4);
@@ -99,10 +82,32 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate)
             waveHeaderEx.factSize = 4;
             waveHeaderEx.dwChannelMask = SPEAKER_QUAD;
             waveHeaderEx.wValidBitsPerSample = waveHeaderEx.wBitsPerSample;
-            waveHeaderEx.SubFormat =  KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;          
+            waveHeaderEx.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;           
+                     
+            WriteData(&waveHeaderEx, sizeof(waveHeaderEx));     
+        }
+        else 
+        {
+            WaveHeaderEx waveHeaderEx = { 0 };
+            strncpy(waveHeaderEx.riffHeader, "RIFF", 4);
+            strncpy(waveHeaderEx.waveHeader, "WAVE", 4);
+            strncpy(waveHeaderEx.fmtHeader, "fmt ", 4);
+            strncpy(waveHeaderEx.factHeader, "fact", 4);
+            strncpy(waveHeaderEx.dataHeader, "data", 4);
+            waveHeaderEx.fmtChunkSize = 18;
+            waveHeaderEx.wFormatTag = WAVE_FORMAT_IEEE_FLOAT;
+            waveHeaderEx.nChannels = channelCount;
+            waveHeaderEx.nSamplesPerSec = sampleRate;
+            waveHeaderEx.wBitsPerSample = 32;
+            waveHeaderEx.nBlockAlign = waveHeaderEx.nChannels * waveHeaderEx.wBitsPerSample / 8;
+            waveHeaderEx.nAvgBytesPerSec = waveHeaderEx.nBlockAlign * waveHeaderEx.nSamplesPerSec;
+            waveHeaderEx.factSize = 4;                   
                
             WriteData(&waveHeaderEx, sizeof(waveHeaderEx)); 
         }       
+        
+        isRecordingStarted = true;       
+
         return WaveResponse::Success;
     }  
     return WaveResponse::NotSelected;
@@ -110,50 +115,61 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate)
 
 uint32_t WaveWriter::WriteData(const void* data, DWORD size)
 {  
+    if (isCloseRequested)
+    {
+        Close();
+        return WaveResponse::Success;
+    }
+    
     if (!fileHandle || bytesWritten >= 0xFFFE0000) return WaveResponse::WriteError; //prevent creating unplayable 4GB+ wave files
     DWORD sizeDone = (DWORD)_fwrite_nolock(data, 1, size, fileHandle);
-    if(sizeDone != size) return WaveResponse::WriteError;
-    bytesWritten += sizeDone; 
+    bytesWritten += sizeDone;
+    if(sizeDone != size) return WaveResponse::WriteError;       
 
     return WaveResponse::Success;
 }
 
-void WaveWriter::Close() 
+void WaveWriter::CloseRequest()
+{
+    isCloseRequested = true;
+}
+
+void WaveWriter::Close()
 {
     if(!fileHandle) return;
 
-    fflush(fileHandle);
-    if (channelCount == 2)
+    isRecordingStarted = false;
+    isCloseRequested = false;    
+
+    if (channelCount == 4)
     {        
         DWORD ckSize = bytesWritten - 8;
-        fseek(fileHandle, offsetof(WaveHeaderEx, wavSize), SEEK_SET);    
-        fwrite(&ckSize, 1, sizeof(DWORD), fileHandle);       
-
-        ckSize = bytesWritten - sizeof(WaveHeaderEx);
-        fseek(fileHandle, offsetof(WaveHeaderEx, dataSize), SEEK_SET);       
-        fwrite(&ckSize, 1, sizeof(DWORD), fileHandle);
-
-        ckSize /= 4;
-        fseek(fileHandle, offsetof(WaveHeaderEx, dwSampleLength), SEEK_SET);        
-        fwrite(&ckSize, 1, sizeof(DWORD), fileHandle);
-    }
-    else if (channelCount == 4)
-    {        
-        DWORD ckSize = bytesWritten - 8;
-        fseek(fileHandle, offsetof(WaveHeaderExtensible, wavSize), SEEK_SET);       
-        fwrite(&ckSize, 1, sizeof(DWORD), fileHandle);
+        _fseek_nolock(fileHandle, offsetof(WaveHeaderExtensible, wavSize), SEEK_SET);
+        _fwrite_nolock(&ckSize, 1, sizeof(DWORD), fileHandle);
 
         ckSize = bytesWritten - sizeof(WaveHeaderExtensible);
-        fseek(fileHandle, offsetof(WaveHeaderExtensible, dataSize), SEEK_SET);        
-        fwrite(&ckSize, 1, sizeof(DWORD), fileHandle);
+        _fseek_nolock(fileHandle, offsetof(WaveHeaderExtensible, dataSize), SEEK_SET);
+        _fwrite_nolock(&ckSize, 1, sizeof(DWORD), fileHandle);
 
         ckSize /= 4;
-        fseek(fileHandle, offsetof(WaveHeaderExtensible, dwSampleLength), SEEK_SET);       
-        fwrite(&ckSize, 1, sizeof(DWORD), fileHandle);
-
+        _fseek_nolock(fileHandle, offsetof(WaveHeaderExtensible, dwSampleLength), SEEK_SET);
+        _fwrite_nolock(&ckSize, 1, sizeof(DWORD), fileHandle);
     }
+    else
+    { 
+        DWORD ckSize = bytesWritten - 8;
+        _fseek_nolock(fileHandle, offsetof(WaveHeaderEx, wavSize), SEEK_SET);
+        _fwrite_nolock(&ckSize, 1, sizeof(DWORD), fileHandle);
+
+        ckSize = bytesWritten - sizeof(WaveHeaderEx);
+        _fseek_nolock(fileHandle, offsetof(WaveHeaderEx, dataSize), SEEK_SET);
+        _fwrite_nolock(&ckSize, 1, sizeof(DWORD), fileHandle);
+
+        ckSize /= 4;
+        _fseek_nolock(fileHandle, offsetof(WaveHeaderEx, dwSampleLength), SEEK_SET);
+        _fwrite_nolock(&ckSize, 1, sizeof(DWORD), fileHandle);
+    }    
     
-    fflush(fileHandle);
-    fclose(fileHandle);   
+    _fclose_nolock(fileHandle);
     fileHandle = NULL; 
 }

@@ -23,9 +23,8 @@ static void InvalidParamHandler(const wchar_t* expression, const wchar_t* functi
 #pragma warning(disable:28159)
 BOOL IsWin8OrNewer()
 {
-	OSVERSIONINFOEX osvi;
-	BOOL bOsVersionInfoEx;
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	OSVERSIONINFOEX osvi = { 0 };
+	BOOL bOsVersionInfoEx;	
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
 	if (bOsVersionInfoEx == FALSE) return FALSE;
@@ -39,9 +38,8 @@ BOOL IsWin8OrNewer()
 //Setting Midi mapper value this simple way does not work on Win XP either but on XP you can do it properly with built-in control panel anyway...
 BOOL IsWinVistaOrWin7()  
 {
-	OSVERSIONINFOEX osvi;
-	BOOL bOsVersionInfoEx;
-	ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+	OSVERSIONINFOEX osvi = { 0 };
+	BOOL bOsVersionInfoEx;	
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
 	if (bOsVersionInfoEx == FALSE) return FALSE;
