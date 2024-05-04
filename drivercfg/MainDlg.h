@@ -20,47 +20,35 @@ static void InvalidParamHandler(const wchar_t* expression, const wchar_t* functi
 		TerminateProcess(GetCurrentProcess(), 1);
 }
 
-#pragma warning(disable:28159)
-BOOL IsWin8OrNewer()
+bool IsWin8OrNewer()
 {
 	OSVERSIONINFOEX osvi = { 0 };
 	BOOL bOsVersionInfoEx;	
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-	if (bOsVersionInfoEx == FALSE) return FALSE;
-	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId &&
-		(osvi.dwMajorVersion > 6 ||
-		(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion > 1)))
-		return TRUE;
-	return FALSE;
+	if (bOsVersionInfoEx == FALSE) return false;
+	return (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && 
+		(osvi.dwMajorVersion > 6 || (osvi.dwMajorVersion == 6 && osvi.dwMinorVersion > 1)));		
 }
 
 //Setting Midi mapper value this simple way does not work on Win XP either but on XP you can do it properly with built-in control panel anyway...
-BOOL IsWinVistaOrWin7()  
+bool IsWinVistaOrWin7()  
 {
 	OSVERSIONINFOEX osvi = { 0 };
 	BOOL bOsVersionInfoEx;	
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-	if (bOsVersionInfoEx == FALSE) return FALSE;
-	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId &&
-		((osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 0) ||
-		(osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 1)))
-		return TRUE;
-	return FALSE;
+	if (bOsVersionInfoEx == FALSE) return false;
+	return (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && 
+		((osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 0) || (osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 1)));		
 }
-#pragma warning(default:28159)
 
-BOOL IsCoolSoftMidiMapperInstalled() 
+bool IsCoolSoftMidiMapperInstalled() 
 {
 	MIDIOUTCAPS Caps = { 0 };
 	MMRESULT result = midiOutGetDevCaps(0, &Caps, sizeof(Caps));
-	if (result != MMSYSERR_NOERROR)
-		return FALSE;
-	if (!_tcscmp(Caps.szPname, _T("CoolSoft MIDIMapper"))) 
-		return TRUE;
-
-	return FALSE;
+	if (result != MMSYSERR_NOERROR) return false;
+	return (!_tcscmp(Caps.szPname, _T("CoolSoft MIDIMapper")));
 }
 
 class CMainDlg : public CDialogImpl<CMainDlg>, public CUpdateUI<CMainDlg>,

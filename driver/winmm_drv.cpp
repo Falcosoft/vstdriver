@@ -31,12 +31,6 @@ static bool synthOpened = false;
 //static HWND hwnd = NULL;
 static int driverCount;
 
-static TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
-{
-	_tcscat_s(result, buffSize, _T("version: ") _T(stringify(VERSION_MAJOR)) _T(".") _T(stringify(VERSION_MINOR)) _T(".") _T(stringify(VERSION_PATCH)));
-	return result;
-}
-
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ){
 	if (fdwReason == DLL_PROCESS_ATTACH){
 		hinst_vst_driver = hinstDLL;
@@ -97,7 +91,7 @@ EXTERN_C LRESULT WINAPI DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage,
 	case DRV_QUERYCONFIGURE:
 		return DRVCNF_OK;
 	case DRV_CONFIGURE:	
-		MessageBox((HWND)dwParam1, GetFileVersion(fileversionBuff, _countof(fileversionBuff)), _T("VST MIDI Driver (Falcomod)"), MB_OK | MB_ICONINFORMATION);
+		MessageBox((HWND)dwParam1, GetFileVersion(fileversionBuff), _T("VST MIDI Driver (Falcomod)"), MB_OK | MB_ICONINFORMATION);
 		return DRVCNF_OK;
 	case DRV_CLOSE:
 		for (int i = 0; i < MAX_DRIVERS; i++) {

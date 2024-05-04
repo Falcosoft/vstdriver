@@ -3,10 +3,18 @@
 
 #pragma once
 
+#if(_WIN32_WINNT < 0x0500)
+#define OPENFILENAME_SIZE_VERSION_400A  CDSIZEOF_STRUCT(OPENFILENAMEA,lpTemplateName)
+#define OPENFILENAME_SIZE_VERSION_400W  CDSIZEOF_STRUCT(OPENFILENAMEW,lpTemplateName)
+#ifdef UNICODE
+#define OPENFILENAME_SIZE_VERSION_400  OPENFILENAME_SIZE_VERSION_400W
+#else
+#define OPENFILENAME_SIZE_VERSION_400  OPENFILENAME_SIZE_VERSION_400A
+#endif 
+#endif 
+
 #include "stdafx.h"
 #include <commdlg.h>
-
-bool IsWinNT4();
 
 #pragma pack(push, 1)
 typedef struct wav_header_ex {

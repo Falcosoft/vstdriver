@@ -1,7 +1,6 @@
 // Copyright (C) 2024 Zoltán Bacskó - Falcosoft
 // vstmidiproxy.cpp : Defines the entry point for the application.
 //
-#pragma warning(disable : 4996)
 
 #include "stdafx.h"
 #include "vstmidiproxy.h"
@@ -62,12 +61,6 @@ static void CALLBACK teVMCallback(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes,
 		// while ((SysExHeader.dwFlags & MHDR_DONE) != MHDR_DONE) {}; //not needed for VST Midi driver since it does not use async buffers.
 		midiOutUnprepareHeader(outPort, &SysExHeader, sizeof(SysExHeader));
 	}
-}
-
-TCHAR* GetFileVersionString(TCHAR* result)
-{	
-	_tcscat(result, _T("version: ") _T(stringify(VERSION_MAJOR)) _T(".") _T(stringify(VERSION_MINOR)) _T(".") _T(stringify(VERSION_PATCH)));
-	return result;
 }
 
 BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
@@ -429,7 +422,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			SendMessage(autostartCtl, BM_SETCHECK, getAutoStart() ? BST_CHECKED : BST_UNCHECKED, 0);
 
 			TCHAR fileversionBuff[64] = _T("VST Midi Proxy ");
-			SetWindowText(versionCtl, GetFileVersionString(fileversionBuff));
+			SetWindowText(versionCtl, GetFileVersion(fileversionBuff));
 
 			_tcscpy(fileversionBuff, _T("TeVirtualMIDI version: "));
 			if (virtualMIDIGetVersion) _tcscat(fileversionBuff, virtualMIDIGetVersion(NULL, NULL, NULL, NULL));

@@ -405,7 +405,7 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 
 
 #pragma comment(lib,"Version.lib") 
-static TCHAR* GetFileVersion(TCHAR* filePath, TCHAR* result, unsigned buffSize)
+static TCHAR* GetRunTimeFileVersion(TCHAR* filePath, TCHAR* result, unsigned buffSize)
 {
 	DWORD dwSize = 0;
 	BYTE* pVersionInfo = NULL;
@@ -2115,10 +2115,10 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				_tcscat_s(versionBuff, _T("Synth driver "));
 				GetSystemDirectory(tempBuff, MAX_PATH);
 				_tcscat_s(tempBuff, _T("\\vstmididrv.dll"));
-				GetFileVersion(tempBuff, versionBuff, _countof(versionBuff));
+				GetRunTimeFileVersion(tempBuff, versionBuff, _countof(versionBuff));
 
 				_tcscat_s(versionBuff, _T("\r\nHost bridge "));
-				GetFileVersion(NULL, versionBuff, _countof(versionBuff));
+				GetRunTimeFileVersion(NULL, versionBuff, _countof(versionBuff));
 
 				params.cbSize = sizeof(params);
 				params.dwStyle = MB_OK | MB_USERICON | MB_TOPMOST | MB_HELP;

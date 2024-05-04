@@ -18,6 +18,7 @@ typedef enum _MYAVRT_PRIORITY
 } MYAVRT_PRIORITY, * PMYAVRT_PRIORITY;
 
 
+#include "../version.h"
 #include "../external_packages/bassasio.h"
 #include "VSTDriver.h"
 #include "AudioDrivers.h"

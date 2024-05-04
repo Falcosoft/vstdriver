@@ -41,7 +41,6 @@ typedef std::wstring tstring;
 #endif
 
 UINT GetWaveOutDeviceId();
-bool IsWinNT4();
 bool IsVistaOrNewer();
 bool UseAsio();
 
@@ -73,6 +72,7 @@ private:
 	char       * sProduct;
 	uint32_t     uVendorVersion;
 	uint32_t     uUniqueId;
+	HWND		 editorOwner;
 
 	unsigned test_plugin_platform();
 	//bool connect_pipe( HANDLE hPipe );
@@ -113,7 +113,7 @@ public:
 
 	// editor
 	//bool hasEditor();
-	void displayEditorModal(unsigned int uDeviceID = 255);
+	void displayEditorModal(unsigned int uDeviceID, HWND owner);
 	void setHighDpiMode(unsigned int modeNum = 0);
 	void setSinglePort32ChMode();
 	void initSysTray();

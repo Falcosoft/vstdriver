@@ -537,7 +537,7 @@ namespace VSTMIDIDRV {
 
 	void MidiSynth::InitDialog(unsigned uDeviceID) {
 
-		if (IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID);
+		if (IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID, (HWND)-1);
 	}
 
 	int MidiSynth::Reset(unsigned uDeviceID) {

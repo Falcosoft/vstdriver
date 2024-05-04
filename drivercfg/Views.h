@@ -739,7 +739,7 @@ public:
 			
 			if (DynAllowSetForegroundWindow) DynAllowSetForegroundWindow(ASFW_ANY); //allows modal dialog to set focus
 			::EnableWindow(hWnd, FALSE);
-			effect->displayEditorModal();
+			effect->displayEditorModal(255, hWnd);
 			::EnableWindow(hWnd, TRUE);
 			::SetForegroundWindow(this->m_hWnd); //Gets back focus after editor is closed. AllowSetForegroundWindow has to be called by vsthost.			
 			
@@ -805,13 +805,7 @@ public:
 		settings_load(effect);	   
 
 		return TRUE;
-	}
-
-	TCHAR* GetFileVersion(TCHAR* result, unsigned int buffSize)
-	{		
-		_tcscat_s(result, buffSize, _T("version: ") _T(stringify(VERSION_MAJOR)) _T(".") _T(stringify(VERSION_MINOR)) _T(".") _T(stringify(VERSION_PATCH)));
-		return result;
-	}
+	}	
 
 	void ResetDriverSettings() 
 	{			
@@ -993,7 +987,7 @@ public:
 		volume_slider = GetDlgItem(IDC_VOLUME);
 		vst_unload = GetDlgItem(IDC_UNLOAD);
 
-		file_info.SetWindowText(GetFileVersion(fileversionBuff, _countof(fileversionBuff)));
+		file_info.SetWindowText(GetFileVersion(fileversionBuff));
 		vst_effect.SetWindowText(_T("No VSTi loaded"));
 		vst_vendor.SetWindowText(_T("No VSTi loaded"));
 		

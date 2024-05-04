@@ -5,31 +5,9 @@
 #include <stddef.h>
 #include <mmreg.h>
 #include "wavewriter.h"
+#include "../version.h"
 #include "../external_packages/audiodefs.h"
 
-#pragma warning(disable:28159)
-bool IsWinNT4()
-{
-    OSVERSIONINFOEX osvi = { 0 };
-    BOOL bOsVersionInfoEx;   
-    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-    bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-    if (bOsVersionInfoEx == FALSE) return false;
-    if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion == 4)
-        return true;
-    return false;
-}
-#pragma warning(default:28159)
-
-#if(_WIN32_WINNT < 0x0500)
-#define OPENFILENAME_SIZE_VERSION_400A  CDSIZEOF_STRUCT(OPENFILENAMEA,lpTemplateName)
-#define OPENFILENAME_SIZE_VERSION_400W  CDSIZEOF_STRUCT(OPENFILENAMEW,lpTemplateName)
-#ifdef UNICODE
-#define OPENFILENAME_SIZE_VERSION_400  OPENFILENAME_SIZE_VERSION_400W
-#else
-#define OPENFILENAME_SIZE_VERSION_400  OPENFILENAME_SIZE_VERSION_400A
-#endif 
-#endif 
 
 WaveWriter::WaveWriter() :
     fileHandle(),

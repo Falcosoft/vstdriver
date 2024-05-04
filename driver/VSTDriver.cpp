@@ -72,18 +72,6 @@ UINT GetWaveOutDeviceId() {
 
 }
 #pragma warning(disable:28159)
-bool IsWinNT4() 
-{
-	OSVERSIONINFOEX osvi = { 0 };
-	BOOL bOsVersionInfoEx;	
-	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
-	if (bOsVersionInfoEx == FALSE) return false;
-	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion == 4)
-		return true;
-	return false;
-}
-
 bool IsVistaOrNewer()
 {
 	OSVERSIONINFOEX osvi = { 0 };
@@ -91,9 +79,7 @@ bool IsVistaOrNewer()
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
 	if (bOsVersionInfoEx == FALSE) return false;
-	if (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion > 5)		
-		return true;
-	return false;
+	return (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && osvi.dwMajorVersion > 5);	
 }
 #pragma warning(default:28159)
 
@@ -212,8 +198,11 @@ VSTDriver::VSTDriver() :
 	sProduct(),
 	IsSCVA(),
 	uPluginPlatform(),
-	uVendorVersion(),
-	uUniqueId() {}
+	uVendorVersion(),	
+	uUniqueId() 
+{
+	editorOwner = (HWND)-1;
+}
 
 VSTDriver::~VSTDriver() {
 	CloseVSTDriver();
@@ -586,10 +575,10 @@ bool VSTDriver::process_running()
 	return false;
 }
 
-static void ProcessPendingMessages()
+static void ProcessPendingMessages(HWND editorOwner)
 {
-	MSG msg = {};
-	while (PeekMessage(&msg, (HWND)-1, 0, 0, PM_REMOVE))
+	MSG msg = { 0 };
+	while (PeekMessage(&msg, editorOwner, 0, 0, PM_REMOVE))
 	{
 		DispatchMessage(&msg);
 	}
@@ -610,8 +599,8 @@ uint32_t VSTDriver::process_read_bytes_pass( void * out, uint32_t size )
 	DWORD state;
 	for (;;)
 	{
-		state = MsgWaitForMultipleObjects( _countof( handles ), handles, FALSE, 5000, QS_ALLEVENTS );
-		if ( state == WAIT_OBJECT_0 + _countof( handles ) ) ProcessPendingMessages();
+		state = MsgWaitForMultipleObjects( _countof( handles ), handles, FALSE, 15000, QS_ALLEVENTS );
+		if ( state == WAIT_OBJECT_0 + _countof( handles ) ) ProcessPendingMessages(editorOwner);
 		else break;
 	}
 
@@ -780,9 +769,12 @@ void VSTDriver::setSampleRate(unsigned int sampleRate)
 	}
 }
 
-void VSTDriver::displayEditorModal(unsigned int uDeviceID)
+void VSTDriver::displayEditorModal(unsigned int uDeviceID, HWND owner)
 {
 	uint32_t code = uDeviceID == 255 ? Command::DisplayEditorModal : Command::DisplayEditorModalThreaded;
+	
+	editorOwner = owner;
+
 	if (uDeviceID == 0) Sleep(50);
 	else if (uDeviceID == 1) Sleep(75);
 	process_write_code( code );
