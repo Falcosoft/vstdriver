@@ -30,7 +30,7 @@ inline TCHAR* GetFileVersion(TCHAR* result)
 
 inline bool IsWinNT4()
 {
-	return (GetVersion() & 0x8000000F) == 4;
+	return (GetVersion() & 0x800000FF) == 4;
 }
 
 

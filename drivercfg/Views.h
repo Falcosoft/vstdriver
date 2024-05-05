@@ -310,6 +310,31 @@ static void SaveDwordValue(LPCTSTR key, DWORD value)
 		reg.Close();
 	}		   
 }
+
+static TCHAR* getProxyPath(TCHAR* result, unsigned int length)
+{
+	if (GetWindowsDirectory(result, length))
+	{			
+		_tcscat_s(result, length, _T("\\SysWOW64\\vstmididrv\\vstmidiproxy.exe"));
+
+		if (GetFileAttributes(result) == INVALID_FILE_ATTRIBUTES)
+		{
+			if (GetWindowsDirectory(result, length))
+			{					
+				_tcscat_s(result, length, _T("\\System32\\vstmididrv\\vstmidiproxy.exe"));
+
+				if (GetFileAttributes(result) == INVALID_FILE_ATTRIBUTES)
+				{
+					_tcscpy_s(result, length, _T(""));
+
+				}
+			}
+		}			
+	}
+
+	return result;
+}
+
 #pragma endregion utility functions
 
 #if _MSC_VER > 1000
@@ -1690,6 +1715,7 @@ public:
 		chkPrivAsio = GetDlgItem(IDC_PRIVATEASIO);
 		chkKeepDriver = GetDlgItem(IDC_KEEPDRIVER);
 		cmbHighDpi = GetDlgItem(IDC_HIGHDPI);
+		btnProxy = GetDlgItem(IDC_PROXY);
 
 		cmbHighDpi.AddString(_T("System"));
 		cmbHighDpi.AddString(_T("System enhanced"));
@@ -1727,7 +1753,10 @@ public:
 		else
 			chkPrivAsio.EnableWindow(false);
 
-		chkKeepDriver.SetCheck(keepDriverLoaded);			
+		chkKeepDriver.SetCheck(keepDriverLoaded);	
+
+		TCHAR tmpPath[MAX_PATH] = { 0 };
+		btnProxy.EnableWindow((BOOL)!!_tcslen(getProxyPath(tmpPath, MAX_PATH)));		
 
 		return TRUE;
 	}
@@ -1793,18 +1822,8 @@ public:
 	{
 		TCHAR tmpPath[MAX_PATH] = { 0 };
 
-		if (GetWindowsDirectory(tmpPath, MAX_PATH))
-		{			
-			_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\vstmidiproxy.exe"));
-
-			if (GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
-			{
-				if (GetWindowsDirectory(tmpPath, MAX_PATH))
-				{					
-					_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\vstmidiproxy.exe"));
-				}
-			}
-
+		if (_tcslen(getProxyPath(tmpPath, MAX_PATH)))
+		{
 			ShellExecute(NULL, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
 		}
 
