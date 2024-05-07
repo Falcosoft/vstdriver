@@ -1937,7 +1937,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, OTHER_MENU_OFFSET + 1, _T("Start Audio Recording"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, OTHER_MENU_OFFSET + 1, _T("Start Wave Recording"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
@@ -2075,7 +2075,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					isRecStarted = false;
 				}
 
-				ModifyMenu(trayMenu, (UINT)wParam, MF_STRING, wParam, isRecStarted ? _T("Stop Audio Recording") : _T("Start Audio Recording"));
+				ModifyMenu(trayMenu, (UINT)wParam, MF_STRING, wParam, isRecStarted ? _T("Stop Wave Recording") : _T("Start Wave Recording"));
 				nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(isRecStarted ? 32513 : 32512));
 				Shell_NotifyIcon(NIM_MODIFY, &nIconData);
 				return 0;
@@ -2086,7 +2086,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{					
 					waveWriter.CloseRequest();
 
-					ModifyMenu(trayMenu, OTHER_MENU_OFFSET + 1, MF_STRING, OTHER_MENU_OFFSET + 1, _T("Start Audio Recording"));
+					ModifyMenu(trayMenu, OTHER_MENU_OFFSET + 1, MF_STRING, OTHER_MENU_OFFSET + 1, _T("Start Wave Recording"));
 					nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
 					Shell_NotifyIcon(NIM_MODIFY, &nIconData);
 

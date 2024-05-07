@@ -100,13 +100,14 @@ public:
     void CloseRequest();
     inline bool getIsRecordingStarted() { return isRecordingStarted; }   
 
-private:
+private:    
     volatile bool isRecordingStarted;
-    volatile bool isCloseRequested;
+    volatile bool isCloseRequested;    
     DWORD bytesWritten;
-    FILE* fileHandle;
+    HANDLE fileHandle;
     int channelCount;   
-    TCHAR fileName[MAX_PATH];   
+    TCHAR fileName[MAX_PATH];    
+  
     WaveWriter(const WaveWriter& that);
     WaveWriter& operator=(const WaveWriter& that); 
 };

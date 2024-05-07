@@ -764,7 +764,7 @@ public:
 			
 			if (DynAllowSetForegroundWindow) DynAllowSetForegroundWindow(ASFW_ANY); //allows modal dialog to set focus
 			::EnableWindow(hWnd, FALSE);
-			effect->displayEditorModal(255, hWnd);
+			effect->displayEditorModal(255, (HWND)0);
 			::EnableWindow(hWnd, TRUE);
 			::SetForegroundWindow(this->m_hWnd); //Gets back focus after editor is closed. AllowSetForegroundWindow has to be called by vsthost.			
 			
