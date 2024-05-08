@@ -15,6 +15,7 @@
 
 #include "stdafx.h"
 #include <commdlg.h>
+#include <process.h>
 
 #pragma pack(push, 1)
 typedef struct wav_header_ex {
@@ -94,21 +95,35 @@ class WaveWriter
 {
 public: 
     WaveWriter();
-    uint32_t Init(int chCount, DWORD sampleRate, HWND owner);
-    uint32_t WriteData(const void* data, DWORD size);
-    void Close();
-    void CloseRequest();
+    uint32_t Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND messageWindow, DWORD message);
+    void WriteData(const void* data, DWORD size);
+    void Close();    
     inline bool getIsRecordingStarted() { return isRecordingStarted; }   
 
-private:    
+private:
+    const static DWORD Buffer_Size = 512 * 1024; 
+    const static DWORD Buffer_Part_Count = 4; //quad buffering, 128K parts
+
     volatile bool isRecordingStarted;
-    volatile bool isCloseRequested;    
-    DWORD bytesWritten;
+    volatile bool stopProcessing;
+    volatile DWORD bufferPart;
+    volatile DWORD bytesWritten;
+    HWND msgWindow;
+    DWORD msg;
+    char* buffer;    
+    DWORD bufferPosition;   
     HANDLE fileHandle;
-    int channelCount;   
-    TCHAR fileName[MAX_PATH];    
-  
+    int channelCount; 
+    HANDLE workEvent;
+	HANDLE startEvent;
+    HANDLE hThread;
+    TCHAR fileName[MAX_PATH];     
+
+    uint32_t WriteDataToDisk(const void* data, DWORD size);  
     WaveWriter(const WaveWriter& that);
-    WaveWriter& operator=(const WaveWriter& that); 
+    WaveWriter& operator=(const WaveWriter& that);
+
+    static unsigned __stdcall WritingThread(void* pthis);
+
 };
 

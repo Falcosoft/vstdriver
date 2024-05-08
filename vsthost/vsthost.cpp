@@ -201,9 +201,14 @@ static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 #define MAX_PORTS 2
 #define MAX_OUTPUTS 2
 #define MAX_PLUGINS 10
+
 #define RESET_MENU_OFFSET 10
-#define OTHER_MENU_OFFSET 20
 #define PORT_MENU_OFFSET 100
+#define OTHER_MENU_OFFSET 20
+#define WAVEWRITE_START_STOP OTHER_MENU_OFFSET + 1
+#define WAVEWRITE_ERROR OTHER_MENU_OFFSET + 2
+#define SHOW_INFO OTHER_MENU_OFFSET + 3
+
 #define RESET_MIDIMSG_COUNT 64 //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
 #define BUFFER_SIZE 4800  //matches better for typical 48/96/192 kHz
 #define MAX_INPUTEVENT_COUNT 1024  //it's impossible to get more events in 1 cycle since midiStream also uses this size.
@@ -317,8 +322,6 @@ static struct PortState
 
 LPTSTR* argv = NULL;
 
-static WaveWriter waveWriter;
-
 static NOTIFYICONDATA nIconData = { 0 };
 static HMENU trayMenu = NULL;
 
@@ -349,8 +352,9 @@ static volatile HWND trayWndHandle = NULL;
 
 static Win32Lock dialogLock(true);
 
-std::vector<uint8_t> blState;
+static std::vector<uint8_t> blState;
 
+static WaveWriter waveWriter;
 
 #pragma endregion Global definitions and variables
 
@@ -1194,7 +1198,7 @@ void renderAudiosamples(int channelCount)
 		
 		if (waveWriter.getIsRecordingStarted())
 		{			
-			if (waveWriter.WriteData(&sample_buffer.front(), byteSize) == WaveResponse::WriteError) PostMessage(trayWndHandle, WM_COMMAND, (WPARAM)OTHER_MENU_OFFSET + 2, 0);
+			waveWriter.WriteData(&sample_buffer.front(), byteSize);
 		}
 				
 		count -= count_to_do;
@@ -1937,7 +1941,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, OTHER_MENU_OFFSET + 1, _T("Start Wave Recording"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, WAVEWRITE_START_STOP, _T("Start Wave Recording"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
@@ -1945,7 +1949,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 4, _T("Send GM2 Reset"));
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 5, _T("All Notes/CC Off"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, OTHER_MENU_OFFSET + 3, _T("Info..."));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, SHOW_INFO, _T("Info..."));
 
 
 			nIconData.cbSize = sizeof(NOTIFYICONDATA);
@@ -1994,7 +1998,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				EnableMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].isPortActive /* && hasEditor */ ? MF_ENABLED : MF_GRAYED);
 				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].isPortActive /* && hasEditor*/ ? MF_ENABLED : MF_GRAYED);
 				EnableMenuItem(trayMenu, 3, (portState[0].isPortActive || portState[1].isPortActive) && !waveWriter.getIsRecordingStarted() ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
-				EnableMenuItem(trayMenu, OTHER_MENU_OFFSET + 1, portState[0].isPortActive || portState[1].isPortActive || waveWriter.getIsRecordingStarted() ? MF_ENABLED : MF_GRAYED);
+				EnableMenuItem(trayMenu, WAVEWRITE_START_STOP, portState[0].isPortActive || portState[1].isPortActive || waveWriter.getIsRecordingStarted() ? MF_ENABLED : MF_GRAYED);
 
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
 				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
@@ -2057,12 +2061,12 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				doOwnReset = true;
 				return 0;
 
-			case OTHER_MENU_OFFSET + 1:
+			case WAVEWRITE_START_STOP:
 			{
 				bool isRecStarted;
 				if (!waveWriter.getIsRecordingStarted())
 				{
-					uint32_t response = waveWriter.Init(is4channelMode ? 4 : 2, sample_rate, portState[0].editorHandle ? portState[0].editorHandle : portState[1].editorHandle ? portState[1].editorHandle : hwnd);
+					uint32_t response = waveWriter.Init(is4channelMode ? 4 : 2, sample_rate, portState[0].editorHandle ? portState[0].editorHandle : portState[1].editorHandle ? portState[1].editorHandle : hwnd, hwnd, WAVEWRITE_ERROR);
 					isRecStarted = response == WaveResponse::Success;
 					if (response == WaveResponse::CannotCreate)
 					{
@@ -2071,7 +2075,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 				else
 				{
-					waveWriter.CloseRequest();
+					waveWriter.Close();
 					isRecStarted = false;
 				}
 
@@ -2081,12 +2085,12 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				return 0;
 			}
 
-			case OTHER_MENU_OFFSET + 2:	
+			case WAVEWRITE_ERROR:
 				if (waveWriter.getIsRecordingStarted())
 				{					
-					waveWriter.CloseRequest();
+					waveWriter.Close();
 
-					ModifyMenu(trayMenu, OTHER_MENU_OFFSET + 1, MF_STRING, OTHER_MENU_OFFSET + 1, _T("Start Wave Recording"));
+					ModifyMenu(trayMenu, WAVEWRITE_START_STOP, MF_STRING, WAVEWRITE_START_STOP, _T("Start Wave Recording"));
 					nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
 					Shell_NotifyIcon(NIM_MODIFY, &nIconData);
 
@@ -2094,7 +2098,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 				return 0;
 
-			case OTHER_MENU_OFFSET + 3:
+			case SHOW_INFO:
 				if (aboutBoxResult == STILLRUNNING) return 0;
 				_tcscat_s(versionBuff, midiClient);
 				_tcscat_s(versionBuff, _T(" "));
