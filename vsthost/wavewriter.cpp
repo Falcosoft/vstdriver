@@ -11,11 +11,10 @@
 
 WaveWriter::WaveWriter() :
     buffer(),
-    startEvent(),
-	workEvent(),
+    workEvent(),
     hThread(),
     bufferPosition(),
-    bufferPart(),
+    bufferStepCount(),
     fileHandle(),
     bytesWritten(),
     channelCount(),
@@ -28,7 +27,7 @@ WaveWriter::WaveWriter() :
 }
 
 uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND messageWindow, DWORD message)
-{	  
+{  
     OPENFILENAME ofn = { 0 };
     ofn.lStructSize = IsWinNT4() ? OPENFILENAME_SIZE_VERSION_400 : sizeof(ofn);
     ofn.hwndOwner = ownerWindow;
@@ -37,7 +36,7 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT | OFN_EXPLORER | OFN_ENABLEHOOK | OFN_ENABLESIZING;
     ofn.lpstrDefExt = L"wav";
- 
+
     if (GetSaveFileName(&ofn))
     {        
         fileHandle = CreateFile(fileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -52,20 +51,17 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
         bufferPosition = 0;  
 
         stopProcessing = false;
-		startEvent = CreateEvent(NULL, false, false, NULL);  
-		workEvent = CreateEvent(NULL, false, false, NULL);  
+        workEvent = CreateEvent(NULL, false, false, NULL);
 
-		hThread = (HANDLE)_beginthreadex(NULL, 8192, &WritingThread, this, 0, NULL);
-		
-		if(!hThread || !startEvent || !workEvent) return WaveResponse::CannotCreate;
+        hThread = (HANDLE)_beginthreadex(NULL, 8192, &WritingThread, this, 0, NULL);
+        
+        if(!hThread || !workEvent) return WaveResponse::CannotCreate;
 
-		DWORD retRes = WaitForSingleObject(startEvent, 2000);
-        if(retRes != WAIT_OBJECT_0) return WaveResponse::CannotCreate;
-	    
         channelCount = chCount;
         msgWindow = messageWindow;
         msg = message;        
-        bytesWritten = 0;       
+        bytesWritten = 0; 
+        bufferStepCount = 0;
           
        
         if (channelCount == 4)
@@ -107,14 +103,14 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
             waveHeaderEx.nBlockAlign = waveHeaderEx.nChannels * waveHeaderEx.wBitsPerSample / 8;
             waveHeaderEx.nAvgBytesPerSec = waveHeaderEx.nBlockAlign * waveHeaderEx.nSamplesPerSec;
             waveHeaderEx.factSize = 4;                   
-               
+
             WriteDataToDisk(&waveHeaderEx, sizeof(waveHeaderEx));
-        }     
-               
-		isRecordingStarted = true;        
+        }
+
+        isRecordingStarted = true;
 
         return WaveResponse::Success;
-    }  
+    }
     return WaveResponse::NotSelected;
 }
 
@@ -123,7 +119,7 @@ void WaveWriter::WriteData(const void* data, DWORD size)
     
     if (size < Buffer_Size / Buffer_Part_Count)
     {
-        DWORD oldPart = (bufferPosition / (Buffer_Size / Buffer_Part_Count)) & (Buffer_Part_Count -1);
+        DWORD oldValue = (bufferPosition / (Buffer_Size / Buffer_Part_Count)) & (Buffer_Part_Count -1);
         
         if (bufferPosition + size <= Buffer_Size)
         {
@@ -139,10 +135,9 @@ void WaveWriter::WriteData(const void* data, DWORD size)
             bufferPosition = size - diff;
         }
 
-        DWORD newPart = (bufferPosition / (Buffer_Size / Buffer_Part_Count)) & (Buffer_Part_Count - 1);
-        if(oldPart != newPart)
+        if(oldValue != ((bufferPosition / (Buffer_Size / Buffer_Part_Count)) & (Buffer_Part_Count - 1)))
         {
-            bufferPart = newPart;
+            bufferStepCount++;
             SetEvent(workEvent); //send write request to writing thread.
         }
     }
@@ -177,6 +172,7 @@ void WaveWriter::Close()
         hThread = NULL;
     }
 
+    DWORD bufferPart = bufferStepCount & (Buffer_Part_Count - 1);
     DWORD writeSize = bufferPosition - (bufferPart * (Buffer_Size / Buffer_Part_Count));
     if (writeSize > 0) WriteDataToDisk(buffer + (bufferPart * (Buffer_Size / Buffer_Part_Count)), writeSize);
    
@@ -185,7 +181,7 @@ void WaveWriter::Close()
     DWORD ckSize[3] = { 0 };
 
     if (channelCount == 4)
-    {        
+    {
         ckSize[0] = bytesWritten - 8;
         ckSize[2] = bytesWritten - sizeof(WaveHeaderExtensible);
         ckSize[1] = ckSize[2] / 4;        
@@ -200,7 +196,7 @@ void WaveWriter::Close()
         WriteFile(fileHandle, &ckSize[2], sizeof(DWORD), &sizeDone[2], &ovr[2]); 
     }
     else
-    { 
+    {
         ckSize[0] = bytesWritten - 8;
         ckSize[2] = bytesWritten - sizeof(WaveHeaderEx);
         ckSize[1] = ckSize[2] / 4;
@@ -213,11 +209,11 @@ void WaveWriter::Close()
 
         ovr[2].Offset = offsetof(WaveHeaderEx, dataSize);
         WriteFile(fileHandle, &ckSize[2], sizeof(DWORD), &sizeDone[2], &ovr[2]);
-    }    
-    
+    }
+
     CloseHandle(fileHandle);  
     fileHandle = NULL;
-    
+
     if (buffer)
     {
         free(buffer);
@@ -228,11 +224,6 @@ void WaveWriter::Close()
         CloseHandle(workEvent);
         workEvent = NULL;
     }
-	if (startEvent)
-    {
-        CloseHandle(startEvent);
-        startEvent = NULL;
-    }
 }
 
 unsigned __stdcall WaveWriter::WritingThread(void* pthis)
@@ -240,8 +231,8 @@ unsigned __stdcall WaveWriter::WritingThread(void* pthis)
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
     WaveWriter* _this = static_cast<WaveWriter*>(pthis);
-	
-	SetEvent(_this->startEvent);
+
+    DWORD bufferStepCountDone = 0;
 
     for (;;)
     {
@@ -253,16 +244,22 @@ unsigned __stdcall WaveWriter::WritingThread(void* pthis)
             PostMessage(_this->msgWindow, WM_COMMAND, (WPARAM)_this->msg, 0);
             break;
         }
+        DWORD i = 0;
+        while (bufferStepCountDone < _this->bufferStepCount && i < 2) //in case of a glitch do not catch up at once, only gradually
+        {
+            DWORD sizeDone;            
+            WriteFile(_this->fileHandle, _this->buffer + ((bufferStepCountDone & (Buffer_Part_Count - 1)) * (Buffer_Size / Buffer_Part_Count)), Buffer_Size / Buffer_Part_Count, &sizeDone, NULL);
+            _this->bytesWritten += sizeDone;
 
-        DWORD sizeDone;
-        DWORD tmpPart = _this->bufferPart == 0 ? Buffer_Part_Count - 1  : _this->bufferPart - 1;
-        WriteFile(_this->fileHandle, _this->buffer + (tmpPart * (Buffer_Size / Buffer_Part_Count)), Buffer_Size / Buffer_Part_Count, &sizeDone, NULL);
-        _this->bytesWritten += sizeDone;
-       
-        if (sizeDone != Buffer_Size / Buffer_Part_Count)
-        {                  
-            PostMessage(_this->msgWindow, WM_COMMAND, (WPARAM)_this->msg, 0);
-            break;
+            if (sizeDone != Buffer_Size / Buffer_Part_Count)
+            {
+                PostMessage(_this->msgWindow, WM_COMMAND, (WPARAM)_this->msg, 0);
+                _this->stopProcessing = true;
+                break;
+            }
+
+            i++;
+            bufferStepCountDone++;
         }
     }
 

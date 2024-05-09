@@ -101,12 +101,12 @@ public:
     inline bool getIsRecordingStarted() { return isRecordingStarted; }   
 
 private:
-    const static DWORD Buffer_Size = 512 * 1024; 
-    const static DWORD Buffer_Part_Count = 4; //quad buffering, 128K parts
+    const static DWORD Buffer_Size = 1024 * 1024; 
+    const static DWORD Buffer_Part_Count = 8; //8-part buffering, 128K parts
 
     volatile bool isRecordingStarted;
     volatile bool stopProcessing;
-    volatile DWORD bufferPart;
+    volatile DWORD bufferStepCount;
     volatile DWORD bytesWritten;
     HWND msgWindow;
     DWORD msg;
@@ -115,7 +115,6 @@ private:
     HANDLE fileHandle;
     int channelCount; 
     HANDLE workEvent;
-	HANDLE startEvent;
     HANDLE hThread;
     TCHAR fileName[MAX_PATH];     
 
