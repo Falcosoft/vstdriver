@@ -13,6 +13,12 @@
 #endif 
 #endif 
 
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#endif
+
 #include "stdafx.h"
 #include <commdlg.h>
 #include <process.h>
@@ -107,6 +113,7 @@ private:
     volatile bool isRecordingStarted;
     volatile bool stopProcessing;
     volatile DWORD bufferStepCount;
+    volatile DWORD bufferStepCountDone;
     volatile DWORD bytesWritten;
     HWND msgWindow;
     DWORD msg;

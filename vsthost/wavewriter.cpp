@@ -15,6 +15,7 @@ WaveWriter::WaveWriter() :
     hThread(),
     bufferPosition(),
     bufferStepCount(),
+    bufferStepCountDone(),
     fileHandle(),
     bytesWritten(),
     channelCount(),
@@ -62,7 +63,7 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
         msg = message;        
         bytesWritten = 0; 
         bufferStepCount = 0;
-          
+        bufferStepCountDone = 0;          
        
         if (channelCount == 4)
         {
@@ -163,7 +164,7 @@ void WaveWriter::Close()
 {
     if(!fileHandle) return;
 
-    isRecordingStarted = false;
+    isRecordingStarted = false;    
     stopProcessing = true;
     SetEvent(workEvent);
     if (hThread != NULL) {
@@ -172,9 +173,18 @@ void WaveWriter::Close()
         hThread = NULL;
     }
 
-    DWORD bufferPart = bufferStepCount & (Buffer_Part_Count - 1);
-    DWORD writeSize = bufferPosition - (bufferPart * (Buffer_Size / Buffer_Part_Count));
-    if (writeSize > 0) WriteDataToDisk(buffer + (bufferPart * (Buffer_Size / Buffer_Part_Count)), writeSize);
+    DWORD bufferPart = bufferStepCountDone & (Buffer_Part_Count - 1);    
+    DWORD written = bufferPart * (Buffer_Size / Buffer_Part_Count);
+    int writeSize = bufferPosition - written;
+    if (writeSize > 0)
+    {
+        WriteDataToDisk(buffer + written, writeSize);
+    }
+    else if (writeSize < 0)
+    {      
+        WriteDataToDisk(buffer + written, Buffer_Size - written);
+        WriteDataToDisk(buffer, bufferPosition);
+    }
    
     OVERLAPPED ovr[3] = { 0 };
     DWORD sizeDone[3] = { 0 };
@@ -230,39 +240,34 @@ unsigned __stdcall WaveWriter::WritingThread(void* pthis)
 {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
-    WaveWriter* _this = static_cast<WaveWriter*>(pthis);
-
-    DWORD bufferStepCountDone = 0;
+    WaveWriter* _this = static_cast<WaveWriter*>(pthis);    
 
     for (;;)
     {
-        WaitForSingleObject(_this->workEvent, INFINITE);
-        if (_this->stopProcessing) break;
+        WaitForSingleObject(_this->workEvent, INFINITE);        
         
         if (!_this->fileHandle || _this->bytesWritten >= 0xFFF80000) //Check for 4G - 512K to prevent creating unplayable 4GB+ wave files.
         {                    
             PostMessage(_this->msgWindow, WM_COMMAND, (WPARAM)_this->msg, 0);
-            break;
+            return 0;
         }
         DWORD i = 0;
-        while (bufferStepCountDone < _this->bufferStepCount && i < 2) //in case of a glitch do not catch up at once, only gradually
+        while (_this->bufferStepCountDone < _this->bufferStepCount && i < 2) //in case of a glitch do not catch up at once, only gradually
         {
             DWORD sizeDone;            
-            WriteFile(_this->fileHandle, _this->buffer + ((bufferStepCountDone & (Buffer_Part_Count - 1)) * (Buffer_Size / Buffer_Part_Count)), Buffer_Size / Buffer_Part_Count, &sizeDone, NULL);
+            WriteFile(_this->fileHandle, _this->buffer + ((_this->bufferStepCountDone & (Buffer_Part_Count - 1)) * (Buffer_Size / Buffer_Part_Count)), Buffer_Size / Buffer_Part_Count, &sizeDone, NULL);
             _this->bytesWritten += sizeDone;
 
             if (sizeDone != Buffer_Size / Buffer_Part_Count)
             {
                 PostMessage(_this->msgWindow, WM_COMMAND, (WPARAM)_this->msg, 0);
-                _this->stopProcessing = true;
-                break;
+                return 0;
             }
 
             i++;
-            bufferStepCountDone++;
+            _this->bufferStepCountDone++;
         }
-    }
 
-    _endthreadex(0);
-    return 0;
+        if (_this->stopProcessing) return 0;
+    }   
 }
