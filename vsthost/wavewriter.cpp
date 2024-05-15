@@ -194,7 +194,7 @@ void WaveWriter::Close()
     {
         ckSize[0] = bytesWritten - 8;
         ckSize[2] = bytesWritten - sizeof(WaveHeaderExtensible);
-        ckSize[1] = ckSize[2] / 4;        
+        ckSize[1] = ckSize[2] / (channelCount * 4);        
 
         ovr[0].Offset = offsetof(WaveHeaderExtensible, wavSize);
         WriteFile(fileHandle, &ckSize[0], sizeof(DWORD), &sizeDone[0], &ovr[0]);       
@@ -209,7 +209,7 @@ void WaveWriter::Close()
     {
         ckSize[0] = bytesWritten - 8;
         ckSize[2] = bytesWritten - sizeof(WaveHeaderEx);
-        ckSize[1] = ckSize[2] / 4;
+        ckSize[1] = ckSize[2] / (channelCount * 4);
 
         ovr[0].Offset = offsetof(WaveHeaderEx, wavSize);
         WriteFile(fileHandle, &ckSize[0], sizeof(DWORD), &sizeDone[0], &ovr[0]);
