@@ -24,7 +24,7 @@ WaveWriter::WaveWriter() :
     msgWindow(),
     msg()
 {
-    _tcscpy_s(fileName, L"VSTiCapture.wav");   
+    _tcscpy_s(fileName, _T("VSTiCapture.wav"));   
 }
 
 uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND messageWindow, DWORD message)
@@ -32,11 +32,11 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
     OPENFILENAME ofn = { 0 };
     ofn.lStructSize = IsWinNT4() ? OPENFILENAME_SIZE_VERSION_400 : sizeof(ofn);
     ofn.hwndOwner = ownerWindow;
-    ofn.lpstrFilter = L"Wave Files (*.wav)\0*.wav\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFilter = _T("Wave Files (*.wav)\0*.wav\0All Files (*.*)\0*.*\0");
     ofn.lpstrFile = fileName;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_HIDEREADONLY | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT | OFN_EXPLORER | OFN_ENABLEHOOK | OFN_ENABLESIZING;
-    ofn.lpstrDefExt = L"wav";
+    ofn.lpstrDefExt = _T("wav");
 
     if (GetSaveFileName(&ofn))
     {        

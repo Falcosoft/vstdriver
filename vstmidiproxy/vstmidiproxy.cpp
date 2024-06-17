@@ -475,7 +475,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			PNMLINK pNMLink = (PNMLINK)lParam;
 			LITEM   item = pNMLink->item;
 
-			ShellExecute(NULL, L"open", item.szUrl, NULL, NULL, SW_SHOW);
+			ShellExecute(NULL, _T("open"), item.szUrl, NULL, NULL, SW_SHOW);
 		}
 		}
 	}
