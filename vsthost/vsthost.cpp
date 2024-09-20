@@ -1868,7 +1868,7 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		{
 			static volatile int aboutBoxResult = 0;
 			TCHAR tempBuff[MAX_PATH] = { 0 };
-			TCHAR versionBuff[MAX_PATH] = _T("MIDI client: ");
+			TCHAR versionBuff[MAX_PATH * 2] = _T("MIDI client: ");
 			MSGBOXPARAMS params = { 0 };
 
 			if ((int)wParam >= 0 && wParam < MAX_PLUGINS)
@@ -1946,7 +1946,12 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				_tcscat_s(versionBuff, bitnessStr);
 				_tcscat_s(versionBuff, _T("\r\nDriver mode: "));
 				_tcscat_s(versionBuff, outputModeStr);
-
+				_tcscat_s(versionBuff, _T(" "));
+				
+				_itot_s(sample_rate, tempBuff, 10);
+				_tcscat_s(versionBuff, tempBuff);
+				_tcscat_s(versionBuff, _T(" Hz"));
+							
 				_tcscat_s(versionBuff, _T("\r\n \r\n"));
 
 				_tcscat_s(versionBuff, _T("Synth driver "));
