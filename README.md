@@ -62,3 +62,7 @@ Interestingly the previous version that used traditional WaveOut also used times
 So I restored the WaveOut version that cures both problems listed above. 
 The only drawback would be higher latency but the fun fact is that because of missing proper configuration (BASS_CONFIG_BUFFER) and some path reelated bugs the Arakula version that used Bass/Basswasapi had a terrible 500ms latenccy.
 So actually the WaveOut version has also much better latency now.
+
+PS:
+Further info can be found on the Wiki page:  
+https://github.com/Falcosoft/vstdriver/wiki
