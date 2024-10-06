@@ -599,7 +599,7 @@ uint32_t VSTDriver::process_read_bytes_pass( void * out, uint32_t size )
 	DWORD state;
 	for (;;)
 	{
-		state = MsgWaitForMultipleObjects( _countof( handles ), handles, FALSE, 15000, QS_ALLEVENTS );
+		state = MsgWaitForMultipleObjects( _countof( handles ), handles, FALSE, INFINITE, QS_ALLEVENTS );
 		if ( state == WAIT_OBJECT_0 + _countof( handles ) ) ProcessPendingMessages(editorOwner);
 		else break;
 	}
