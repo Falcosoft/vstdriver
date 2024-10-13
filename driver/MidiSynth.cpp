@@ -641,8 +641,9 @@ namespace VSTMIDIDRV {
 	void MidiSynth::PlaySysEx(unsigned uDeviceID, unsigned char* bufpos, DWORD len) {
 		
 		//Short Midi channel messages can be also sent by midiOutLongMsg(). But VSTi plugins many times cannot handle short messages sent as kVstSysExType.
-		//So we will send short channel messages always as kVstMidiType. No running status support in this case.    
-		if (bufpos[0] < 0xF0 && len > 1) {
+		//So we will send short channel messages always as kVstMidiType. No running status support in this case.  
+		//bufpos[0] > 0x7F check has to be added because of SysEx Continuation messages...
+		if (bufpos[0] < 0xF0 && bufpos[0] > 0x7F && len > 1) {
 
 			DWORD startPos = 0;
 			for (DWORD i = 0; i < len; i++) {
