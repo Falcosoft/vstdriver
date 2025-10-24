@@ -47,8 +47,7 @@ namespace VSTMIDIDRV
 		unsigned int samplerate;
 		bool isASIO2WASAPI;
 
-		volatile DWORD startTime;
-		volatile LARGE_INTEGER startTimeQp;
+		volatile LARGE_INTEGER startTime;		
 		double	queryPerformanceUnit;
 
 		TCHAR installPath[MAX_PATH];

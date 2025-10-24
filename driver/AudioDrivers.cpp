@@ -342,8 +342,7 @@ namespace VSTMIDIDRV {
 #pragma region BassAsioOut
 	/// BassASIO Output class. Also utilized by internal ASIO2WASAPI plugin.
 	BassAsioOut::BassAsioOut(MidiSynth* pSynth) :
-		parentSynth(pSynth),
-		startTimeQp(),
+		parentSynth(pSynth),		
 		installPath(),
 		bassAsioPath(),
 		asio2WasapiPath(),
@@ -459,12 +458,12 @@ namespace VSTMIDIDRV {
 			{
 				usingQPC = true;
 				queryPerformanceUnit = 1.0 / (tmpFreq.QuadPart * 0.001);
-				QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&startTimeQp));
+				QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&startTime));
 			}
 			else
 			{
 				usingQPC = false;
-				startTime = timeGetTime();
+				startTime.LowPart = timeGetTime();
 			}
 
 			if (!BASS_ASIO_Start(buflen, 0)) return -2;
@@ -488,8 +487,8 @@ namespace VSTMIDIDRV {
 		if (bassAsio)
 		{
 			BASS_ASIO_ChannelReset(FALSE, -1, BASS_ASIO_RESET_PAUSE);
-			if (usingQPC) QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&startTimeQp));
-			else startTime = timeGetTime();
+			if (usingQPC) QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&startTime));
+			else startTime.LowPart = timeGetTime();
 		}
 
 		return 0;
@@ -500,12 +499,12 @@ namespace VSTMIDIDRV {
 		int res;
 		if (usingQPC)
 		{
-			LONGLONG tmpStartTimeQp = startTimeQp.QuadPart;
+			LONGLONG tmpStartTimeQp = startTime.QuadPart;
 			LARGE_INTEGER tmpCounter;
 			QueryPerformanceCounter(&tmpCounter);
 			res = int((tmpCounter.QuadPart - tmpStartTimeQp) * queryPerformanceUnit * (samplerate * 0.001));
 		}
-		else res = int((timeGetTime() - startTime) * (samplerate * 0.001));
+		else res = int((timeGetTime() - startTime.LowPart) * (samplerate * 0.001));
 
 #ifdef _DEBUG
 		std::cout << "VST MIDI Driver: GetPos(): " << res << "\n";
@@ -713,8 +712,8 @@ namespace VSTMIDIDRV {
 			_this->parentSynth->Render((short*)buffer, length / (sizeof(short) * _this->channels));
 		}
 
-		if (_this->usingQPC) QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&_this->startTimeQp));
-		else _this->startTime = timeGetTime();
+		if (_this->usingQPC) QueryPerformanceCounter(const_cast<LARGE_INTEGER*>(&_this->startTime));
+		else _this->startTime.LowPart = timeGetTime();
 
 		return length;
 	}

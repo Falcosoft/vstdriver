@@ -1346,8 +1346,7 @@ public:
 	}
 
 	void LoadWaveOutDrivers()
-	{
-		CString deviceItem;
+	{		
 		CString deviceName;
 		WAVEOUTCAPS caps;
 		CString selectedOutputDriver = LoadOutputDriver(_T("WinMM WaveOut"));
@@ -1478,8 +1477,7 @@ public:
 	}
 
 	LRESULT OnButtonOpen(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/ )
-	{
-		CString deviceName;
+	{		
 		CString selectedOutputDriver;
 
 		int index = playbackDevices.GetCurSel();
@@ -1509,7 +1507,12 @@ public:
 
 		BASS_ASIO_SetWindow(m_hWnd);
 		BASS_ASIO_Init(selectedOutputDriverInt, 0);
-		if (!BASS_ASIO_ControlPanel() && BASS_ASIO_ErrorGetCode() == BASS_ERROR_ALREADY) return 0;
+		if (!BASS_ASIO_ControlPanel() && BASS_ASIO_ErrorGetCode() == BASS_ERROR_ALREADY)
+		{
+			if (isAsio2Wasapi) reg.Close();
+			return 0;
+		}
+
 		BASS_ASIO_Free();
 
 		driverChanged = true;
@@ -1700,9 +1703,9 @@ public:
 		TCHAR tmpBuff[32];
 		cmbHighDpi.GetWindowText(tmpBuff, 32);
 		
-		if (!_tcscmp(tmpBuff, _T("System"))) value = MYDPI_AWARENESS_CONTEXT_UNAWARE;
-		else if (!_tcscmp(tmpBuff, _T("System enhanced"))) value = MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED;
-		else if (!_tcscmp(tmpBuff, _T("Application"))) value = MYDPI_AWARENESS_CONTEXT_SYSTEM_AWARE;	
+		if (!_tcscmp(tmpBuff, _T("System"))) value = MYDPI_AWARENESS_CONTEXT_UNAWARE;		
+		else if (!_tcscmp(tmpBuff, _T("Application"))) value = MYDPI_AWARENESS_CONTEXT_SYSTEM_AWARE;
+		//else if (!_tcscmp(tmpBuff, _T("System enhanced"))) value = MYDPI_AWARENESS_CONTEXT_UNAWARE_GDISCALED;
 
 		SaveDwordValue(_T("HighDpiMode"), value);
 

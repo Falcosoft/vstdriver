@@ -1,7 +1,9 @@
-// Copyright (C) 2024 Zoltán Bacskó - Falcosoft
+// Copyright (C) 2024 Zoltan Bacsko - Falcosoft
 // vstmidiproxy.cpp : Defines the entry point for the application.
 //
 
+//#include <stdio.h>
+//#include <io.h>
 #include "stdafx.h"
 #include "vstmidiproxy.h"
 #include "../version.h"
@@ -11,6 +13,7 @@
 #include <stdlib.h>
 #include <crtdbg.h>
 #endif
+
 
 HMODULE TeVirtualMIDI32 = NULL; // TeVirtualMIDI handle	
 
@@ -35,6 +38,11 @@ LPVM_MIDI_PORT TeVMPortA = NULL;
 LPVM_MIDI_PORT TeVMPortB = NULL;
 HMIDIOUT OutPortA = NULL;
 HMIDIOUT OutPortB = NULL;
+
+MMRESULT MMResA = -1;
+MMRESULT MMResB = -1;
+bool foundA;
+bool foundB;
 
 HANDLE proxyMutex = NULL;
 
@@ -69,6 +77,9 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 
 	TCHAR szWindowClass[] = _T("VstMidiProxy");
 
+	//AllocConsole();
+	//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;
+
 	proxyMutex = CreateMutex(NULL, true, _T("vstmidiproxy32"));
 	if (GetLastError() == ERROR_ALREADY_EXISTS)
 	{
@@ -94,18 +105,40 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 	{
 		MIDIOUTCAPS2 caps = { 0 };
 		midiOutGetDevCaps(i, (LPMIDIOUTCAPS)&caps, sizeof(caps));
+		//wprintf(L"Midi port %d:\n", i);
+		//wprintf(L"Name: %ls\n", caps.szPname);
+		//wprintf(L"\n");
 
 		if (caps.ManufacturerGuid == VSTMidiDrvManufacturerGuid && caps.ProductGuid == VSTMidiDrvPortAGuid)
-			midiOutOpen(&OutPortA, i, NULL, NULL, CALLBACK_NULL);
-		else if (caps.ManufacturerGuid == VSTMidiDrvManufacturerGuid && caps.ProductGuid == VSTMidiDrvPortBGuid)
-			midiOutOpen(&OutPortB, i, NULL, NULL, CALLBACK_NULL);
+		{
+			foundA = true;
+			//wprintf(L"Found Port A! Trying to open...\n");
+			MMResA = midiOutOpen(&OutPortA, i, NULL, NULL, CALLBACK_NULL);
+			//if (!MMResA) wprintf(L"Success!\n"); else  wprintf(L"Failed with error %d\n", MMResA);
+			//wprintf(L"\n");
 
-		if (OutPortA && OutPortB) break;
+		}
+		else if (caps.ManufacturerGuid == VSTMidiDrvManufacturerGuid && caps.ProductGuid == VSTMidiDrvPortBGuid)
+		{
+			foundB = true;
+			//wprintf(L"Found Port B! Trying to open...\n");
+			MMResB = midiOutOpen(&OutPortB, i, NULL, NULL, CALLBACK_NULL);
+			//if (!MMResB) wprintf(L"Success!\n"); else  wprintf(L"Failed with error %d\n", MMResB);
+			//wprintf(L"\n");
+		}
+
+
+		if (foundA && foundB)  break;
 	}
 
-	if (!OutPortA || !OutPortB)
+	if (!foundA || !foundB) 
 	{
 		MessageBox(Mainhwnd, _T("VST Midi driver 2.4+ is not properly installed.\r\nDefault driver ports cannot be found.\r\nTry to reinstall the driver."), _T("VST Midi Proxy Error"), MB_OK | MB_ICONERROR);
+		return FALSE;
+	}
+	else if (!OutPortA || !OutPortB)
+	{
+		MessageBox(Mainhwnd, _T("Could not open Ports A/B !\r\nTry to configure ports with the 32-bit version of the Configuration dialog."), _T("VST Midi Proxy Error"), MB_OK | MB_ICONERROR);
 		return FALSE;
 	}
 
@@ -500,6 +533,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		}
 		else if (wParam == IDCANCEL || wParam == IDOK)
 		{
+			//FreeConsole();
 			PostMessage(hWnd, WM_CLOSE, 0, 0);
 			return TRUE;
 		}

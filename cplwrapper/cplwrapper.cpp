@@ -1,3 +1,4 @@
+// Copyright (C) 2023 Zoltan Bacsko - Falcosoft
 // cplwrapper.cpp : Defines the entry point for the DLL application.
 // Falco: This cpl file is only relevant for Win NT4 which cannot handle exe files as control panel items. This cpl item simply invokes vstmididrvcfg.exe.  
 // It is hardcoded to link with msvcrt.lib from VC++ 6.

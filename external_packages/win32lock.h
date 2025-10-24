@@ -46,7 +46,7 @@ public:
 		useSRWLock = (AcquireSRWLockExclusive && ReleaseSRWLockExclusive);
 
 		if (!useSRWLock) {
-			_lock.Ptr = new CRITICAL_SECTION; //only allocate CRITICAL_SECTION dynamically if needed.
+			_lock.Ptr = new CRITICAL_SECTION(); //only allocate CRITICAL_SECTION dynamically if needed.
 			InitializeCriticalSection((LPCRITICAL_SECTION)_lock.Ptr);
 		}
 	}
@@ -54,7 +54,7 @@ public:
 	~Win32Lock() {
 		if (!useSRWLock) {
 			DeleteCriticalSection((LPCRITICAL_SECTION)_lock.Ptr);
-			delete _lock.Ptr;
+			delete (LPCRITICAL_SECTION)_lock.Ptr;
 		}
 	}
 
@@ -130,8 +130,7 @@ public:
 					Sleep(1); 
 				}
 			}
-		}
-		lockCount++;
+		}		
 	}
 
 	inline void unlock() {

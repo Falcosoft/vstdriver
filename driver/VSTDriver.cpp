@@ -52,7 +52,7 @@ UINT GetWaveOutDeviceId() {
 
 				for (int deviceId = -1; waveOutGetDevCaps(deviceId, &caps, sizeof(caps)) == MMSYSERR_NOERROR; ++deviceId)
 				{
-					if (regValue && !_tcscmp(regValue, caps.szPname))
+					if (!_tcscmp(regValue, caps.szPname))
 					{
 						free(regValue);
 						RegCloseKey(hKey);

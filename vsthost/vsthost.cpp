@@ -30,7 +30,7 @@ static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 #define ASFW_ANY    ((DWORD)-1)
 #endif
 
-#define WM_ICONMSG WM_APP + 1
+#define WM_ICONMSG ((WM_APP) + (1))
 #define MAX_PORTS 2
 #define MAX_OUTPUTS 2
 #define MAX_PLUGINS 10
@@ -38,9 +38,9 @@ static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 #define RESET_MENU_OFFSET 10
 #define PORT_MENU_OFFSET 100
 #define OTHER_MENU_OFFSET 20
-#define WAVEWRITE_START_STOP OTHER_MENU_OFFSET + 1
-#define WAVEWRITE_ERROR OTHER_MENU_OFFSET + 2
-#define SHOW_INFO OTHER_MENU_OFFSET + 3
+#define WAVEWRITE_START_STOP ((OTHER_MENU_OFFSET) + (1))
+#define WAVEWRITE_ERROR ((OTHER_MENU_OFFSET) + (2))
+#define SHOW_INFO ((OTHER_MENU_OFFSET) + (3))
 
 #define RESET_MIDIMSG_COUNT 64 //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
 #define BUFFER_SIZE 4800  //matches better for typical 48/96/192 kHz
@@ -597,7 +597,7 @@ void InitSimpleResetEvents()
 
 		msg = (ControllerStatus | i) | (0x40 << 8); //Sustain off		
 		index = i * 4;
-		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
+		memcpy(&resetMidiEvents[index].midiData, &msg, sizeof(msg));
 		resetMidiEvents[index].type = kVstMidiType;
 		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;
@@ -605,7 +605,7 @@ void InitSimpleResetEvents()
 
 		msg = (ControllerStatus | i) | (0x7B << 8); //All Notes off
 		index = i * 4 + 1;
-		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
+		memcpy(&resetMidiEvents[index].midiData, &msg, sizeof(msg));
 		resetMidiEvents[index].type = kVstMidiType;
 		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;
@@ -613,7 +613,7 @@ void InitSimpleResetEvents()
 
 		msg = (ControllerStatus | i) | (0x79 << 8);  //All Controllers off
 		index = i * 4 + 2;
-		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
+		memcpy(&resetMidiEvents[index].midiData, &msg, sizeof(msg));
 		resetMidiEvents[index].type = kVstMidiType;
 		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;
@@ -621,7 +621,7 @@ void InitSimpleResetEvents()
 
 		msg = (ControllerStatus | i) | (0x78 << 8);  //All Sounds off
 		index = i * 4 + 3;
-		memcpy(&resetMidiEvents[index].midiData, &msg, 3);
+		memcpy(&resetMidiEvents[index].midiData, &msg, sizeof(msg));
 		resetMidiEvents[index].type = kVstMidiType;
 		resetMidiEvents[index].byteSize = sizeof(VstMidiEvent);
 		resetMidiEvents[index].flags = VstMidiEventFlags::kVstMidiEventIsRealtime;
@@ -1633,12 +1633,9 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 						GetWindowRect(hwnd, &rect);
 						setEditorPosition(portNum, rect.left, rect.top);
 
-						KillTimer(hwnd, 1);
-						if (effect)
-						{
-							effect->dispatcher(effect, effEditClose, 0, 0, NULL, 0);
-							portState[portNum].editorHandle = NULL;
-						}
+						KillTimer(hwnd, 1);						
+						effect->dispatcher(effect, effEditClose, 0, 0, NULL, 0);
+						portState[portNum].editorHandle = NULL;						
 
 						if (dialogState[portNum].hFont) DeleteObject(dialogState[portNum].hFont);
 						EndDialog(hwnd, IDOK);
@@ -2510,7 +2507,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 			//if (ev->port > 1) ev->port = 1;
 			ev->ev.midiEvent.type = kVstMidiType;
 			ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
-			memcpy(&ev->ev.midiEvent.midiData, &b, 3);
+			memcpy(&ev->ev.midiEvent.midiData, &b, sizeof(b));
 
 			put_code(Response::NoError);
 		}
@@ -2598,7 +2595,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 	resetInputEvents();
 	if (hDll) FreeLibrary(hDll);
 	CoUninitialize();
-	if (dll_dir) free(dll_dir);
+	free(dll_dir);
 
 
 	//if (argv) LocalFree(argv); only needed when CommandLineToArgvW() was called.
