@@ -43,6 +43,13 @@ jobs:
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
 
+      - name: Install Visual Studio
+        uses: microsoft/setup-visual-studio@v1
+        with: 
+        channel: 2022
+        components: |
+          microsoft.visualstudio.component.atl
+
       - name: Build debuggable x64 
         working-directory: ${{ github.workspace }}
         run: msbuild /m /p:Configuration="Debug" /p:Platform="x64" /p:PlatformToolset=v142 ${{ env.SOLUTION_FILE_PATH }}
