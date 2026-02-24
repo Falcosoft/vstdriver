@@ -1677,11 +1677,11 @@ public:
 class CView4 : public CDialogImpl<CView4>
 {
 	CButton btnHelp, btnProxy, chk32ch, chkPrivAsio, chkKeepDriver;
-	CComboBox cmbHighDpi;	
+	CComboBox cmbHighDpi, cmbGlobalPorts;
 
 public:
 
-	CView4() : btnHelp(), btnProxy(), chk32ch(), chkPrivAsio(), chkKeepDriver(), cmbHighDpi() {}
+	CView4() : btnHelp(), btnProxy(), chk32ch(), chkPrivAsio(), chkKeepDriver(), cmbHighDpi(), cmbGlobalPorts(){}
 
 	~CView4() {}
 
@@ -1695,6 +1695,7 @@ public:
 		COMMAND_HANDLER(IDC_PRIVATEASIO, BN_CLICKED, OnBnClickedMulti)
 		COMMAND_HANDLER(IDC_KEEPDRIVER, BN_CLICKED, OnBnClickedMulti)
 		COMMAND_HANDLER(IDC_HIGHDPI, CBN_SELCHANGE, OnCbnSelchangeHighDpi)
+		COMMAND_HANDLER(IDC_GLOBALPORTS, CBN_SELCHANGE, OnCbnSelchangeGlobalPort)
 	END_MSG_MAP()
 
 	LRESULT OnCbnSelchangeHighDpi(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
@@ -1711,6 +1712,11 @@ public:
 
 		return 0;
 	}
+	
+	LRESULT OnCbnSelchangeGlobalPort(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{	
+		return 0;
+	}
 
 	LRESULT OnInitDialogView4(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
 	{
@@ -1719,7 +1725,18 @@ public:
 		chkKeepDriver = GetDlgItem(IDC_KEEPDRIVER);
 		cmbHighDpi = GetDlgItem(IDC_HIGHDPI);
 		btnProxy = GetDlgItem(IDC_PROXY);
+		cmbGlobalPorts = GetDlgItem(IDC_GLOBALPORTS);
 
+		TCHAR portText[] = _T("Ports A/B");		
+
+		for (int i = 0; i < 8; i++) 
+		{
+			portText[_tcslen(portText) - 3] = _T('A') + static_cast<TCHAR>(i * 2);
+			portText[_tcslen(portText) - 1] = _T('A') + static_cast<TCHAR>(i * 2 + 1);
+			cmbGlobalPorts.AddString(portText);
+		}
+		cmbGlobalPorts.SetCurSel(0);
+		
 		cmbHighDpi.AddString(_T("System"));
 		cmbHighDpi.AddString(_T("System enhanced"));
 		cmbHighDpi.AddString(_T("Application"));
@@ -1824,10 +1841,13 @@ public:
 	LRESULT OnButtonProxy(WORD wNotifyCode, WORD wID, HWND hWndCtl, BOOL& bHandled)
 	{
 		TCHAR tmpPath[MAX_PATH] = { 0 };
+		TCHAR portStr[2] = { 0 };
+
+		int index = cmbGlobalPorts.GetCurSel();
 
 		if (_tcslen(getProxyPath(tmpPath, MAX_PATH)))
 		{
-			ShellExecute(NULL, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+			ShellExecute(NULL, NULL, tmpPath, _itot(index, portStr, 10) , NULL, SW_SHOWNORMAL);
 		}
 
 		return 1;

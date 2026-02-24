@@ -46,6 +46,8 @@
 #define IDC_HIGHDPI                     1039
 #define IDC_STATIC_HIGHDPI              1040
 #define IDC_PROXY                       1041
+#define IDC_GLOBALPORTS                 1043
+#define IDC_STATIC_GLOBALPORTS          1044
 #define IDC_STATIC                      -1
 
 // Next default values for new objects

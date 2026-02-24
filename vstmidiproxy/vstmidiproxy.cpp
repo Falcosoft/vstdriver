@@ -31,7 +31,7 @@ static LPVM_MIDI_PORT WIN32DEF(virtualMIDICreatePortEx2)(LPCWSTR portName, LPVM_
 static BOOL WIN32DEF(virtualMIDIGetProcesses)(LPVM_MIDI_PORT midiPort, ULONG64* processIds, PDWORD length) = NULL;
 static void WIN32DEF(virtualMIDIClosePort)(LPVM_MIDI_PORT midiPort) = NULL;
 
-HINSTANCE hInst;
+DWORD globalPortNum = 0;
 HWND Mainhwnd;
 BOOL IsVMidiPresent = FALSE;
 LPVM_MIDI_PORT TeVMPortA = NULL;
@@ -76,18 +76,40 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 	LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM); //forward declaration for main dlgproc.  
 
 	TCHAR szWindowClass[] = _T("VstMidiProxy");
+	TCHAR wText[32] = { 0 };
+	TCHAR portSigns[4] = _T("A/B");
 
 	//AllocConsole();
 	//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;
 
-	proxyMutex = CreateMutex(NULL, true, _T("vstmidiproxy32"));
+
+	portSigns[_tcslen(portSigns) - 3] = _T('A') + static_cast<TCHAR>(globalPortNum * 2);
+	portSigns[_tcslen(portSigns) - 1] = _T('A') + static_cast<TCHAR>(globalPortNum * 2 + 1);
+	
+	_tcscpy(wText, _T("vstmidiproxy32"));
+	if (globalPortNum > 0)_tcscat(wText, portSigns);
+
+	proxyMutex = CreateMutex(NULL, true, wText);
+
+	_tcscpy(wText, _T("VST Midi Proxy "));
+	_tcscat(wText, portSigns);
+
 	if (GetLastError() == ERROR_ALREADY_EXISTS)
 	{
-		HWND winHandle = FindWindow(szWindowClass, NULL);
+		HWND winHandle = FindWindow(szWindowClass, wText);
 		if (winHandle)
 		{
 			ShowWindow(winHandle, SW_SHOWNORMAL);
 			SetForegroundWindow(winHandle);
+		}
+		else if (globalPortNum == 0)// backward compatibility with prevuous versions
+		{
+			winHandle = FindWindow(szWindowClass, _T("VST Midi Proxy")); 
+			if (winHandle)
+			{
+				ShowWindow(winHandle, SW_SHOWNORMAL);
+				SetForegroundWindow(winHandle);
+			}
 		}
 
 		CloseHandle(proxyMutex);
@@ -142,7 +164,7 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 		return FALSE;
 	}
 
-	hInst = hInstance;
+	//hInst = hInstance;
 	WNDCLASSEXW wcex = { 0 };
 
 	wcex.cbSize = sizeof(WNDCLASSEX);
@@ -167,6 +189,8 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 		return FALSE;
 	}
 
+	SetWindowText(Mainhwnd, wText);
+
 	TeVirtualMIDI32 = LoadLibrary(_T("teVirtualMIDI32.dll"));
 	if (TeVirtualMIDI32)
 	{
@@ -180,8 +204,18 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 
 	if (IsVMidiPresent)
 	{
-		TeVMPortA = virtualMIDICreatePortEx2(L"VST MIDI Synth Global (port A)", teVMCallback, NULL, 65535, TEVM_RX | TEVM_RX_ONLY);
-		TeVMPortB = virtualMIDICreatePortEx2(L"VST MIDI Synth Global (port B)", teVMCallback, NULL, 65535, TEVM_RX | TEVM_RX_ONLY);
+		TCHAR portSign[3] = _T("A)");		
+
+		portSign[0] = _T('A') + static_cast<TCHAR>(globalPortNum * 2);
+		_tcscpy(wText, _T("VST MIDI Synth Global (port "));
+		_tcscat(wText, portSign);		
+		TeVMPortA = virtualMIDICreatePortEx2(wText, teVMCallback, NULL, 65535, TEVM_RX | TEVM_RX_ONLY);
+		
+		portSign[0] =  _T('A') + static_cast<TCHAR>(globalPortNum * 2 + 1);
+		_tcscpy(wText, _T("VST MIDI Synth Global (port "));
+		_tcscat(wText, portSign);		
+		TeVMPortB = virtualMIDICreatePortEx2(wText, teVMCallback, NULL, 65535, TEVM_RX | TEVM_RX_ONLY);
+		
 		IsVMidiPresent = IsVMidiPresent && TeVMPortA && TeVMPortB;
 		if (IsVMidiPresent) nCmdShow = SW_HIDE;
 	}
@@ -202,7 +236,22 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 	_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_WNDW);
 	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_WNDW);
-#endif
+#endif	
+	int argc = __argc;
+	
+
+#ifdef UNICODE	
+	LPTSTR* argv = __wargv;
+#else
+	argv = __argv;
+#endif		
+
+	if (argv != NULL && argc == 2)
+	{
+		TCHAR* end_char = NULL;
+		globalPortNum = _tcstoul(argv[1], &end_char, 10);
+		if (globalPortNum > 7) globalPortNum = 0;
+	}	
 
 	if (!Initialize(hInstance, nCmdShow))
 	{
@@ -271,7 +320,10 @@ BOOL getAutoStart()
 	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run"), 0, KEY_READ, &hKey);
 	if (lResult == NO_ERROR)
 	{
-		TCHAR szValueName[] = _T("VstMidiProxy");
+		TCHAR szValueName[14] = _T("VstMidiProxy");
+		TCHAR portStr[2] = { 0 };
+		if (globalPortNum > 0) _tcscat(szValueName, _ultot(globalPortNum + 1, portStr, 10));
+
 		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
 		RegCloseKey(hKey);
 
@@ -289,12 +341,21 @@ void setAutoStart(bool enabled)
 	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\Microsoft\\Windows\\CurrentVersion\\Run"), 0, KEY_READ | KEY_WRITE, &hKey);
 	if (lResult == NO_ERROR)
 	{
-		RegDeleteValue(hKey, _T("VstMidiProxy"));
+		TCHAR szValueName[14] = _T("VstMidiProxy");
+		TCHAR portStr[2] = { 0 };
+		if (globalPortNum > 0) _tcscat(szValueName, _ultot(globalPortNum + 1, portStr, 10));
+
+		RegDeleteValue(hKey, szValueName);
 		if (enabled)
 		{
 			TCHAR pszValue[MAX_PATH] = { 0 };
 			GetModuleFileName(NULL, pszValue, MAX_PATH);
-			RegSetValueEx(hKey, _T("VstMidiProxy"), NULL, REG_SZ, (LPBYTE)pszValue, (DWORD)((_tcslen(pszValue) + 1) * sizeof(TCHAR)));
+			
+			TCHAR portStr[2] = { 0 };
+			_tcscat(pszValue, _T(" "));
+			_tcscat(pszValue, _ultot(globalPortNum , portStr, 10));
+
+			RegSetValueEx(hKey, szValueName, NULL, REG_SZ, (LPBYTE)pszValue, (DWORD)((_tcslen(pszValue) + 1) * sizeof(TCHAR)));
 		}
 
 		RegCloseKey(hKey);
