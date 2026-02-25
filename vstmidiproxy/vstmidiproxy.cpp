@@ -38,6 +38,7 @@ LPVM_MIDI_PORT TeVMPortA = NULL;
 LPVM_MIDI_PORT TeVMPortB = NULL;
 HMIDIOUT OutPortA = NULL;
 HMIDIOUT OutPortB = NULL;
+TCHAR wText[32] = { 0 };
 
 MMRESULT MMResA = -1;
 MMRESULT MMResB = -1;
@@ -75,8 +76,7 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 {
 	LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM); //forward declaration for main dlgproc.  
 
-	TCHAR szWindowClass[] = _T("VstMidiProxy");
-	TCHAR wText[32] = { 0 };
+	TCHAR szWindowClass[] = _T("VstMidiProxy");	
 	TCHAR portSigns[4] = _T("A/B");
 
 	//AllocConsole();
@@ -488,7 +488,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		nIconData.uID = WM_ICONMSG;
 		nIconData.uCallbackMessage = WM_ICONMSG;
 		nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_VSTMIDIPROXY));
-		_tcscpy(nIconData.szTip, _T("VST Midi Proxy"));
+		_tcscpy(nIconData.szTip, wText);
 
 		Shell_NotifyIcon(NIM_ADD, &nIconData);
 

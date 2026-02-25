@@ -1826,13 +1826,29 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
 
 			if (IsWinNT4())
+			{
 				_tcscpy_s(trayTip, _T("VST Midi Synth - "));
+			}
 			else
-				_tcscpy_s(trayTip, _T("VST Midi Synth \r\n"));
+			{
+				if (!isMidiProxy)
+				{
+					_tcscpy_s(trayTip, _T("VST Midi Synth \r\n"));
+				}
+				else 
+				{
+					
+					_tcscpy_s(trayTip, _T("VST Midi Synth(Global A/B) \r\n"));
+					size_t portPos = _tcscspn(trayTip, _T("A"));
+					trayTip[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2);
+					trayTip[portPos + 2] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2 + 1);
+					
+				}
+			}
 
 			_tcsncat_s(trayTip, argv[3], _countof(trayTip) - _tcslen(trayTip));
 
-			_tcsncpy_s(nIconData.szTip, trayTip, _countof(nIconData.szTip));
+			_tcsncpy_s(nIconData.szTip, trayTip, _TRUNCATE);
 			Shell_NotifyIcon(NIM_ADD, &nIconData);
 
 			return 0;
