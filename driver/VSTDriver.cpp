@@ -474,15 +474,28 @@ bool VSTDriver::process_create()
 #else
 	const TCHAR bitnessStr[] = _T(" 32-bit");
 #endif	
-
 	GetModuleFileName(NULL, exe_path, _countof(exe_path));
 	GetFileTitle(exe_path, exe_title, _countof(exe_title));
+	
+	DWORD proxyPortNum = 0;
+	TCHAR proxyPort[] = _T(" 0");
+
+	if(_tcsstr(exe_title, _T("vstmidiproxy")))
+	{
+		TCHAR* pProxyCmdLine;		
+		pProxyCmdLine = GetCommandLine();
+				
+		proxyPort[1] = pProxyCmdLine[_tcslen(pProxyCmdLine) - 1];		
+		TCHAR* end_char = NULL;		
+		proxyPortNum = _tcstoul(&proxyPort[1], &end_char, 10);
+	}	
 
     _tcscat_s(CmdLine, _T(" \""));
 	_tcscat_s(CmdLine, exe_title);
 	_tcscat_s(CmdLine, _T("\""));
 	_tcscat_s(CmdLine, bitnessStr);	
 	_tcscat_s(CmdLine, UseAsio() ? (UseWasapi() ? _T(" S") : _T(" A")) : _T(" W"));
+	if (proxyPortNum != 0 && proxyPortNum < 8) _tcscat_s(CmdLine, proxyPort);
 
 	if ( !CreateProcess( NULL, CmdLine, NULL, NULL, TRUE, 0, NULL, NULL, &siStartInfo, &piProcInfo ) )
 	{

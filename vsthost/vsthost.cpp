@@ -154,6 +154,7 @@ static struct PortState
 } portState[MAX_PORTS];
 
 LPTSTR* argv = NULL;
+static int argc = 0;
 
 static NOTIFYICONDATA nIconData = { 0 };
 static HMENU trayMenu = NULL;
@@ -163,6 +164,9 @@ static volatile bool doOwnReset = false;
 static bool driverResetRequested = false;
 static bool need_idle = false;
 static bool isYamahaPlugin = false;
+static bool isMidiProxy = false;
+static int proxyPortNum = 0;
+static TCHAR proxyPrefix[8] = { 0 };
 
 static volatile bool is4channelMode = false;
 
@@ -1112,7 +1116,7 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 				sameThread = false;
 			}
 
-			TCHAR wText[28] = { 0 };
+			TCHAR wText[36] = { 0 };
 			if (sameThread)
 			{
 				SetWindowLongPtr(hwnd, GWL_STYLE, WS_POPUPWINDOW | WS_DLGFRAME | DS_MODALFRAME | DS_CENTER);
@@ -1121,9 +1125,10 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 			else
 			{
 #pragma warning(disable:4838) //fake warning even after casting
-				TCHAR portSign[] = { _T('A') + static_cast<TCHAR>(portNum) };
+				TCHAR portSign[] = { _T('A') + static_cast<TCHAR>(2 * proxyPortNum + portNum) };
 #pragma warning(default:4838)
-				_tcscpy_s(wText, _T("VST General Editor port "));				
+				if (isMidiProxy) _tcscpy_s(wText, proxyPrefix);
+				_tcsncat_s(wText, _T("VST General Editor port "), _TRUNCATE);
 				_tcsncat_s(wText, portSign, 1);
 			}			
 
@@ -1419,7 +1424,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				sameThread = false;
 			}
 
-			TCHAR wText[20] = { 0 };
+			TCHAR wText[28] = { 0 };
 			if (sameThread)
 			{
 				_tcscpy_s(wText, _T("VST Editor"));
@@ -1427,9 +1432,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			else
 			{
 #pragma warning(disable:4838) //fake warning even after casting
-				TCHAR portSign[] = { _T('A') + static_cast<TCHAR>(portNum) };
+				TCHAR portSign[] = { _T('A') + static_cast<TCHAR>(2 * proxyPortNum + portNum) };
 #pragma warning(default:4838)
-				_tcscpy_s(wText, _T("VST Editor port "));
+				if (isMidiProxy) _tcscpy_s(wText, proxyPrefix);
+				_tcsncat_s(wText, _T("VST Editor port "), _TRUNCATE);
 				_tcsncat_s(wText, portSign, 1);
 			}
 
@@ -1748,14 +1754,44 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	switch (msg)
 	{
 		case WM_CREATE:
-		{
+		{			
+			
 			TCHAR tmpPath[MAX_PATH] = { 0 };
 			TCHAR trayTip[MAX_PATH] = { 0 };
 			HMENU pluginMenu = CreatePopupMenu();
+			
+			_tcsncpy_s(midiClient, argv[3], _TRUNCATE);
+			_tcsncpy_s(clientBitnessStr, argv[4], _TRUNCATE);
+			_tcsncpy_s(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _TRUNCATE);
+		
+			TCHAR portItem1Str[26] = { 0 };
+			TCHAR portItem2Str[26] = { 0 };
+			if (_tcsstr(midiClient, _T("vstmidiproxy"))) isMidiProxy = true;
+			
+			if (isMidiProxy)
+			{
+				_tcsncpy_s(proxyPrefix, _T("Global "), _TRUNCATE);
+				_tcsncpy_s(portItem1Str, proxyPrefix, _TRUNCATE);
+				_tcsncpy_s(portItem2Str, proxyPrefix, _TRUNCATE);
+				_tcsncat_s(portItem1Str, _T("Port A VST Dialog"), _TRUNCATE);
+				_tcsncat_s(portItem2Str, _T("Port B VST Dialog"), _TRUNCATE);
 
-			_tcsncpy_s(midiClient, argv[3], _countof(midiClient));
-			_tcsncpy_s(clientBitnessStr, argv[4], _countof(clientBitnessStr));
-			_tcsncpy_s(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _countof(outputModeStr));
+				if (argc > 6)
+				{
+					TCHAR* end_char = NULL;
+					proxyPortNum = _tcstol(argv[6], &end_char, 10);
+					if (proxyPortNum > 7 || proxyPortNum < 0) proxyPortNum = 0; 
+					size_t portPos = _tcscspn(portItem1Str, _T("A"));
+					portItem1Str[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2);
+					portItem2Str[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2 + 1);
+				}
+			}
+			else 
+			{
+				_tcsncpy_s(portItem1Str, _T("Port A VST Dialog"), _TRUNCATE);
+				_tcsncpy_s(portItem2Str, _T("Port B VST Dialog"), _TRUNCATE);
+
+			}
 
 			for (int i = 0; i < MAX_PLUGINS; i++)
 				if (getPluginMenuItem(i, tmpPath, MAX_PATH)) {
@@ -1766,8 +1802,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 
 			trayMenu = CreatePopupMenu();
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET, _T("Port A VST Dialog"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET + 1, _T("Port B VST Dialog"));
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET, portItem1Str);
+			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET + 1, portItem2Str);
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
 			AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
 			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
@@ -2112,7 +2148,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 
 	_set_invalid_parameter_handler(InvalidParamHandler);
 
-	int argc = __argc;
+	argc = __argc;
 
 #ifdef UNICODE 
 	//argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -2121,7 +2157,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 	argv = __argv;
 #endif		
 
-	if (argv == NULL || argc != 6) return Error::InvalidCommandLineArguments;
+	if (argv == NULL || argc < 6) return Error::InvalidCommandLineArguments;
 
 	TCHAR* end_char = NULL;
 	unsigned in_sum = _tcstoul(argv[2], &end_char, 16);
