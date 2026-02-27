@@ -380,6 +380,7 @@ int refreshClientList(const HWND hWnd)
 		for (DWORD i = 0; i < processIdSize; i++)
 		{
 			TCHAR buffer[MAX_PATH] = _T("Port A: ");
+			buffer[5] = _T('A') + static_cast<TCHAR>(globalPortNum * 2);
 			_tcscat(getProcessName(buffer, (DWORD)processIds[i]), _T("\r\n"));
 			appendText(clientsCtl, buffer);
 			clientCount++;
@@ -392,6 +393,7 @@ int refreshClientList(const HWND hWnd)
 		for (DWORD i = 0; i < processIdSize; i++)
 		{
 			TCHAR buffer[MAX_PATH] = _T("Port B: ");
+			buffer[5] = _T('A') + static_cast<TCHAR>(globalPortNum * 2 + 1);
 			_tcscat(getProcessName(buffer, (DWORD)processIds[i]), _T("\r\n"));
 			appendText(clientsCtl, buffer);
 			clientCount++;
