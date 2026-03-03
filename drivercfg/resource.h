@@ -17,6 +17,7 @@
 #define IDC_SHOWVST                     1009
 #define IDC_VSTLOADED                   1010
 #define IDC_USE4CH                      1011
+#define IDC_SHOWTRAY                    1012
 #define IDC_VSTPRODUCT                  1013
 #define IDC_VSTLOAD                     1014
 #define IDC_VENDOR                      1015

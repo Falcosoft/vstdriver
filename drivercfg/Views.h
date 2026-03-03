@@ -346,7 +346,7 @@ class CView1 : public CDialogImpl<CView1>
 {
 	CComboBox vst_info;
 	CComboBox vst_buffer_size, vst_sample_rate, vst_sample_format;
-	CButton vst_load, vst_configure, vst_showvst, vst_4chmode, vst_unload;
+	CButton vst_load, vst_configure, vst_showvst, vst_showtray, vst_4chmode, vst_unload;
 	CStatic vst_vendor, vst_effect, file_info;
 	CTrackBarCtrl volume_slider;
 	TCHAR vst_path[MAX_PATH];
@@ -357,7 +357,7 @@ class CView1 : public CDialogImpl<CView1>
 public:
 	CView1() :		
 		vst_info(), vst_buffer_size(), vst_sample_rate(), vst_sample_format(),
-		vst_load(), vst_configure(), vst_showvst(), vst_4chmode(), vst_unload(),
+		vst_load(), vst_configure(), vst_showvst(), vst_showtray(), vst_4chmode(), vst_unload(),
 		vst_vendor(), vst_effect(), file_info(),
 		volume_slider(),
 		vst_path(),
@@ -394,7 +394,8 @@ public:
 		COMMAND_ID_HANDLER(IDC_VSTLOAD,OnButtonAdd)
 		COMMAND_ID_HANDLER(IDC_VSTCONFIG,OnButtonConfig)
 		COMMAND_ID_HANDLER(IDC_UNLOAD, OnButtonUnload)
-		COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)		
+		COMMAND_HANDLER(IDC_SHOWVST, BN_CLICKED, OnClickedSHOWVST)	
+		COMMAND_HANDLER(IDC_SHOWTRAY, BN_CLICKED, OnClickedSHOWTRAY)
 		COMMAND_HANDLER(IDC_VSTLOADED, CBN_SELCHANGE, OnCbnSelchangeVSTLoaded)
 		COMMAND_HANDLER(IDC_VSTLOADED, CBN_DROPDOWN, OnCbnDropDownVSTLoaded)
 		COMMAND_HANDLER(IDC_SAMPLERATE, CBN_SELCHANGE, OnCbnSelchangeSamplerate)
@@ -443,6 +444,16 @@ public:
 			if (lResult == ERROR_SUCCESS) {
 				vst_showvst.SetCheck(reg_value);
 			}
+			
+			lResult = reg.QueryDWORDValue(_T("ShowDriverTrayIcon"), reg_value);
+			if (lResult == ERROR_SUCCESS && !isWinNT4) {
+				vst_showtray.SetCheck(reg_value);
+			}
+			else {
+				vst_showtray.SetCheck(1);
+				if (isWinNT4)vst_showtray.EnableWindow(false);
+			}
+
 			lResult = reg.QueryDWORDValue(_T("Use4ChannelMode"),reg_value);
 			if (lResult == ERROR_SUCCESS) {
 				if (!isWinNT4 || usingASIO) {
@@ -637,6 +648,13 @@ public:
 	LRESULT OnClickedSHOWVST(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{  
 		SaveDwordValue(_T("ShowVstDialog"), vst_showvst.GetCheck());
+
+		return 0;
+	}
+
+	LRESULT OnClickedSHOWTRAY(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	{
+		SaveDwordValue(_T("ShowDriverTrayIcon"), vst_showtray.GetCheck());
 
 		return 0;
 	}
@@ -1002,6 +1020,7 @@ public:
 		vst_sample_rate = GetDlgItem(IDC_SAMPLERATE);
 		vst_buffer_size = GetDlgItem(IDC_BUFFERSIZE);
 		vst_showvst = GetDlgItem(IDC_SHOWVST);
+		vst_showtray = GetDlgItem(IDC_SHOWTRAY);
 		vst_4chmode = GetDlgItem(IDC_USE4CH);
 		vst_load = GetDlgItem(IDC_VSTLOAD);
 		vst_info = GetDlgItem(IDC_VSTLOADED);
@@ -1776,7 +1795,8 @@ public:
 		chkKeepDriver.SetCheck(keepDriverLoaded);	
 
 		TCHAR tmpPath[MAX_PATH] = { 0 };
-		btnProxy.EnableWindow((BOOL)!!_tcslen(getProxyPath(tmpPath, MAX_PATH)));		
+		btnProxy.EnableWindow((BOOL)!!_tcslen(getProxyPath(tmpPath, MAX_PATH)));
+		cmbGlobalPorts.EnableWindow((BOOL)!!_tcslen(getProxyPath(tmpPath, MAX_PATH)));
 
 		return TRUE;
 	}

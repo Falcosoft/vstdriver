@@ -237,6 +237,10 @@ LONG __stdcall myExceptFilterProc(LPEXCEPTION_POINTERS param)
 		MessageBox(NULL, buffer, _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
 		lastUsedSysEx = 15;
 		setSelectedSysExIndex(lastUsedSysEx);
+		nIconData.dwState = 0;
+		nIconData.dwStateMask = NIS_HIDDEN;
+		Shell_NotifyIcon(NIM_MODIFY, &nIconData);
+		Sleep(1);
 		Shell_NotifyIcon(NIM_DELETE, &nIconData);
 		DestroyMenu(trayMenu);
 		TerminateProcess(GetCurrentProcess(), 1);
@@ -813,6 +817,23 @@ int getSelectedSysExIndex()
 	{
 		DWORD size = sizeof(DWORD);
 		RegQueryValueEx(hKey, _T("SelectedSysEx"), NULL, NULL, (LPBYTE)&retRes, &size);
+
+		RegCloseKey(hKey);
+	}
+
+	return retRes;
+}
+
+int getShowDriverTrayIcon()
+{
+	HKEY hKey;
+	int retRes = 1;
+
+	long result = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ | KEY_WRITE, &hKey);
+	if (result == NO_ERROR)
+	{
+		DWORD size = sizeof(DWORD);
+		RegQueryValueEx(hKey, _T("ShowDriverTrayIcon"), NULL, NULL, (LPBYTE)&retRes, &size);
 
 		RegCloseKey(hKey);
 	}
@@ -1818,12 +1839,18 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, SHOW_INFO, _T("Info..."));
 
 
-			nIconData.cbSize = sizeof(NOTIFYICONDATA);
-			nIconData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+			nIconData.cbSize = sizeof(NOTIFYICONDATA);						
+			nIconData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_STATE;
 			nIconData.hWnd = hwnd;
 			nIconData.uID = WM_ICONMSG;
 			nIconData.uCallbackMessage = WM_ICONMSG;
 			nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
+
+			if (getShowDriverTrayIcon() == 0)
+			{
+				nIconData.dwState = NIS_HIDDEN;
+				nIconData.dwStateMask = NIS_HIDDEN;
+			}
 
 			if (IsWinNT4())
 			{
@@ -1858,7 +1885,10 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		case WM_DESTROY:
 		{
 			setSelectedSysExIndex(lastUsedSysEx);
-
+			nIconData.dwState = 0;
+			nIconData.dwStateMask = NIS_HIDDEN;
+			Shell_NotifyIcon(NIM_MODIFY, &nIconData);
+			Sleep(1);		
 			Shell_NotifyIcon(NIM_DELETE, &nIconData);
 			DestroyMenu(trayMenu);
 			trayMenu = NULL;
