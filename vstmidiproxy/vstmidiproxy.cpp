@@ -34,6 +34,7 @@ static void WIN32DEF(virtualMIDIClosePort)(LPVM_MIDI_PORT midiPort) = NULL;
 DWORD globalPortNum = 0;
 HWND Mainhwnd;
 BOOL IsVMidiPresent = FALSE;
+BOOL IsMidi2Srv = FALSE;
 LPVM_MIDI_PORT TeVMPortA = NULL;
 LPVM_MIDI_PORT TeVMPortB = NULL;
 HMIDIOUT OutPortA = NULL;
@@ -75,6 +76,9 @@ static void CALLBACK teVMCallback(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes,
 BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 {
 	LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM); //forward declaration for main dlgproc.  
+	BOOL getMidi2Srv();
+
+	IsMidi2Srv = getMidi2Srv();
 
 	TCHAR szWindowClass[] = _T("VstMidiProxy");	
 	TCHAR portSigns[4] = _T("A/B");
@@ -251,8 +255,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		TCHAR* end_char = NULL;
 		globalPortNum = _tcstoul(argv[1], &end_char, 10);
 		if (globalPortNum > 7) globalPortNum = 0;
-	}	
-
+	}
+	
 	if (!Initialize(hInstance, nCmdShow))
 	{
 		return FALSE;
@@ -267,8 +271,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
-	}
-
+	}	
+	
 	return (int)msg.wParam;
 }
 
@@ -308,6 +312,30 @@ LPTSTR getProcessName(LPTSTR buffer, DWORD processId)
 	}
 
 	return buffer;
+}
+
+BOOL getMidi2Srv()
+{
+	long lResult;	
+	HKEY hKey;
+	
+	lResult = RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("Software\\Microsoft\\Windows NT\\CurrentVersion\\Drivers32"), 0, KEY_READ, &hKey);
+	if (lResult == ERROR_SUCCESS)
+	{
+		ULONG size = MAX_PATH;
+		DWORD dwType = REG_SZ;
+		TCHAR szValueName[6] = _T("midi1");
+		TCHAR driverStr[MAX_PATH] = { 0 };
+		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)driverStr, &size);
+		RegCloseKey(hKey);
+
+		if (lResult == ERROR_SUCCESS)
+		{
+			if (!_tcscmp(driverStr, _T("wdmaud2.drv"))) return TRUE;
+		}		
+		
+	}
+	return FALSE;
 }
 
 BOOL getAutoStart()
@@ -381,7 +409,11 @@ int refreshClientList(const HWND hWnd)
 		{
 			TCHAR buffer[MAX_PATH] = _T("Port A: ");
 			buffer[5] = _T('A') + static_cast<TCHAR>(globalPortNum * 2);
-			_tcscat(getProcessName(buffer, (DWORD)processIds[i]), _T("\r\n"));
+			if (!IsMidi2Srv)
+				_tcscat(getProcessName(buffer, (DWORD)processIds[i]), _T("\r\n"));
+			else
+				_tcscat(buffer, _T("Midi 2.0 service \r\n"));
+
 			appendText(clientsCtl, buffer);
 			clientCount++;
 		}
@@ -394,7 +426,11 @@ int refreshClientList(const HWND hWnd)
 		{
 			TCHAR buffer[MAX_PATH] = _T("Port B: ");
 			buffer[5] = _T('A') + static_cast<TCHAR>(globalPortNum * 2 + 1);
-			_tcscat(getProcessName(buffer, (DWORD)processIds[i]), _T("\r\n"));
+			if (!IsMidi2Srv)
+				_tcscat(getProcessName(buffer, (DWORD)processIds[i]), _T("\r\n"));
+			else
+				_tcscat(buffer, _T("Midi 2.0 service \r\n"));
+
 			appendText(clientsCtl, buffer);
 			clientCount++;
 		}
@@ -634,7 +670,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 		if (wParam && lParam)
 		{
-			if (refreshClientList(hWnd))
+			if (refreshClientList(hWnd) && !IsMidi2Srv)
 			{
 				if (MessageBox(hWnd, _T("Some clients are still connected.\r\nAre you sure you want to exit?"), _T("VST Midi Proxy"), MB_YESNO | MB_ICONQUESTION) == IDNO) return FALSE;
 			}
