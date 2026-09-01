@@ -1177,10 +1177,10 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 				width = eRect.right - eRect.left;
 				height = eRect.bottom - eRect.top;
 
-				dialogState[portNum].checkBoxWnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Always on Top"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), height - (int)(23 * dpiMul), (int)(90 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+				dialogState[portNum].checkBoxWnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Always on Top"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), height - (int)(23 * dpiMul), (int)(90 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, GetModuleHandle(NULL), NULL);
 
-				dialogState[portNum].buttonWnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Save Settings"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(84 * dpiMul), height - (int)(24 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
-				dialogState[portNum].button2Wnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Switch UI"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, (int)(100 * dpiMul), height - (int)(24 * dpiMul), (int)(68 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+				dialogState[portNum].buttonWnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Save Settings"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(84 * dpiMul), height - (int)(24 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, GetModuleHandle(NULL), NULL);
+				dialogState[portNum].button2Wnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Switch UI"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, (int)(100 * dpiMul), height - (int)(24 * dpiMul), (int)(68 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, GetModuleHandle(NULL), NULL);
 
 				GetObject(GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf);
 				dialogState[portNum].hFont = CreateFontIndirect(&lf);
@@ -1496,10 +1496,10 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				{
 					LOGFONT lf = { 0 };
 
-					dialogState[portNum].checkBoxWnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Always on Top"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(90 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+					dialogState[portNum].checkBoxWnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Always on Top"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, (int)(5 * dpiMul), eRect->bottom - eRect->top + (int)(3 * dpiMul), (int)(90 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, GetModuleHandle(NULL), NULL);
 
-					dialogState[portNum].buttonWnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Save Settings"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
-					dialogState[portNum].button2Wnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Switch UI"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, (int)(100 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(68 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+					dialogState[portNum].buttonWnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Save Settings"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, width - (int)(90 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(80 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, GetModuleHandle(NULL), NULL);
+					dialogState[portNum].button2Wnd = CreateWindowEx(NULL, _T("BUTTON"), _T("Switch UI"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, (int)(100 * dpiMul), eRect->bottom - eRect->top + (int)(2 * dpiMul), (int)(68 * dpiMul), (int)(20 * dpiMul), hwnd, NULL, GetModuleHandle(NULL), NULL);
 
 					GetObject(GetStockObject(DEFAULT_GUI_FONT), sizeof(LOGFONT), &lf);
 					dialogState[portNum].hFont = CreateFontIndirect(&lf);

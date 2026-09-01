@@ -197,6 +197,7 @@ VSTDriver::VSTDriver() :
 	sVendor(),
 	sProduct(),
 	IsSCVA(),
+	IsNukedSC55(),
 	uPluginPlatform(),
 	uVendorVersion(),	
 	uUniqueId() 
@@ -551,6 +552,8 @@ bool VSTDriver::process_create()
 
 	//Always keep SC-VA loaded even when ports are closed because of huge loading times. For other plugins this setting is optional.
 	IsSCVA = (uUniqueId == (uint32_t)'scva');
+	//Nuked SC-55 Clap + CLAP 2 VST2 wrapper are slow to initialize properly. So additional waits are needed...
+	IsNukedSC55 = (uUniqueId == 0xED9877EA);
 
 	return true;
 }
@@ -790,6 +793,9 @@ void VSTDriver::displayEditorModal(unsigned int uDeviceID, HWND owner)
 
 	if (uDeviceID == 0) Sleep(50);
 	else if (uDeviceID == 1) Sleep(75);
+
+	if (IsNukedSC55 && (code == Command::DisplayEditorModalThreaded)) Sleep(200);
+	
 	process_write_code( code );
 
 	if (code == Command::DisplayEditorModalThreaded) {		

@@ -55,6 +55,7 @@ private:
 	bool         bInitialized;
 	bool         bInitializedOtherModel;
 	bool         IsSCVA;
+	bool         IsNukedSC55;
 	HANDLE       hProcess;
 	HANDLE       hThread;
 	HANDLE       hReadEvent;
@@ -106,6 +107,7 @@ public:
 	long getVendorVersion();
 	long getUniqueID();
 	bool getIsSCVA() { return IsSCVA; };
+	bool getIsNukedSC55() { return IsNukedSC55; };
 
 	// configuration
 	void getChunk(std::vector<uint8_t> & out);
