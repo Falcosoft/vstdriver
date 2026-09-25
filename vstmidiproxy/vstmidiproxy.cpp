@@ -56,11 +56,11 @@ static void CALLBACK teVMCallback(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes,
 
 	if (!outPort) return;
 
-	if (length < 4 && length > 0)
+	if (length < 4 && length > 1)
 	{
 		midiOutShortMsg(outPort, (DWORD)(*(LPDWORD)midiDataBytes));
 	}
-	else if (length > 0)
+	else if (length > 1)
 	{
 		MIDIHDR SysExHeader = { 0 };
 		SysExHeader.dwBufferLength = length;
