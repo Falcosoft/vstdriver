@@ -21,6 +21,7 @@
 #include "AudioDrivers.h"
 #include <string>
 #include <math.h>
+#include <new>
 
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
@@ -35,6 +36,7 @@ namespace VSTMIDIDRV {
 	MidiSynth& midiSynth = MidiSynth::getInstance();
 
 	static Win32Lock synthLock;
+	static Win32Lock lifecycleLock(true); // Init/Close/reset serialization; recursive on NT4 too.
 
 #pragma region Utility_Functions
 	DWORD GetDwordData(LPCTSTR valueName, DWORD defaultValue)
@@ -231,6 +233,9 @@ namespace VSTMIDIDRV {
 
 #pragma region MidiSynth
 	MidiSynth::MidiSynth() :
+		settingsLoaded(false),
+		configuredSampleRate(),
+		configuredKeepLoaded(),
 		midiStream(new MidiStream),
 		statusBuff(),
 		midiVol(),
@@ -248,12 +253,16 @@ namespace VSTMIDIDRV {
 		keepLoaded(),
 		isSinglePort32Ch(),
 		framesRendered(),
+		stopping(1),
+		resetPending(),
 		enableSinglePort32ChMode(),
 		chunkSize(),
 		chunkSizeMS(),
 		channels(),
 		bufferSize(),
 		bufferSizeMS(),
+		bufferCapacity(),
+		bufferfCapacity(),
 		bufferf(),
 		buffer() 
 	{
@@ -298,38 +307,54 @@ namespace VSTMIDIDRV {
 	}
 
 	void MidiSynth::LoadSettings() {
+		// Keep these settings for this MidiSynth instance, including plugin switches.
+		// A replacement bridge still loads the currently selected plugin separately.
+		if (settingsLoaded) return;
+
 		channels = GetChannelCount();
 		outputGain = pow(10.0f, GetGain() * 0.05f);
-		sampleRate = GetSampleRate();
+		configuredSampleRate = GetSampleRate();
+		if (!configuredSampleRate) configuredSampleRate = 48000;
 		bufferSizeMS = GetBufferSize();
-		bufferSize = MillisToFrames(bufferSizeMS);
 		chunkSizeMS = bufferSizeMS < 120 ? bufferSizeMS / 4 : bufferSizeMS < 200 ? bufferSizeMS / 5 : bufferSizeMS / 8;
-		chunkSize = MillisToFrames(chunkSizeMS);
 		midiLatencyMS = 0;
-		midiLatency = MillisToFrames(midiLatencyMS);
 
 		usingFloat = GetUsingFloat();
 		useAsio = UseAsio();
 		enableSinglePort32ChMode = GetEnableSinglePort32ChMode();
-		keepLoaded = GetKeepDriverLoaded();
-
-
-		if (chunkSize) {
-			// Number of chunks should be ceil(bufferSize / chunkSize)
-			DWORD chunks = (bufferSize + chunkSize - 1) / chunkSize;
-			// Refine bufferSize as chunkSize * number of chunks, no less then the specified value
-			bufferSize = chunks * chunkSize;
-		}
+		configuredKeepLoaded = GetKeepDriverLoaded();
+		settingsLoaded = true;
 	}
 
 	int MidiSynth::Init(unsigned uDeviceID) {
 
+		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
+
 		LoadSettings();
 
-		if (sampleRate == 0) sampleRate = 48000;
-		if (!useAsio && !bufferSize) {
+		// ASIO may negotiate a different rate; SC-VA may force keepLoaded.
+		// Start every initialization from the saved user settings.
+		sampleRate = configuredSampleRate;
+		keepLoaded = configuredKeepLoaded;
+
+		UINT64 bufferFrames = (UINT64)sampleRate * bufferSizeMS / 1000;
+		UINT64 chunkFrames = (UINT64)sampleRate * chunkSizeMS / 1000;
+		if (bufferFrames > MAXDWORD || chunkFrames > MAXDWORD)
+			return MMSYSERR_INVALPARAM;
+
+		chunkSize = (unsigned int)chunkFrames;
+		if (chunkSize) {
+			// Round up without overflowing the frame-count arithmetic.
+			bufferFrames = ((bufferFrames + chunkSize - 1) / chunkSize) * chunkSize;
+			if (bufferFrames > MAXDWORD) return MMSYSERR_INVALPARAM;
+		}
+		bufferSize = (unsigned int)bufferFrames;
+		midiLatency = MillisToFrames(midiLatencyMS);
+
+		if (!useAsio && (!bufferSize || !chunkSize)) {
 			bufferSize = MillisToFrames(80);
 			chunkSize = bufferSize / 4;
+			if (!bufferSize || !chunkSize) return MMSYSERR_INVALPARAM;
 		}
 
 		midiVol[0] = 1.0f;
@@ -361,13 +386,33 @@ namespace VSTMIDIDRV {
 		{
 			if (!waveOut) waveOut = new WaveOutWin32(this);
 
+			// Keep allocation and byte-count arithmetic valid on 32-bit builds too.
+			UINT64 requiredSamples = (UINT64)channels * bufferSize;
+			UINT64 requiredBytes = requiredSamples * (usingFloat ? sizeof(float) : sizeof(short));
+			if (!requiredSamples || requiredBytes > MAXDWORD)
+				return MMSYSERR_INVALPARAM;
+			unsigned int capacityNeeded = (unsigned int)requiredSamples;
+
+			// Init runs before output starts. Replace only after allocation succeeds.
 			if (usingFloat)
 			{
-				if (!bufferf) bufferf = new float[channels * bufferSize];
+				if (!bufferf || bufferfCapacity < capacityNeeded) {
+					float* replacement = new (std::nothrow) float[capacityNeeded];
+					if (!replacement) return MMSYSERR_NOMEM;
+					delete[] bufferf;
+					bufferf = replacement;
+					bufferfCapacity = capacityNeeded;
+				}
 			}
 			else
 			{
-				if (!buffer) buffer = new short[channels * bufferSize];
+				if (!buffer || bufferCapacity < capacityNeeded) {
+					short* replacement = new (std::nothrow) short[capacityNeeded];
+					if (!replacement) return MMSYSERR_NOMEM;
+					delete[] buffer;
+					buffer = replacement;
+					bufferCapacity = capacityNeeded;
+				}
 			}
 						
 			wResult = waveOut->Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, sampleRate, usingFloat, channels);
@@ -400,6 +445,8 @@ namespace VSTMIDIDRV {
 
 		framesRendered = 0;
 
+		InterlockedExchange(&stopping, 0);
+
 		// Start playing stream
 		if (useAsio) {
 			wResult = bassAsioOut->Start();
@@ -415,6 +462,7 @@ namespace VSTMIDIDRV {
 			wResult = waveOut->Start();
 		}
 
+		if (wResult) InterlockedExchange(&stopping, 1);
 		return wResult;
 	}	
 
@@ -422,9 +470,13 @@ namespace VSTMIDIDRV {
 	// The number of frames rendered is added to the global counter framesRendered
 	void MidiSynth::Render(short* bufpos, DWORD totalFrames) {
 		while (totalFrames > 0) {
-			DWORD timeStamp;
+			if (stopping) {
+				memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
+				return;
+			}
+			DWORD timeStamp = (DWORD)-1;
 			// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-			while ((timeStamp = midiStream->PeekMessageTime()) == framesRendered) {
+			while (!stopping && (timeStamp = midiStream->PeekMessageTime()) == framesRendered) {
 				{
 					DWORD msg;
 					DWORD sysex_len;
@@ -448,6 +500,10 @@ namespace VSTMIDIDRV {
 
 			}
 
+			if (stopping) {
+				memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
+				return;
+			}
 			// Find out how many frames to render. The value of timeStamp == -1 indicates the MIDI buffer is empty
 			DWORD framesToRender = timeStamp - framesRendered;
 			if (framesToRender > totalFrames) {
@@ -467,7 +523,7 @@ namespace VSTMIDIDRV {
 			bufpos += framesToRender * channels;
 			totalFrames -= framesToRender;
 			if (result == ResetRequest)
-				timeSetEvent(1, 1, ResetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
+				RequestReset();
 
 		}
 
@@ -479,9 +535,13 @@ namespace VSTMIDIDRV {
 
 	void MidiSynth::RenderFloat(float* bufpos, DWORD totalFrames) {
 		while (totalFrames > 0) {
-			DWORD timeStamp;
+			if (stopping) {
+				memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
+				return;
+			}
+			DWORD timeStamp = (DWORD)-1;
 			// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-			while ((timeStamp = midiStream->PeekMessageTime()) == framesRendered) {
+			while (!stopping && (timeStamp = midiStream->PeekMessageTime()) == framesRendered) {
 				{
 					DWORD msg;
 					DWORD sysex_len;
@@ -504,6 +564,10 @@ namespace VSTMIDIDRV {
 				}
 			}
 
+			if (stopping) {
+				memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
+				return;
+			}
 			// Find out how many frames to render. The value of timeStamp == -1 indicates the MIDI buffer is empty
 			DWORD framesToRender = timeStamp - framesRendered;
 			if (framesToRender > totalFrames) {
@@ -522,7 +586,7 @@ namespace VSTMIDIDRV {
 			bufpos += framesToRender * channels;
 			totalFrames -= framesToRender;
 			if (result == ResetRequest)
-				timeSetEvent(1, 1, ResetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
+				RequestReset();
 		}
 
 		// Wrap framesRendered counter
@@ -532,15 +596,23 @@ namespace VSTMIDIDRV {
 	}
 
 	unsigned int MidiSynth::MillisToFrames(unsigned int millis) {
-		return UINT(sampleRate * millis / 1000.f);
+		return (unsigned int)((UINT64)sampleRate * millis / 1000);
 	}	
 
 	void MidiSynth::InitDialog(unsigned uDeviceID) {
+		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
+		ScopeLock<Win32Lock> scopeLock(&synthLock);
+		InitDialogInternal(uDeviceID);
+	}
 
-		if (IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID, (HWND)-1);
+	void MidiSynth::InitDialogInternal(unsigned uDeviceID) {
+		// Keep the complete editor request/reply exchange exclusive with rendering.
+		// F5 preprocessing already holds synthLock, which may be nonrecursive.
+		if (vstDriver && IsShowVSTDialog()) vstDriver->displayEditorModal(uDeviceID, (HWND)-1);
 	}
 
 	int MidiSynth::Reset(unsigned uDeviceID) {
+		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
 
 		//UINT wResult = useAsio ? bassAsioOut->Pause() : waveOut->Pause();
 		//if (wResult) return wResult;
@@ -565,7 +637,7 @@ namespace VSTMIDIDRV {
 			if (!isSinglePort32Ch) {
 
 				vstDriver->setSinglePort32ChMode();
-				InitDialog((unsigned int)!uDeviceID);
+				InitDialogInternal((unsigned int)!uDeviceID);
 				isSinglePort32Ch = true;
 			}
 			//F5 xx command uses 1 as first port, but we use 0 and we have only A/B ports. This way 1 -> 0, 2 -> 1, 3 -> 0, 4 -> 1 and so on. 
@@ -611,7 +683,7 @@ namespace VSTMIDIDRV {
 			if (!isSinglePort32Ch) {
 
 				vstDriver->setSinglePort32ChMode();
-				InitDialog((unsigned int)!uDeviceID);
+				InitDialogInternal((unsigned int)!uDeviceID);
 				isSinglePort32Ch = true;
 			}
 			//F5 xx command uses 1 as first port, but we use 0 and we have only A/B ports. This way 1 -> 0, 2 -> 1, 3 -> 0, 4 -> 1 and so on.
@@ -630,6 +702,7 @@ namespace VSTMIDIDRV {
 	void MidiSynth::PushMIDI(unsigned uDeviceID, DWORD msg) {
 
 		ScopeLock<Win32Lock> scopeLock(&synthLock);
+		if (stopping) return;
 
 		if (!PreprocessMIDI(uDeviceID, msg))
 			return;
@@ -659,6 +732,7 @@ namespace VSTMIDIDRV {
 
 		ScopeLock<Win32Lock> scopeLock(&synthLock);
 
+		if (stopping) return;
 		if (!PreprocessSysEx(uDeviceID, bufpos, len))
 			return;
 
@@ -671,6 +745,8 @@ namespace VSTMIDIDRV {
 	}
 
 	void MidiSynth::Close(bool forceUnload) {
+		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
+		InterlockedExchange(&stopping, 1);
 		if (useAsio && bassAsioOut) {
 			bassAsioOut->Pause();
 			bassAsioOut->Close();
@@ -680,6 +756,13 @@ namespace VSTMIDIDRV {
 			waveOut->Close();
 		}
 
+		// The final client's reset is deferred until the audio worker has exited.
+		if (vstDriver && keepLoaded && !forceUnload && !vstDriver->isIOCancelled()) {
+			Reset(0);
+			Reset(1);
+		}
+		// An interrupted exchange cannot be reused: discard that bridge after joining.
+		if (vstDriver && vstDriver->isIOCancelled()) forceUnload = true;
 		if (!keepLoaded || forceUnload)
 		{
 			ScopeLock<Win32Lock> scopeLock(&synthLock);
@@ -690,9 +773,25 @@ namespace VSTMIDIDRV {
 		}
 	}
 
-	void CALLBACK MidiSynth::ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2) {
-		midiSynth.Close(true);
-		midiSynth.Init(DWORD(-1));
+	void MidiSynth::CancelPendingRender() {
+		// Do not take synthLock: the rendering thread may hold it while waiting.
+		if (vstDriver) vstDriver->cancelPendingIO();
 	}
-#pragma endregion MidiSynth class (singleton) 
+
+	void MidiSynth::RequestReset() {
+		if (stopping || InterlockedCompareExchange(&resetPending, 1, 0)) return;
+		if (!timeSetEvent(1, 1, ResetSynthTimerProc, NULL, TIME_ONESHOT | TIME_CALLBACK_FUNCTION))
+			InterlockedExchange(&resetPending, 0);
+	}
+
+	void CALLBACK MidiSynth::ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2) {
+		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
+		// A queued plugin-switch timer must not resurrect an explicitly closed synth.
+		if (!midiSynth.stopping) {
+			midiSynth.Close(true);
+			midiSynth.Init(DWORD(-1));
+		}
+		InterlockedExchange(&midiSynth.resetPending, 0);
+	}
+#pragma endregion MidiSynth class (singleton)
 }

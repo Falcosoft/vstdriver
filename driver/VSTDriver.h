@@ -55,10 +55,12 @@ private:
 	bool         bInitialized;
 	bool         bInitializedOtherModel;
 	bool         IsSCVA;
-	bool         IsNukedSC55;
 	HANDLE       hProcess;
 	HANDLE       hThread;
 	HANDLE       hReadEvent;
+		HANDLE       hWriteEvent;
+		HANDLE       hCancelEvent;
+		DWORD        ioTimeout;
 	HANDLE       hChildStd_IN_Rd;
 	HANDLE       hChildStd_IN_Wr;
 	HANDLE       hChildStd_OUT_Rd;
@@ -82,10 +84,11 @@ private:
 	void process_terminate();
 	bool process_running();
 	uint32_t process_read_code();
-	void process_read_bytes( void * buffer, uint32_t size );
+		bool process_read_bytes( void * buffer, uint32_t size );
 	uint32_t process_read_bytes_pass( void * buffer, uint32_t size );
+		uint32_t process_transfer_bytes_pass(void * buffer, uint32_t size, bool writing);
 	void process_write_code( uint32_t code );
-	void process_write_bytes( const void * buffer, uint32_t size );
+		bool process_write_bytes( const void * buffer, uint32_t size );
 	uint32_t RenderFloatInternal(float* samples, int len, float volume, WORD channels);
 
 	void load_settings(TCHAR * szPath);
@@ -94,6 +97,8 @@ public:
 	VSTDriver();
 	~VSTDriver();
 	void CloseVSTDriver();
+		void cancelPendingIO(); // Signal only; the I/O thread cancels its own NT4-compatible I/O.
+		bool isIOCancelled();
 	BOOL OpenVSTDriver(TCHAR * szPath = NULL, int sampleRate = 48000);
 	void ResetDriver(unsigned int uDeviceID);
 	void ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1);
@@ -107,7 +112,6 @@ public:
 	long getVendorVersion();
 	long getUniqueID();
 	bool getIsSCVA() { return IsSCVA; };
-	bool getIsNukedSC55() { return IsNukedSC55; };
 
 	// configuration
 	void getChunk(std::vector<uint8_t> & out);

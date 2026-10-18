@@ -224,13 +224,15 @@ EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, 
 		res = CloseDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
 		if (synthOpened) 
 		{
-			if(!drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
+			// Reset the final port only after Close has stopped the audio worker.
 						
 			int clientCounts = 0;
 			for (int driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
 			clientCounts += drivers[driverNum].clientCount;
 			if (clientCounts) break;
 			}
+
+			if (clientCounts && !drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
 
 			if(!clientCounts) {
 				TCHAR exe_path[MAX_PATH] = {0};

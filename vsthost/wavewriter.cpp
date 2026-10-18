@@ -10,6 +10,8 @@
 
 
 WaveWriter::WaveWriter() :
+    controlLock(true),
+    bufferLock(true),
     buffer(),
     workEvent(),
     hThread(),
@@ -28,7 +30,11 @@ WaveWriter::WaveWriter() :
 }
 
 uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND messageWindow, DWORD message)
-{  
+{
+    ScopeLock<Win32Lock> controlScope(&controlLock);
+    // A timed-out Close retains ownership until the old writer really exits.
+    if (fileHandle || buffer || hThread || workEvent) Close();
+    if (fileHandle || buffer || hThread || workEvent) return WaveResponse::CannotCreate;
     OPENFILENAME ofn = { 0 };
     ofn.lStructSize = IsWinNT4() ? OPENFILENAME_SIZE_VERSION_400 : sizeof(ofn);
     ofn.hwndOwner = ownerWindow;
@@ -47,23 +53,25 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
             return WaveResponse::CannotCreate;
         }
         
+        channelCount = chCount;
+        bytesWritten = 0;
+        bufferPosition = bufferStepCount = bufferStepCountDone = 0;
         buffer = (char*)malloc(Buffer_Size);
-        if (!buffer) return WaveResponse::CannotCreate;
-        bufferPosition = 0;  
+        if (!buffer) {
+            ReleaseResources();
+            return WaveResponse::CannotCreate;
+        }
 
         stopProcessing = false;
         workEvent = CreateEvent(NULL, false, false, NULL);
 
-        hThread = (HANDLE)_beginthreadex(NULL, 8192, &WritingThread, this, 0, NULL);
-        
-        if(!hThread || !workEvent) return WaveResponse::CannotCreate;
+        if (!workEvent) {
+            ReleaseResources();
+            return WaveResponse::CannotCreate;
+        }
 
-        channelCount = chCount;
         msgWindow = messageWindow;
         msg = message;        
-        bytesWritten = 0; 
-        bufferStepCount = 0;
-        bufferStepCountDone = 0;          
        
         if (channelCount == 4)
         {
@@ -86,7 +94,10 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
             waveHeaderEx.wValidBitsPerSample = waveHeaderEx.wBitsPerSample;
             waveHeaderEx.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;           
                      
-            WriteDataToDisk(&waveHeaderEx, sizeof(waveHeaderEx));
+            if (WriteDataToDisk(&waveHeaderEx, sizeof(waveHeaderEx)) != WaveResponse::Success) {
+                ReleaseResources();
+                return WaveResponse::CannotCreate;
+            }
         }
         else 
         {
@@ -105,18 +116,39 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
             waveHeaderEx.nAvgBytesPerSec = waveHeaderEx.nBlockAlign * waveHeaderEx.nSamplesPerSec;
             waveHeaderEx.factSize = 4;                   
 
-            WriteDataToDisk(&waveHeaderEx, sizeof(waveHeaderEx));
+            if (WriteDataToDisk(&waveHeaderEx, sizeof(waveHeaderEx)) != WaveResponse::Success) {
+                ReleaseResources();
+                return WaveResponse::CannotCreate;
+            }
         }
 
-        isRecordingStarted = true;
+        // Do not publish recording or start the consumer before initialization completes.
+        hThread = (HANDLE)_beginthreadex(NULL, 8192, &WritingThread, this, 0, NULL);
+        if (!hThread) {
+            ReleaseResources();
+            return WaveResponse::CannotCreate;
+        }
+        {
+            ScopeLock<Win32Lock> bufferScope(&bufferLock);
+            isRecordingStarted = true;
+        }
 
         return WaveResponse::Success;
     }
     return WaveResponse::NotSelected;
 }
 
+bool WaveWriter::getIsRecordingStarted()
+{
+    ScopeLock<Win32Lock> bufferScope(&bufferLock);
+    return isRecordingStarted;
+}
+
 void WaveWriter::WriteData(const void* data, DWORD size)
-{       
+{
+    ScopeLock<Win32Lock> bufferScope(&bufferLock);
+    // Recheck after acquiring the lock: the caller's earlier flag read can be stale.
+    if (!isRecordingStarted || stopProcessing || !buffer) return;       
     
     if (size < Buffer_Size / Buffer_Part_Count)
     {
@@ -152,7 +184,7 @@ void WaveWriter::WriteData(const void* data, DWORD size)
 uint32_t WaveWriter::WriteDataToDisk(const void* data, DWORD size)
 {   
     if (!fileHandle || bytesWritten >= 0xFFF80000) return WaveResponse::WriteError; //Check for 4G - 512K to prevent creating unplayable 4GB+ wave files.
-    DWORD sizeDone;
+    DWORD sizeDone = 0;
     WriteFile(fileHandle, data, size, &sizeDone, NULL);
     bytesWritten += sizeDone;
     if (sizeDone != size) return WaveResponse::WriteError;
@@ -162,13 +194,22 @@ uint32_t WaveWriter::WriteDataToDisk(const void* data, DWORD size)
 
 void WaveWriter::Close()
 {
-    if(!fileHandle) return;
-
-    isRecordingStarted = false;    
-    stopProcessing = true;
-    SetEvent(workEvent);
+    ScopeLock<Win32Lock> controlScope(&controlLock);
+    {
+        ScopeLock<Win32Lock> bufferScope(&bufferLock);
+        if (!fileHandle && !buffer && !hThread && !workEvent) return;
+        isRecordingStarted = false;
+        stopProcessing = true;
+        if (workEvent) SetEvent(workEvent);
+    }
+    // Never hold bufferLock while waiting for disk I/O. Audio can immediately
+    // enter WriteData, see recording stopped, and return without waiting on disk.
     if (hThread != NULL) {
-        WaitForSingleObject(hThread, 5000);
+        if (WaitForSingleObject(hThread, 5000) != WAIT_OBJECT_0) {
+            // Keep ALL resources alive; a later Close/Init can retry cleanup.
+            OutputDebugString(_T("VST MIDI Driver: recording writer still stopping\n"));
+            return;
+        }
         CloseHandle(hThread);
         hThread = NULL;
     }
@@ -221,19 +262,17 @@ void WaveWriter::Close()
         WriteFile(fileHandle, &ckSize[2], sizeof(DWORD), &sizeDone[2], &ovr[2]);
     }
 
-    CloseHandle(fileHandle);  
-    fileHandle = NULL;
+    ReleaseResources();
+}
 
-    if (buffer)
-    {
-        free(buffer);
-        buffer = NULL;
-    }
-    if (workEvent)
-    {
-        CloseHandle(workEvent);
-        workEvent = NULL;
-    }
+void WaveWriter::ReleaseResources()
+{
+    if (fileHandle) CloseHandle(fileHandle);
+    fileHandle = NULL;
+    if (buffer) free(buffer);
+    buffer = NULL;
+    if (workEvent) CloseHandle(workEvent);
+    workEvent = NULL;
 }
 
 unsigned __stdcall WaveWriter::WritingThread(void* pthis)
@@ -254,7 +293,7 @@ unsigned __stdcall WaveWriter::WritingThread(void* pthis)
         DWORD i = 0;
         while (_this->bufferStepCountDone < _this->bufferStepCount && i < 2) //in case of a glitch do not catch up at once, only gradually
         {
-            DWORD sizeDone;            
+            DWORD sizeDone = 0;            
             WriteFile(_this->fileHandle, _this->buffer + ((_this->bufferStepCountDone & (Buffer_Part_Count - 1)) * (Buffer_Size / Buffer_Part_Count)), Buffer_Size / Buffer_Part_Count, &sizeDone, NULL);
             _this->bytesWritten += sizeDone;
 

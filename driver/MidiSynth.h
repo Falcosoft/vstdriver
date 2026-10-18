@@ -67,6 +67,9 @@ namespace VSTMIDIDRV {
 
 	class MidiSynth {
 	private:
+		bool settingsLoaded;
+		unsigned int configuredSampleRate;
+		bool configuredKeepLoaded;
 		unsigned int sampleRate;
 		unsigned int midiLatency, midiLatencyMS;
 		unsigned int bufferSize, bufferSizeMS;
@@ -87,7 +90,11 @@ namespace VSTMIDIDRV {
 
 		short* buffer;
 		float* bufferf;
+		unsigned int bufferCapacity; // Number of short samples, including all channels.
+		unsigned int bufferfCapacity; // Number of float samples, including all channels.
 		DWORD framesRendered;
+		volatile LONG stopping;
+		volatile LONG resetPending;
 
 		VSTDriver* vstDriver;
 		WaveOutWin32* waveOut;
@@ -100,7 +107,9 @@ namespace VSTMIDIDRV {
 		unsigned int MillisToFrames(unsigned int millis);
 		bool PreprocessMIDI(unsigned int& uDeviceID, DWORD& msg);
 		bool PreprocessSysEx(unsigned int& uDeviceID, const unsigned char* bufpos, const DWORD len);
+		void InitDialogInternal(unsigned uDeviceID); // Caller must hold synthLock.
 		void LoadSettings();
+		void RequestReset();
 		static void CALLBACK ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);		
 
 	public:
@@ -115,6 +124,7 @@ namespace VSTMIDIDRV {
 		int Init(unsigned uDeviceID);
 		void InitDialog(unsigned uDeviceID);
 		void Close(bool forceUnload);
+		void CancelPendingRender();
 		int Reset(unsigned uDeviceID);
 		void Render(short* bufpos, DWORD totalFrames);
 		void RenderFloat(float* bufpos, DWORD totalFrames);

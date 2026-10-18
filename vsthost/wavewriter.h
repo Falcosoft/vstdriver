@@ -104,9 +104,11 @@ public:
     uint32_t Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND messageWindow, DWORD message);
     void WriteData(const void* data, DWORD size);
     void Close();    
-    inline bool getIsRecordingStarted() { return isRecordingStarted; }   
+    bool getIsRecordingStarted();
 
 private:
+    Win32Lock controlLock;
+    Win32Lock bufferLock;
     const static DWORD Buffer_Size = 1024 * 1024; 
     const static DWORD Buffer_Part_Count = 8; //8-part buffering, 128K parts
 
@@ -126,6 +128,7 @@ private:
     TCHAR fileName[MAX_PATH];     
 
     uint32_t WriteDataToDisk(const void* data, DWORD size);  
+    void ReleaseResources(); // Only after the writer exited, or before it was started.
     WaveWriter(const WaveWriter& that);
     WaveWriter& operator=(const WaveWriter& that);
 

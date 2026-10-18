@@ -18,6 +18,7 @@
 #include "VSTDriver.h"
 #include <commdlg.h>
 #include <assert.h>
+#include <new>
 
 #pragma warning(disable:6255) 
 #pragma warning(disable:26812)
@@ -188,6 +189,9 @@ VSTDriver::VSTDriver() :
 	hProcess(),
 	hThread(),
 	hReadEvent(),
+	hWriteEvent(),
+	hCancelEvent(),
+	ioTimeout(INFINITE),
 	hChildStd_IN_Rd(),
 	hChildStd_IN_Wr(),
 	hChildStd_OUT_Rd(),
@@ -197,16 +201,17 @@ VSTDriver::VSTDriver() :
 	sVendor(),
 	sProduct(),
 	IsSCVA(),
-	IsNukedSC55(),
 	uPluginPlatform(),
 	uVendorVersion(),	
 	uUniqueId() 
 {
 	editorOwner = (HWND)-1;
+	hCancelEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 }
 
 VSTDriver::~VSTDriver() {
 	CloseVSTDriver();
+	if (hCancelEvent) CloseHandle(hCancelEvent);
 	delete [] sName;
 	delete [] sVendor;
 	delete [] sProduct;
@@ -412,6 +417,12 @@ bool VSTDriver::process_create()
 	}
 
 	hReadEvent = CreateEvent( NULL, TRUE, FALSE, NULL );
+	hWriteEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (!hReadEvent || !hWriteEvent || !hCancelEvent) {
+		process_terminate();
+		return false;
+	}
+	ResetEvent(hCancelEvent);
 
 	tstring pipe_name_in, pipe_name_out;
 	if ( !create_pipe_name( pipe_name_in ) || !create_pipe_name( pipe_name_out ) )
@@ -527,62 +538,97 @@ bool VSTDriver::process_create()
 		return false;
 	}
 
-	uint32_t name_string_length = process_read_code();
-	uint32_t vendor_string_length = process_read_code();
-	uint32_t product_string_length = process_read_code();
-	uVendorVersion = process_read_code();
-	uUniqueId = process_read_code();
-	uNumOutputs = process_read_code();
+	// Read failures must not become lengths or channel counts.
+	uint32_t metadata[6];
+	if (!process_read_bytes(metadata, sizeof(metadata)) ||
+		metadata[0] > 255 || metadata[1] > 255 || metadata[2] > 255 ||
+		metadata[5] != 2) { // The bridge always sends stereo, or two stereo ports.
+		process_terminate();
+		return false;
+	}
 
-	delete [] sName;
-	delete [] sVendor;
-	delete [] sProduct;
+	char* name = new (std::nothrow) char[metadata[0] + 1];
+	char* vendor = new (std::nothrow) char[metadata[1] + 1];
+	char* product = new (std::nothrow) char[metadata[2] + 1];
+	if (!name || !vendor || !product ||
+		!process_read_bytes(name, metadata[0]) ||
+		!process_read_bytes(vendor, metadata[1]) ||
+		!process_read_bytes(product, metadata[2])) {
+		delete[] name;
+		delete[] vendor;
+		delete[] product;
+		process_terminate();
+		return false;
+	}
+	name[metadata[0]] = vendor[metadata[1]] = product[metadata[2]] = 0;
 
-	sName = new char[ name_string_length + 1 ];
-	sVendor = new char[ vendor_string_length + 1 ];
-	sProduct = new char[ product_string_length + 1 ];
-
-	process_read_bytes( sName, name_string_length );
-	process_read_bytes( sVendor, vendor_string_length );
-	process_read_bytes( sProduct, product_string_length );
-
-	sName[ name_string_length ] = 0;
-	sVendor[ vendor_string_length ] = 0;
-	sProduct[ product_string_length ] = 0;
+	delete[] sName;
+	delete[] sVendor;
+	delete[] sProduct;
+	sName = name;
+	sVendor = vendor;
+	sProduct = product;
+	uVendorVersion = metadata[3];
+	uUniqueId = metadata[4];
+	uNumOutputs = metadata[5];
 
 	//Always keep SC-VA loaded even when ports are closed because of huge loading times. For other plugins this setting is optional.
 	IsSCVA = (uUniqueId == (uint32_t)'scva');
-	//Nuked SC-55 Clap + CLAP 2 VST2 wrapper are slow to initialize properly. So additional waits are needed...
-	IsNukedSC55 = (uUniqueId == 0xED9877EA);
 
 	return true;
 }
 
 void VSTDriver::process_terminate()
 {
-	if ( hProcess )
-	{
-		process_write_code( Command::Exit );
-		WaitForSingleObject( hProcess, 5000 );
-		TerminateProcess( hProcess, 0 );
-		CloseHandle( hThread );
-		CloseHandle( hProcess );
+	if (hProcess) {
+		// A failed pipe write must never recursively enter process_terminate.
+		// Attempt a bounded graceful exit only when the protocol is still usable.
+		if (process_running() && !isIOCancelled() && hWriteEvent) {
+			DWORD command = Command::Exit, written = 0;
+			OVERLAPPED ol = {0};
+			ol.hEvent = hWriteEvent;
+			ResetEvent(hWriteEvent);
+			BOOL done = WriteFile(hChildStd_IN_Wr, &command, sizeof(command), &written, &ol);
+			if (!done && GetLastError() == ERROR_IO_PENDING) {
+				if (WaitForSingleObject(hWriteEvent, 500) == WAIT_OBJECT_0)
+					done = GetOverlappedResult(hChildStd_IN_Wr, &ol, &written, FALSE);
+				else {
+					CancelIo(hChildStd_IN_Wr);
+					GetOverlappedResult(hChildStd_IN_Wr, &ol, &written, TRUE);
+				}
+			}
+			if (done && written == sizeof(command)) WaitForSingleObject(hProcess, 5000);
+		}
+		if (process_running()) {
+			TerminateProcess(hProcess, 0);
+			WaitForSingleObject(hProcess, 2000);
+		}
+		CloseHandle(hThread);
+		CloseHandle(hProcess);
 	}
-	if ( hChildStd_IN_Rd ) CloseHandle( hChildStd_IN_Rd );
-	if ( hChildStd_IN_Wr ) CloseHandle( hChildStd_IN_Wr );
-	if ( hChildStd_OUT_Rd ) CloseHandle( hChildStd_OUT_Rd );
-	if ( hChildStd_OUT_Wr ) CloseHandle( hChildStd_OUT_Wr );
-	if ( hReadEvent ) CloseHandle( hReadEvent );
-	if ( bInitialized && !bInitializedOtherModel ) CoUninitialize();
+	if (hChildStd_IN_Rd) CloseHandle(hChildStd_IN_Rd);
+	if (hChildStd_IN_Wr) CloseHandle(hChildStd_IN_Wr);
+	if (hChildStd_OUT_Rd) CloseHandle(hChildStd_OUT_Rd);
+	if (hChildStd_OUT_Wr) CloseHandle(hChildStd_OUT_Wr);
+	if (hReadEvent) CloseHandle(hReadEvent);
+	if (hWriteEvent) CloseHandle(hWriteEvent);
+	if (bInitialized && !bInitializedOtherModel) CoUninitialize();
 	bInitialized = false;
 	bInitializedOtherModel = false;
-	hProcess = NULL;
-	hThread = NULL;
-	hReadEvent = NULL;
-	hChildStd_IN_Rd = NULL;
-	hChildStd_IN_Wr = NULL;
-	hChildStd_OUT_Rd = NULL;
-	hChildStd_OUT_Wr = NULL;
+	hProcess = hThread = hReadEvent = hWriteEvent = NULL;
+	hChildStd_IN_Rd = hChildStd_IN_Wr = NULL;
+	hChildStd_OUT_Rd = hChildStd_OUT_Wr = NULL;
+	// hCancelEvent belongs to this VSTDriver object, not the child process.
+}
+
+void VSTDriver::cancelPendingIO()
+{
+	if (hCancelEvent) SetEvent(hCancelEvent);
+}
+
+bool VSTDriver::isIOCancelled()
+{
+	return hCancelEvent && WaitForSingleObject(hCancelEvent, 0) == WAIT_OBJECT_0;
 }
 
 bool VSTDriver::process_running()
@@ -600,55 +646,61 @@ static void ProcessPendingMessages(HWND editorOwner)
 	}
 }
 
-uint32_t VSTDriver::process_read_bytes_pass( void * out, uint32_t size )
+uint32_t VSTDriver::process_transfer_bytes_pass(void* out, uint32_t size, bool writing)
 {
-	OVERLAPPED ol = {};
-	ol.hEvent = hReadEvent;
-	ResetEvent( hReadEvent );
-	DWORD bytesDone;
-	SetLastError( NO_ERROR );
-	if ( ReadFile( hChildStd_OUT_Rd, out, size, &bytesDone, &ol ) ) return bytesDone;
-	if ( GetLastError() != ERROR_IO_PENDING ) return 0;
+	if (isIOCancelled() || !process_running()) return 0;
+	HANDLE pipe = writing ? hChildStd_IN_Wr : hChildStd_OUT_Rd;
+	OVERLAPPED ol = {0};
+	ol.hEvent = writing ? hWriteEvent : hReadEvent;
+	ResetEvent(ol.hEvent);
+	DWORD bytesDone = 0;
+	BOOL done = writing ? WriteFile(pipe, out, size, &bytesDone, &ol) :
+		ReadFile(pipe, out, size, &bytesDone, &ol);
+	if (done) return bytesDone;
+	if (GetLastError() != ERROR_IO_PENDING) return 0;
 
-	const HANDLE handles[1] = {hReadEvent};
-	SetLastError( NO_ERROR );
-	DWORD state;
-	for (;;)
-	{
-		state = MsgWaitForMultipleObjects( _countof( handles ), handles, FALSE, INFINITE, QS_ALLEVENTS );
-		if ( state == WAIT_OBJECT_0 + _countof( handles ) ) ProcessPendingMessages(editorOwner);
-		else break;
+	const HANDLE handles[3] = {ol.hEvent, hCancelEvent, hProcess};
+	DWORD started = GetTickCount();
+	for (;;) {
+		DWORD waitTime = ioTimeout;
+		if (ioTimeout != INFINITE) {
+			DWORD elapsed = GetTickCount() - started;
+			waitTime = elapsed < ioTimeout ? ioTimeout - elapsed : 0;
+		}
+		DWORD state = MsgWaitForMultipleObjects(3, handles, FALSE, waitTime, QS_ALLEVENTS);
+		if (state == WAIT_OBJECT_0 + 3) {
+			ProcessPendingMessages(editorOwner);
+			continue;
+		}
+		if (state == WAIT_OBJECT_0 && GetOverlappedResult(pipe, &ol, &bytesDone, FALSE))
+			return bytesDone;
+		// CancelIo cancels only I/O issued by THIS thread (available on NT4).
+		// Reap completion before the stack OVERLAPPED or caller's buffer expires.
+		CancelIo(pipe);
+		GetOverlappedResult(pipe, &ol, &bytesDone, TRUE);
+		return 0;
 	}
-
-	if ( state == WAIT_OBJECT_0 && GetOverlappedResult( hChildStd_OUT_Rd, &ol, &bytesDone, TRUE ) ) return bytesDone;
-
-#if 0 && _WIN32_WINNT >= 0x600
-	CancelIoEx( hChildStd_OUT_Rd, &ol );
-#else
-	CancelIo( hChildStd_OUT_Rd );
-#endif
-
-	return 0;
 }
 
-void VSTDriver::process_read_bytes( void * out, uint32_t size )
+uint32_t VSTDriver::process_read_bytes_pass(void* out, uint32_t size)
 {
-	if ( process_running() && size )
-	{
-		uint8_t * ptr = (uint8_t *) out;
-		uint32_t done = 0;
-		while ( done < size )
-		{
-			uint32_t delta = process_read_bytes_pass( ptr + done, size - done );
-			if ( delta == 0 )
-			{
-				memset( out, 0xFF, size );
-				break;
-			}
-			done += delta;
+	return process_transfer_bytes_pass(out, size, false);
+}
+
+bool VSTDriver::process_read_bytes(void* out, uint32_t size)
+{
+	if (!size) return true;
+	uint32_t done = 0;
+	while (done < size) {
+		uint32_t delta = process_read_bytes_pass((uint8_t*)out + done, size - done);
+		if (!delta) {
+			memset(out, 0xFF, size); // Preserve existing error-code callers.
+			cancelPendingIO();
+			return false;
 		}
+		done += delta;
 	}
-	else memset( out, 0xFF, size );
+	return true;
 }
 
 uint32_t VSTDriver::process_read_code()
@@ -658,14 +710,18 @@ uint32_t VSTDriver::process_read_code()
 	return code;
 }
 
-void VSTDriver::process_write_bytes( const void * in, uint32_t size )
+bool VSTDriver::process_write_bytes(const void* in, uint32_t size)
 {
-	if ( process_running() )
-	{
-		if ( size == 0 ) return;
-		DWORD bytesWritten;
-		if ( !WriteFile( hChildStd_IN_Wr, in, size, &bytesWritten, NULL ) || bytesWritten < size ) process_terminate();
+	uint32_t done = 0;
+	while (done < size) {
+		uint32_t delta = process_transfer_bytes_pass((uint8_t*)in + done, size - done, true);
+		if (!delta) {
+			cancelPendingIO();
+			return false;
+		}
+		done += delta;
 	}
+	return true;
 }
 
 void VSTDriver::process_write_code( uint32_t code )
@@ -791,11 +847,6 @@ void VSTDriver::displayEditorModal(unsigned int uDeviceID, HWND owner)
 	
 	editorOwner = owner;
 
-	if (uDeviceID == 0) Sleep(50);
-	else if (uDeviceID == 1) Sleep(75);
-
-	if (IsNukedSC55 && (code == Command::DisplayEditorModalThreaded)) Sleep(200);
-	
 	process_write_code( code );
 
 	if (code == Command::DisplayEditorModalThreaded) {		
@@ -851,11 +902,14 @@ BOOL VSTDriver::OpenVSTDriver(TCHAR * szPath, int sampleRate) {
 }
 
 void VSTDriver::ResetDriver(unsigned int uDeviceID) {
+	DWORD previousTimeout = ioTimeout;
+	ioTimeout = 2000; // Closing a retained port must not wait forever for plugin reset.
 
 	process_write_code( Command::Reset );
 	process_write_code( uDeviceID );
 	uint32_t code = process_read_code();
 	if ( code != NoError ) process_terminate();
+	ioTimeout = previousTimeout;
 }
 
 void VSTDriver::ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1) {
@@ -889,7 +943,11 @@ uint32_t VSTDriver::RenderFloatInternal(float * samples, int len, float volume, 
 		return code;
 	}
 	
-	process_read_bytes( samples, sizeof(*samples) * len * uNumOutputs * channels / 2);
+	if (!process_read_bytes(samples, sizeof(*samples) * len * uNumOutputs * channels / 2)) {
+		memset(samples, 0, sizeof(*samples) * len * uNumOutputs * channels / 2);
+		process_terminate();
+		return (uint32_t)-1;
+	}
 	
 	if (volume != 1.0f)
 	{

@@ -124,7 +124,13 @@ namespace VSTMIDIDRV {
 		stopProcessing = true;
 		SetEvent(hEvent);
 		if (hThread != NULL) {
-			WaitForSingleObject(hThread, 2000);
+			if (WaitForSingleObject(hThread, 2000) == WAIT_TIMEOUT) {
+				parentSynth->CancelPendingRender();
+			}
+			// Pipe I/O is cancellable and the worker never displays modal dialogs.
+			// Keep headers and buffers alive until it has actually exited.
+			if (WaitForSingleObject(hThread, INFINITE) != WAIT_OBJECT_0)
+				return MMSYSERR_ERROR;
 			CloseHandle(hThread);
 			hThread = NULL;
 		}
@@ -151,6 +157,7 @@ namespace VSTMIDIDRV {
 		}
 		delete[] WaveHdr;
 		WaveHdr = NULL;
+		chunks = 0;
 
 		wResult = waveOutClose(hWaveOut);
 		if (wResult != MMSYSERR_NOERROR) {
@@ -161,6 +168,7 @@ namespace VSTMIDIDRV {
 
 			return 8;
 		}
+		hWaveOut = NULL;
 		if (hEvent != NULL) {
 			CloseHandle(hEvent);
 			hEvent = NULL;
@@ -228,19 +236,19 @@ namespace VSTMIDIDRV {
 
 		if (waveOutGetPosition(hWaveOut, &mmTime, sizeof(MMTIME)) != MMSYSERR_NOERROR) {
 			if (!errorShown[FailedToGetPosition]) {
-				MessageBox(NULL, _T("Failed to get current playback position"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
+				OutputDebugString(_T("VST MIDI Driver: failed to get playback position\n"));
 				errorShown[FailedToGetPosition] = true;
 			}
 
-			return 10;
+			return playPositionSnapshot;
 		}
 		if (mmTime.wType != TIME_SAMPLES) {
 			if (!errorShown[FailedToGetSamples]) {
-				MessageBox(NULL, _T("Failed to get # of samples played"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
+				OutputDebugString(_T("VST MIDI Driver: sample position unavailable\n"));
 				errorShown[FailedToGetSamples] = true;
 			}
 
-			return 10;
+			return playPositionSnapshot;
 		}
 		mmTime.u.sample &= WRAP_MASK;
 
@@ -306,16 +314,18 @@ namespace VSTMIDIDRV {
 		while (!_this->stopProcessing)
 		{
 			bool allBuffersRendered = true;
-			for (UINT i = 0; i < _this->chunks; i++) {
+			for (UINT i = 0; i < _this->chunks && !_this->stopProcessing; i++) {
 				if (_this->WaveHdr[i].dwFlags & WHDR_DONE) {
 					allBuffersRendered = false;
 					if (_this->usingFloat)
 						_this->parentSynth->RenderFloat((float*)_this->WaveHdr[i].lpData, _this->WaveHdr[i].dwBufferLength / (sizeof(float) * _this->channels));
 					else
 						_this->parentSynth->Render((short*)_this->WaveHdr[i].lpData, _this->WaveHdr[i].dwBufferLength / (sizeof(short) * _this->channels));
+					if (_this->stopProcessing) break;
 					if (waveOutWrite(_this->hWaveOut, &_this->WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+						_this->stopProcessing = true;
 						if (!_this->errorShown[FailedToWrite]) {
-							MessageBox(NULL, _T("Failed to write block to device"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
+							OutputDebugString(_T("VST MIDI Driver: WaveOut write failed\n"));
 							_this->errorShown[FailedToWrite] = true;
 						}
 

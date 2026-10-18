@@ -44,7 +44,7 @@ static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 
 #define RESET_MIDIMSG_COUNT 64 //4 messages for 16 channels. These can be useful if a synth does not support any SysEx reset messages. 
 #define BUFFER_SIZE 4800  //matches better for typical 48/96/192 kHz
-#define MAX_INPUTEVENT_COUNT 1024  //it's impossible to get more events in 1 cycle since midiStream also uses this size.
+#define MAX_INPUTEVENT_COUNT 1024  // Bounded pending list; producers can refill the driver queue while it drains.
 #define PORT_ALL 0xFFFF
 
 namespace Command {
@@ -358,6 +358,17 @@ void get_bytes(void* in, uint32_t size)
 	}
 }
 
+void discard_bytes(uint32_t size)
+{
+	char scratch[1024];
+	while (size) {
+		DWORD wanted = size > sizeof(scratch) ? sizeof(scratch) : size;
+		DWORD done = 0;
+		if (!ReadFile(pipe_in, scratch, wanted, &done, NULL) || !done) return;
+		size -= done;
+	}
+}
+
 uint32_t get_code()
 {
 	uint32_t code;
@@ -639,9 +650,8 @@ void InitSimpleResetEvents()
 
 void InsertSysExEvent(const char* sysExBytes, int size, DWORD portNum)
 {
-	InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position];
-	inputEventList.position++;
-	inputEventList.position &= (MAX_INPUTEVENT_COUNT - 1);
+	if (portNum >= MAX_PORTS || inputEventList.position >= MAX_INPUTEVENT_COUNT) return;
+	InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position++];
 
 	memset(ev, 0, sizeof(InputEventList::InputEvent));
 
@@ -655,6 +665,10 @@ void InsertSysExEvent(const char* sysExBytes, int size, DWORD portNum)
 
 	if (ev->ev.sysexEvent.sysexDump)
 		memcpy(ev->ev.sysexEvent.sysexDump, sysExBytes, size);
+	else {
+		inputEventList.position--;
+		inputEventList.portMessageCount[portNum]--;
+	}
 }
 
 void InsertOwnReset(DWORD portNum)
@@ -2349,7 +2363,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 	product_string_length = (uint32_t)strlen(product_string);
 	vendor_version = (uint32_t)portState[0].pEffect->dispatcher(portState[0].pEffect, effGetVendorVersion, 0, 0, NULL, 0);
 	unique_id = portState[0].pEffect->uniqueID;
-	isYamahaPlugin = (unique_id == (uint32_t)'xg50') || (unique_id == (uint32_t)'YMF7') || (unique_id == (uint32_t)'S-TY');
+	isYamahaPlugin = (unique_id == (uint32_t)'xg50') || (unique_id == (uint32_t)'YMF7') || (unique_id == (uint32_t)'S-TY') ||
+		(unique_id == (uint32_t)'mu80') || (unique_id == (uint32_t)'mu90') || (unique_id == (uint32_t)'mu10') || (unique_id == (uint32_t)'mu12');
 
 	if (!vendor_string_length)
 	{
@@ -2573,53 +2588,47 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 
 		case Command::SendMidiEvent: // Send MIDI Event
 		{
-			InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position];
-			inputEventList.position++;
-			inputEventList.position &= (MAX_INPUTEVENT_COUNT - 1);
-
-			memset(ev, 0, sizeof(InputEventList::InputEvent));
-
 			uint32_t b = get_code();
-
-			uint32_t port = ((b & 0x7F000000) >> 24) & 1;
+			uint32_t port = (b >> 24) & 1;
 			portState[port].isPortActive = true;
-			inputEventList.portMessageCount[port]++;
-
-			ev->port = port;
-			//if (ev->port > 1) ev->port = 1;
-			ev->ev.midiEvent.type = kVstMidiType;
-			ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
-			memcpy(&ev->ev.midiEvent.midiData, &b, sizeof(b));
-
+			if (inputEventList.position < MAX_INPUTEVENT_COUNT) {
+				InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position++];
+				memset(ev, 0, sizeof(*ev));
+				ev->port = port;
+				ev->ev.midiEvent.type = kVstMidiType;
+				ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
+				memcpy(&ev->ev.midiEvent.midiData, &b, sizeof(b));
+				inputEventList.portMessageCount[port]++;
+			}
+			else OutputDebugString(_T("VST MIDI Driver: pending MIDI event list full\n"));
 			put_code(Response::NoError);
 		}
 		break;
 
 		case Command::SendMidiSysExEvent: // Send System Exclusive Event
 		{
-			InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position];
-			inputEventList.position++;
-			inputEventList.position &= (MAX_INPUTEVENT_COUNT - 1);
-
-			memset(ev, 0, sizeof(InputEventList::InputEvent));
-
 			uint32_t size = get_code();
-
 			uint32_t port = (size >> 24) & 1;
-			portState[port].isPortActive = true;
-			inputEventList.portMessageCount[port]++;
-
 			size &= 0xFFFFFF;
-
-			ev->port = port;
-			//if (ev->port > 1) ev->port = 1;
-			ev->ev.sysexEvent.type = kVstSysExType;
-			ev->ev.sysexEvent.byteSize = sizeof(ev->ev.sysexEvent);
-			ev->ev.sysexEvent.dumpBytes = size;
-			ev->ev.sysexEvent.sysexDump = (char*)malloc(size);
-
-			get_bytes(ev->ev.sysexEvent.sysexDump, size);
-
+			portState[port].isPortActive = true;
+			char* dump = NULL;
+			if (size && inputEventList.position < MAX_INPUTEVENT_COUNT)
+				dump = (char*)malloc(size);
+			if (dump) {
+				get_bytes(dump, size);
+				InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position++];
+				memset(ev, 0, sizeof(*ev));
+				ev->port = port;
+				ev->ev.sysexEvent.type = kVstSysExType;
+				ev->ev.sysexEvent.byteSize = sizeof(ev->ev.sysexEvent);
+				ev->ev.sysexEvent.dumpBytes = size;
+				ev->ev.sysexEvent.sysexDump = dump;
+				inputEventList.portMessageCount[port]++;
+			}
+			else {
+				discard_bytes(size);
+				OutputDebugString(_T("VST MIDI Driver: pending SysEx rejected (full list, empty message, or no memory)\n"));
+			}
 			put_code(Response::NoError);
 		}
 		break;
