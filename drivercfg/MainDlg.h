@@ -23,27 +23,27 @@ static void InvalidParamHandler(const wchar_t* expression, const wchar_t* functi
 bool IsWin8OrNewer()
 {
 	OSVERSIONINFOEX osvi = { 0 };
-	BOOL bOsVersionInfoEx;	
+	BOOL bOsVersionInfoEx;
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
 	if (bOsVersionInfoEx == FALSE) return false;
-	return (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && 
-		(osvi.dwMajorVersion > 6 || (osvi.dwMajorVersion == 6 && osvi.dwMinorVersion > 1)));		
+	return (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId &&
+		(osvi.dwMajorVersion > 6 || (osvi.dwMajorVersion == 6 && osvi.dwMinorVersion > 1)));
 }
 
 //Setting Midi mapper value this simple way does not work on Win XP either but on XP you can do it properly with built-in control panel anyway...
-bool IsWinVistaOrWin7()  
+bool IsWinVistaOrWin7()
 {
 	OSVERSIONINFOEX osvi = { 0 };
-	BOOL bOsVersionInfoEx;	
+	BOOL bOsVersionInfoEx;
 	osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
 	bOsVersionInfoEx = GetVersionEx((OSVERSIONINFO*)&osvi);
 	if (bOsVersionInfoEx == FALSE) return false;
-	return (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId && 
-		((osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 0) || (osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 1)));		
+	return (VER_PLATFORM_WIN32_NT == osvi.dwPlatformId &&
+		((osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 0) || (osvi.dwMajorVersion == 6 && osvi.dwMinorVersion == 1)));
 }
 
-bool IsCoolSoftMidiMapperInstalled() 
+bool IsCoolSoftMidiMapperInstalled()
 {
 	MIDIOUTCAPS Caps = { 0 };
 	MMRESULT result = midiOutGetDevCaps(0, &Caps, sizeof(Caps));
@@ -90,14 +90,14 @@ public:
 		COMMAND_ID_HANDLER(IDCANCEL, OnCancel)
 		NOTIFY_HANDLER(IDC_TAB, TCN_SELCHANGE, OnTcnSelchangeTab)
 		COMMAND_HANDLER(IDC_ALWAYSONTOP, BN_CLICKED, OnBnClickedAlwaysOnTop)
-		REFLECT_NOTIFICATIONS();		
+		REFLECT_NOTIFICATIONS();
 	END_MSG_MAP()
 
-		// Handler prototypes (uncomment arguments if needed):
-		//	LRESULT MessageHandler(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
-		//	LRESULT CommandHandler(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
-		//	LRESULT NotifyHandler(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOOL& /*bHandled*/)
-	
+	// Handler prototypes (uncomment arguments if needed):
+	//	LRESULT MessageHandler(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
+	//	LRESULT CommandHandler(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
+	//	LRESULT NotifyHandler(int /*idCtrl*/, LPNMHDR /*pnmh*/, BOOL& /*bHandled*/)
+
 
 	LRESULT OnHelp(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/, BOOL& /*bHandled*/)
 	{
@@ -115,25 +115,25 @@ public:
 		SetWindowText(windowName);
 		dialogMutex = CreateMutex(NULL, true, _T("vstmididrvcfg64"));
 #else	
-		
+
 		dialogMutex = CreateMutex(NULL, true, _T("vstmididrvcfg32"));
 #endif	
-				
-		if(GetLastError() == ERROR_ALREADY_EXISTS) 
+
+		if (GetLastError() == ERROR_ALREADY_EXISTS)
 		{
-			
-			SetWindowText(_T("Closing"));			
-			HWND winHandle = ::FindWindow(NULL, windowName);			
-			if (winHandle) 
+
+			SetWindowText(_T("Closing"));
+			HWND winHandle = ::FindWindow(NULL, windowName);
+			if (winHandle)
 			{
 				m_hWnd = winHandle; //hacky but works...
 				CenterWindow();
-				::SetForegroundWindow(winHandle);				
-			}		
-			
+				::SetForegroundWindow(winHandle);
+			}
+
 			ExitProcess(0);
-		}	
-		
+		}
+
 		// center the dialog on the screen
 		alwaysOnTop = GetDlgItem(IDC_ALWAYSONTOP);
 		alwaysOnTop.SetCheck(1);
@@ -143,7 +143,7 @@ public:
 		SetIcon(hIcon, TRUE);
 		HICON hIconSmall = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
 		SetIcon(hIconSmall, FALSE);
-		
+
 		m_ctrlTab.SubclassWindow(GetDlgItem(IDC_TAB));
 		m_view1.Create(m_hWnd);
 
@@ -151,10 +151,10 @@ public:
 		if (showWindowsMidiTab)
 		{
 			m_view2.Create(m_hWnd);
-		}		
+		}
 
 		m_view3.Create(m_hWnd);
-		
+
 		m_view4.Create(m_hWnd);
 
 		TCITEM tci = { 0 };
@@ -162,8 +162,8 @@ public:
 
 		tci.pszText = _T("VST settings");
 		m_ctrlTab.InsertItem(0, &tci, m_view1);
-		
-		tci.pszText = _T("Audio devices");		
+
+		tci.pszText = _T("Audio devices");
 		m_ctrlTab.InsertItem(1, &tci, m_view3);
 
 		tci.pszText = _T("Advanced");
@@ -191,19 +191,19 @@ public:
 	}
 
 	LRESULT OnTcnSelchangeTab(int idCtrl, LPNMHDR pNMHDR, BOOL& bHandled)
-	{		
+	{
 		BOOL dummy;
-		if(m_ctrlTab.GetCurSel() == 0 && m_view3.GetDriverChanged())
+		if (m_ctrlTab.GetCurSel() == 0 && m_view3.GetDriverChanged())
 		{
-			
+
 			m_view1.ResetDriverSettings();
 			m_view1.OnCbnSelchangeBuffersize(0, 0, 0, dummy);
-			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);			
+			m_view1.OnCbnSelchangeSamplerate(0, 0, 0, dummy);
 			m_view3.SetDriverChanged(false);
 		}
 		else if (m_ctrlTab.GetCurSel() == 1)
-		{			
-			m_view3.ShowPortBControls(usingASIO && is4chMode);	
+		{
+			m_view3.ShowPortBControls(usingASIO && is4chMode);
 		}
 		else if (m_ctrlTab.GetCurSel() == 3)
 		{
@@ -247,10 +247,10 @@ public:
 
 	LRESULT CMainDlg::OnBnClickedAlwaysOnTop(WORD /*wNotifyCode*/, WORD /*wID*/, HWND /*hWndCtl*/, BOOL& /*bHandled*/)
 	{
-		if(alwaysOnTop.GetCheck())
+		if (alwaysOnTop.GetCheck())
 			SetWindowPos(HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 		else
-			SetWindowPos(HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);		
+			SetWindowPos(HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 
 		return 0;
 	}

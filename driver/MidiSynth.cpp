@@ -22,6 +22,7 @@
 #include <string>
 #include <math.h>
 #include <new>
+#include "../common/LegacySafety.h"
 
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
@@ -129,17 +130,38 @@ namespace VSTMIDIDRV {
 		return b;
 	}
 #pragma endregion Utility functions
-	
+
 
 
 #pragma region MidiStream class	
-	MidiStream::MidiStream() : stream() {
+	MidiStream::MidiStream() : startpos(0), endpos(0), droppedCount(0), stream() {
+	}
+
+	MidiStream::~MidiStream() {
 		Reset();
 	}
 
-	void MidiStream::Reset() {
-		startpos = 0;
-		endpos = 0;
+	DWORD MidiStream::ReportDrop() {
+		if (!droppedCount) OutputDebugString(_T("VST MIDI Driver: MIDI queue full or SysEx allocation failed; dropping new events\n"));
+		++droppedCount;
+		return (DWORD)-1;
+	}
+
+	void MidiStream::Reset(DWORD port) {
+		unsigned read = startpos, write = startpos;
+		while (read != endpos) {
+			message& item = stream[read];
+			if (port == (DWORD)-1 || (item.port_type & 0x7fffffff) == port) {
+				if ((item.port_type & 0x80000000) && item.sysex) free(item.sysex);
+			}
+			else {
+				if (write != read) stream[write] = item;
+				write = (write + 1) % maxPos;
+			}
+			read = (read + 1) % maxPos;
+		}
+		endpos = write;
+		droppedCount = 0;
 	}
 
 	DWORD MidiStream::PutMessage(DWORD port, DWORD msg, DWORD timestamp) {
@@ -148,7 +170,7 @@ namespace VSTMIDIDRV {
 		if (newEndpos == maxPos) // check for buffer rolloff
 			newEndpos = 0;
 		if (startpos == newEndpos) // check for buffer full
-			return -1;
+			return ReportDrop();
 		stream[endpos].sysex = NULL;
 		stream[endpos].msg = msg; // ok to put data and update endpos
 		stream[endpos].timestamp = timestamp;
@@ -157,7 +179,8 @@ namespace VSTMIDIDRV {
 		return 0;
 	}
 
-	DWORD MidiStream::PutSysEx(DWORD port,const unsigned char* sysex, DWORD sysex_len, DWORD timestamp) {
+	DWORD MidiStream::PutSysEx(DWORD port, const unsigned char* sysex, DWORD sysex_len, DWORD timestamp) {
+		if (!sysex || !sysex_len || sysex_len > VSTDriverMaxSysExBytes) return (DWORD)-1;
 		unsigned int newEndpos = endpos;
 		void* sysexCopy;
 
@@ -165,11 +188,11 @@ namespace VSTMIDIDRV {
 		if (newEndpos == maxPos)
 			newEndpos = 0;
 		if (startpos == newEndpos)
-			return -1;
+			return ReportDrop();
 
 		sysexCopy = malloc(sysex_len);
 		if (!sysexCopy)
-			return -1;
+			return ReportDrop();
 
 		memcpy(sysexCopy, sysex, sysex_len);
 
@@ -203,6 +226,7 @@ namespace VSTMIDIDRV {
 			sysex = NULL;
 			sysex_len = 0;
 		}
+		stream[startpos].sysex = NULL; // Ownership of a dequeued SysEx passes to the renderer.
 		startpos++;
 		if (startpos == maxPos) // check for buffer rolloff
 			startpos = 0;
@@ -264,7 +288,7 @@ namespace VSTMIDIDRV {
 		bufferCapacity(),
 		bufferfCapacity(),
 		bufferf(),
-		buffer() 
+		buffer()
 	{
 #ifdef _DEBUG
 		_CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_WNDW);
@@ -291,7 +315,7 @@ namespace VSTMIDIDRV {
 			delete bassAsioOut;
 			bassAsioOut = NULL;
 		}
-		if (midiStream)	{
+		if (midiStream) {
 			delete midiStream;
 			midiStream = NULL;
 		}
@@ -368,7 +392,7 @@ namespace VSTMIDIDRV {
 		if (useAsio)
 		{
 			if (!bassAsioOut) bassAsioOut = new BassAsioOut(this);
-			
+
 			wResult = bassAsioOut->Init(bufferSizeMS, sampleRate, usingFloat, channels);
 			if (wResult) bassAsioOut->Close();
 			else
@@ -414,7 +438,7 @@ namespace VSTMIDIDRV {
 					bufferCapacity = capacityNeeded;
 				}
 			}
-						
+
 			wResult = waveOut->Init(usingFloat ? (void*)bufferf : (void*)buffer, bufferSize, chunkSize, sampleRate, usingFloat, channels);
 		}
 
@@ -452,7 +476,7 @@ namespace VSTMIDIDRV {
 			wResult = bassAsioOut->Start();
 			if (wResult) bassAsioOut->Close();
 		}
-		else 
+		else
 		{
 			if (usingFloat)
 				memset(bufferf, 0, bufferSize * sizeof(float) * channels);
@@ -464,7 +488,7 @@ namespace VSTMIDIDRV {
 
 		if (wResult) InterlockedExchange(&stopping, 1);
 		return wResult;
-	}	
+	}
 
 	// Renders totalFrames frames starting from bufpos
 	// The number of frames rendered is added to the global counter framesRendered
@@ -476,7 +500,7 @@ namespace VSTMIDIDRV {
 			}
 			DWORD timeStamp = (DWORD)-1;
 			// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-			while (!stopping && (timeStamp = midiStream->PeekMessageTime()) == framesRendered) {
+			while (!stopping) {
 				{
 					DWORD msg;
 					DWORD sysex_len;
@@ -484,6 +508,8 @@ namespace VSTMIDIDRV {
 					unsigned char* sysex;
 
 					ScopeLock<Win32Lock> scopeLock(&synthLock);
+					timeStamp = midiStream->PeekMessageTime();
+					if (stopping || timeStamp != framesRendered) break;
 
 					midiStream->GetMessage(port, msg, sysex, sysex_len);
 
@@ -541,7 +567,7 @@ namespace VSTMIDIDRV {
 			}
 			DWORD timeStamp = (DWORD)-1;
 			// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-			while (!stopping && (timeStamp = midiStream->PeekMessageTime()) == framesRendered) {
+			while (!stopping) {
 				{
 					DWORD msg;
 					DWORD sysex_len;
@@ -549,6 +575,8 @@ namespace VSTMIDIDRV {
 					unsigned char* sysex;
 
 					ScopeLock<Win32Lock> scopeLock(&synthLock);
+					timeStamp = midiStream->PeekMessageTime();
+					if (stopping || timeStamp != framesRendered) break;
 
 					midiStream->GetMessage(port, msg, sysex, sysex_len);
 
@@ -597,7 +625,7 @@ namespace VSTMIDIDRV {
 
 	unsigned int MidiSynth::MillisToFrames(unsigned int millis) {
 		return (unsigned int)((UINT64)sampleRate * millis / 1000);
-	}	
+	}
 
 	void MidiSynth::InitDialog(unsigned uDeviceID) {
 		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
@@ -620,8 +648,9 @@ namespace VSTMIDIDRV {
 		{
 			ScopeLock<Win32Lock> scopeLock(&synthLock);
 			vstDriver->ResetDriver(uDeviceID);
-			midiStream->Reset();
-			statusBuff[uDeviceID] = 0;
+			midiStream->Reset(isSinglePort32Ch ? (DWORD)-1 : uDeviceID);
+			if (isSinglePort32Ch) statusBuff[0] = statusBuff[1] = 0;
+			else statusBuff[uDeviceID] = 0;
 			isSinglePort32Ch = false;
 			virtualPortNum = 0;
 		}
@@ -646,7 +675,7 @@ namespace VSTMIDIDRV {
 			return false;
 		}
 
-		if (isSinglePort32Ch) uDeviceID = virtualPortNum;		
+		if (isSinglePort32Ch) uDeviceID = virtualPortNum;
 
 		////falco: running status support
 		if ((unsigned char)msg >= 0x80 && (unsigned char)msg <= 0xEF) {
@@ -672,7 +701,7 @@ namespace VSTMIDIDRV {
 				((unsigned char*)&msg)[2] = velocity;
 			}
 		}
-		
+
 		return true;
 	}
 
@@ -693,7 +722,7 @@ namespace VSTMIDIDRV {
 		}
 
 		if (isSinglePort32Ch) uDeviceID = virtualPortNum;
-		
+
 		statusBuff[uDeviceID] = 0; //clear running status also in case of SysEx messages
 
 		return true;
@@ -712,7 +741,11 @@ namespace VSTMIDIDRV {
 	}
 
 	void MidiSynth::PlaySysEx(unsigned uDeviceID, unsigned char* bufpos, DWORD len) {
-		
+		if (!bufpos || !len || len > VSTDriverMaxSysExBytes) {
+			OutputDebugString(_T("VST MIDI Driver: invalid SysEx buffer rejected\n"));
+			return;
+		}
+
 		//Short Midi channel messages can be also sent by midiOutLongMsg(). But VSTi plugins many times cannot handle short messages sent as kVstSysExType.
 		//So we will send short channel messages always as kVstMidiType. No running status support in this case.  
 		//bufpos[0] > 0x7F check has to be added because of SysEx Continuation messages...
@@ -720,13 +753,13 @@ namespace VSTMIDIDRV {
 
 			DWORD startPos = 0;
 			for (DWORD i = 0; i < len; i++) {
-				if (bufpos[i] > 0x7F || i == len - 1) {					
+				if (bufpos[i] > 0x7F || i == len - 1) {
 					DWORD shortMsg = 0;
 					memcpy(&shortMsg, &bufpos[startPos], Min<DWORD>(i - startPos + 1, 3));
 					PushMIDI(uDeviceID, shortMsg);
 					startPos = i;
 				}
-			}			
+			}
 			return;
 		}
 
@@ -754,6 +787,11 @@ namespace VSTMIDIDRV {
 		else if (!useAsio && waveOut) {
 			waveOut->Pause();
 			waveOut->Close();
+		}
+
+		{
+			ScopeLock<Win32Lock> scopeLock(&synthLock);
+			if (midiStream) midiStream->Reset();
 		}
 
 		// The final client's reset is deferred until the audio worker has exited.

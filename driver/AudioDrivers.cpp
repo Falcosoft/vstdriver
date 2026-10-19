@@ -46,7 +46,7 @@ namespace VSTMIDIDRV {
 		hEvent = NULL;
 		hThread = NULL;
 		hEvent = CreateEvent(NULL, false, true, NULL);
-		DWORD_PTR callback = (DWORD_PTR)hEvent;	
+		DWORD_PTR callback = (DWORD_PTR)hEvent;
 		DWORD callbackType = CALLBACK_EVENT;
 
 		//freopen_s((FILE**)stdout, "CONOUT$", "w", stdout); //redirect to allocated console;			
@@ -346,13 +346,13 @@ namespace VSTMIDIDRV {
 		return 0;
 	}
 #pragma endregion Win32 WinMM WaveOut class
-	
-///////////////////////////////////////
+
+	///////////////////////////////////////
 
 #pragma region BassAsioOut
 	/// BassASIO Output class. Also utilized by internal ASIO2WASAPI plugin.
 	BassAsioOut::BassAsioOut(MidiSynth* pSynth) :
-		parentSynth(pSynth),		
+		parentSynth(pSynth),
 		installPath(),
 		bassAsioPath(),
 		asio2WasapiPath(),
@@ -434,7 +434,7 @@ namespace VSTMIDIDRV {
 		}
 
 		return 0;
-	}	
+	}
 
 	int BassAsioOut::Close(bool doDelay)
 	{
@@ -739,7 +739,7 @@ namespace VSTMIDIDRV {
 	void BassAsioOut::AsioNotifyProc(DWORD notify, void* user)
 	{
 		if (notify == BASS_ASIO_NOTIFY_RESET)
-			timeSetEvent(1, 1, resetAsioTimerProc,(DWORD_PTR)user, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
+			timeSetEvent(1, 1, resetAsioTimerProc, (DWORD_PTR)user, TIME_ONESHOT | TIME_CALLBACK_FUNCTION);
 	}
 #pragma endregion BassASIO Output class. Also utilized by internal ASIO2WASAPI plugin.
 }

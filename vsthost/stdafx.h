@@ -63,9 +63,9 @@ static void append_be( std::vector<uint8_t> & out, const T & value )
 }
 
 template<typename T>
-static void retrieve_be( T & out, const uint8_t * & in, unsigned & size )
+static bool retrieve_be( T & out, const uint8_t * & in, unsigned & size )
 {
-	if ( size < sizeof(T) ) return;
+	if (size < sizeof(T)) { out = T(); return false; }
 
 	size -= sizeof(T);
 
@@ -80,4 +80,5 @@ static void retrieve_be( T & out, const uint8_t * & in, unsigned & size )
 	}
 
 	out = carriage.original;
+	return true;
 }

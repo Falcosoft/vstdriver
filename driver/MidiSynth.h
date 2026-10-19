@@ -27,7 +27,7 @@ namespace VSTMIDIDRV {
 	class WaveOutWin32;
 	class BassAsioOut;
 
-	enum : unsigned int	{
+	enum : unsigned int {
 		FailedToOpen = 0,
 		FailedToPrepare = 1,
 		FailedToReset = 2,
@@ -45,6 +45,8 @@ namespace VSTMIDIDRV {
 		static const unsigned int maxPos = 1024;
 		unsigned int startpos;
 		unsigned int endpos;
+		DWORD droppedCount;
+		DWORD ReportDrop();
 		struct message
 		{
 			void* sysex;
@@ -56,7 +58,8 @@ namespace VSTMIDIDRV {
 
 	public:
 		MidiStream();
-		void Reset();
+		~MidiStream();
+		void Reset(DWORD port = (DWORD)-1);
 		DWORD PutMessage(DWORD port, DWORD msg, DWORD timestamp);
 		DWORD PutSysEx(DWORD port, const unsigned char* sysex, DWORD sysex_len, DWORD timestamp);
 		void GetMessage(DWORD& port, DWORD& message, unsigned char*& sysex, DWORD& sysex_len);
@@ -110,17 +113,17 @@ namespace VSTMIDIDRV {
 		void InitDialogInternal(unsigned uDeviceID); // Caller must hold synthLock.
 		void LoadSettings();
 		void RequestReset();
-		static void CALLBACK ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);		
+		static void CALLBACK ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2);
 
 	public:
-		
+
 		unsigned int getSampleRate() { return sampleRate; }
 		unsigned int getBufferSizeMS() { return bufferSizeMS; }
 		bool getUsingFloat() { return usingFloat; }
 		WORD getChannels() { return channels; }
 
 		~MidiSynth();
-		static MidiSynth& getInstance();		
+		static MidiSynth& getInstance();
 		int Init(unsigned uDeviceID);
 		void InitDialog(unsigned uDeviceID);
 		void Close(bool forceUnload);

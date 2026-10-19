@@ -8,6 +8,7 @@
 #include "resource.h"
 #include "wavewriter.h"
 #include "log.h"
+#include "../common/LegacySafety.h"
 
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
@@ -160,7 +161,8 @@ static NOTIFYICONDATA nIconData = { 0 };
 static HMENU trayMenu = NULL;
 
 static volatile int lastUsedSysEx = RESET_MENU_OFFSET + 5;
-static volatile bool doOwnReset = false;
+static Win32Lock resetLock(true);
+static DWORD pendingResetPorts = 0;
 static bool driverResetRequested = false;
 static bool need_idle = false;
 static bool isYamahaPlugin = false;
@@ -172,7 +174,19 @@ static volatile bool is4channelMode = false;
 
 static HANDLE highDpiMode = NULL;
 
-static volatile DWORD destPort = PORT_ALL;
+static void QueueOwnReset(DWORD port)
+{
+	ScopeLock<Win32Lock> scope(&resetLock);
+	pendingResetPorts |= port == PORT_ALL ? 3U : (1U << port);
+}
+
+static DWORD TakeOwnReset()
+{
+	ScopeLock<Win32Lock> scope(&resetLock);
+	DWORD ports = pendingResetPorts;
+	pendingResetPorts = 0;
+	return ports;
+}
 
 static uint32_t sample_rate = 48000;
 static uint32_t sample_pos = 0;
@@ -184,6 +198,7 @@ static char product_string[256] = { 0 };
 
 static HANDLE pipe_in = NULL;
 static HANDLE pipe_out = NULL;
+static bool pipeFailed = false; // Accessed by the bridge command thread only.
 
 static volatile HWND trayWndHandle = NULL;
 
@@ -300,237 +315,229 @@ static TCHAR* GetRunTimeFileVersion(TCHAR* filePath, TCHAR* result, unsigned buf
 	return result;
 }
 
-void resetInputEvents()
+void resetInputEvents(unsigned port = PORT_ALL)
 {
-	for (unsigned i = 0; i < inputEventList.position; i++)
-		if (inputEventList.events[i].ev.sysexEvent.type == kVstSysExType && inputEventList.events[i].ev.sysexEvent.sysexDump)
-		{
-			free(inputEventList.events[i].ev.sysexEvent.sysexDump);
-			inputEventList.events[i].ev.sysexEvent.sysexDump = NULL;
+	unsigned kept = 0;
+	inputEventList.portMessageCount[0] = inputEventList.portMessageCount[1] = 0;
+	for (unsigned i = 0; i < inputEventList.position; ++i) {
+		InputEventList::InputEvent& item = inputEventList.events[i];
+		if (port == PORT_ALL || item.port == port) {
+			if (item.ev.sysexEvent.type == kVstSysExType && item.ev.sysexEvent.sysexDump)
+				free(item.ev.sysexEvent.sysexDump);
 		}
-
-	inputEventList.position = 0;
-	inputEventList.portMessageCount[0] = 0;
-	inputEventList.portMessageCount[1] = 0;
-}
-
-void put_bytes(const void* out, uint32_t size)
-{
-	DWORD dwWritten;
-	WriteFile(pipe_out, out, size, &dwWritten, NULL);
-#ifdef LOG_EXCHANGE
-	TCHAR logfile[MAX_PATH];
-	_stprintf_s(logfile, _T("C:\\temp\\log\\bytes_%08u.out"), exchange_count++);
-	FILE* f = _tfopen(logfile, _T("wb"));
-	fwrite(out, 1, size, f);
-	fclose(f);
-#endif
-}
-
-void put_code(uint32_t code)
-{
-	put_bytes(&code, sizeof(code));
-}
-
-void get_bytes(void* in, uint32_t size)
-{
-	DWORD dwRead;
-	if (!ReadFile(pipe_in, in, size, &dwRead, NULL) || dwRead < size)
-	{
-		memset(in, 0, size);
-#ifdef LOG_EXCHANGE
-		TCHAR logfile[MAX_PATH];
-		_stprintf_s(logfile, _T("C:\\temp\\log\\bytes_%08u.err"), exchange_count++);
-		FILE* f = _tfopen(logfile, _T("wb"));
-		_ftprintf(f, _T("Wanted %u bytes, got %u"), size, dwRead);
-		fclose(f);
-#endif
+		else {
+			if (kept != i) inputEventList.events[kept] = item;
+			++inputEventList.portMessageCount[item.port];
+			++kept;
+		}
 	}
-	else
-	{
-#ifdef LOG_EXCHANGE
-		TCHAR logfile[MAX_PATH];
-		_stprintf_s(logfile, _T("C:\\temp\\log\\bytes_%08u.in"), exchange_count++);
-		FILE* f = _tfopen(logfile, _T("wb"));
-		fwrite(in, 1, size, f);
-		fclose(f);
-#endif
-	}
+	inputEventList.position = kept;
 }
 
-void discard_bytes(uint32_t size)
+bool put_bytes(const void* out, uint32_t size)
+{
+	if (pipeFailed) return false;
+	const uint8_t* bytes = (const uint8_t*)out;
+	while (size) {
+		DWORD done = 0;
+		if (!WriteFile(pipe_out, bytes, size, &done, NULL) || !done || done > size) {
+			pipeFailed = true;
+			return false;
+		}
+		bytes += done;
+		size -= done;
+	}
+	return true;
+}
+
+bool put_code(uint32_t code)
+{
+	return put_bytes(&code, sizeof(code));
+}
+
+bool get_bytes(void* in, uint32_t size)
+{
+	if (pipeFailed) return false;
+	uint8_t* bytes = (uint8_t*)in;
+	while (size) {
+		DWORD done = 0;
+		if (!ReadFile(pipe_in, bytes, size, &done, NULL) || !done || done > size) {
+			pipeFailed = true;
+			return false;
+		}
+		bytes += done;
+		size -= done;
+	}
+	return true;
+}
+
+bool discard_bytes(uint32_t size)
 {
 	char scratch[1024];
 	while (size) {
-		DWORD wanted = size > sizeof(scratch) ? sizeof(scratch) : size;
-		DWORD done = 0;
-		if (!ReadFile(pipe_in, scratch, wanted, &done, NULL) || !done) return;
-		size -= done;
+		unsigned wanted = size > sizeof(scratch) ? sizeof(scratch) : size;
+		if (!get_bytes(scratch, wanted)) return false;
+		size -= wanted;
 	}
+	return !pipeFailed;
 }
 
 uint32_t get_code()
 {
-	uint32_t code;
-	get_bytes(&code, sizeof(code));
+	uint32_t code = 0;
+	if (!get_bytes(&code, sizeof(code))) return 0;
 	return code;
 }
 
-void getChunk(AEffect* pEffect, std::vector<uint8_t>& out)
+bool getChunk(AEffect* effect, std::vector<uint8_t>& out)
 {
-	uint32_t num_programs = pEffect->numPrograms;
-	uint32_t num_params = pEffect->numParams;
-	uint32_t orgProgramIndex = (uint32_t)pEffect->dispatcher(pEffect, effGetProgram, 0, 0, NULL, 0.0);
-
-	out.resize(0);
-	uint32_t unique_id = pEffect->uniqueID;
-	append_be(out, unique_id);
-	bool type_chunked = !!(pEffect->flags & effFlagsProgramChunks);
-	append_be(out, type_chunked);
-	if (!type_chunked)
-	{
-		if (num_programs > 1 && orgProgramIndex > 0)
-			pEffect->dispatcher(pEffect, effSetProgram, 0, 0, NULL, 0.0);
-
-		append_be(out, num_params);
-		for (unsigned i = 0; i < num_params; ++i)
-		{
-			float parameter = pEffect->getParameter(pEffect, i);
-			append_be(out, parameter);
-		}
+	out.clear();
+	if (!effect || effect->numPrograms < 0 || effect->numParams < 0) return false;
+	uint32_t programs = effect->numPrograms, params = effect->numParams;
+	uint32_t original = (uint32_t)effect->dispatcher(effect, effGetProgram, 0, 0, NULL, 0);
+	if (programs > 1 && original >= programs) return false;
+	bool chunked = !!(effect->flags & effFlagsProgramChunks);
+	void* data = NULL;
+	VstIntPtr dataSize = 0;
+	UINT64 total = sizeof(uint32_t) + sizeof(bool) + sizeof(uint32_t);
+	if (chunked) {
+		dataSize = effect->dispatcher(effect, effGetChunk, 0, 0, &data, 0);
+		if (dataSize < 0 || (dataSize && !data)) return false;
+		total += (UINT64)dataSize;
 	}
-	else
-	{
-		void* chunk;
-		uint32_t size = (uint32_t)pEffect->dispatcher(pEffect, effGetChunk, 0, 0, &chunk, 0);
-		append_be(out, size);
-		size_t chunk_size = out.size();
-		out.resize(chunk_size + size);
-		if (size) memcpy(&out[chunk_size], chunk, size);
+	else total += (UINT64)params * sizeof(float) * (programs > 1 ? programs : 1);
+	if (programs > 1) total += 4 * sizeof(uint32_t);
+	if (total > VSTDriverMaxChunkBytes) return false;
+	try { out.reserve((size_t)total); }
+	catch (const std::bad_alloc&) { return false; }
+	catch (const std::length_error&) { return false; }
+	append_be(out, (uint32_t)effect->uniqueID);
+	append_be(out, chunked);
+	if (chunked) {
+		append_be(out, (uint32_t)dataSize);
+		size_t offset = out.size();
+		out.resize(offset + (size_t)dataSize); // Capacity was checked and reserved above.
+		if (dataSize) memcpy(&out[offset], data, (size_t)dataSize);
 	}
-
-	if (num_programs > 1)
-	{
-		append_be(out, (uint32_t)'VstD'); //From now on in case of more programs we save all programs. These new markers are for file version check. 
+	else {
+		append_be(out, params);
+		if (programs > 1 && original) effect->dispatcher(effect, effSetProgram, 0, 0, NULL, 0);
+		for (unsigned i = 0; i < params; ++i) append_be(out, effect->getParameter(effect, i));
+	}
+	if (programs > 1) {
+		append_be(out, (uint32_t)'VstD'); //From now on in case of more programs we save all programs. These new markers are for file version check.
 		append_be(out, (uint32_t)'Ver2');
-		append_be(out, num_programs);
-		append_be(out, orgProgramIndex);
-		if (!type_chunked)
-		{
-			for (unsigned j = 1; j < num_programs; ++j)
-			{
-				pEffect->dispatcher(pEffect, effSetProgram, 0, j, NULL, 0.0);
-				for (unsigned i = 0; i < num_params; ++i)
-				{
-					float parameter = pEffect->getParameter(pEffect, i);
-					append_be(out, parameter);
-				}
+		append_be(out, programs);
+		append_be(out, original);
+		if (!chunked) {
+			for (unsigned j = 1; j < programs; ++j) {
+				effect->dispatcher(effect, effSetProgram, 0, j, NULL, 0);
+				for (unsigned i = 0; i < params; ++i) append_be(out, effect->getParameter(effect, i));
 			}
-			pEffect->dispatcher(pEffect, effSetProgram, 0, orgProgramIndex, NULL, 0.0);
+			effect->dispatcher(effect, effSetProgram, 0, original, NULL, 0);
 		}
 	}
+	return true;
 }
 
-void setChunk(AEffect* pEffect, std::vector<uint8_t> const& in)
+bool validateChunk(AEffect* effect, const std::vector<uint8_t>& in)
 {
+	if (!effect || in.empty() || in.size() > VSTDriverMaxChunkBytes ||
+		effect->numPrograms < 0 || effect->numParams < 0) return false;
+	const uint8_t* cursor = &in.front();
 	unsigned size = (unsigned)in.size();
-	if (pEffect && size)
-	{
-		const uint8_t* inc = &in.front();
-		
-		uint32_t num_programs = pEffect->numPrograms;
-		uint32_t orgProgramIndex = (uint32_t)pEffect->dispatcher(pEffect, effGetProgram, 0, 0, NULL, 0.0);
-		uint32_t num_params;
-
-		uint32_t effect_id;
-		retrieve_be(effect_id, inc, size);
-		if (effect_id != pEffect->uniqueID) return;
-		bool type_chunked;
-		retrieve_be(type_chunked, inc, size);
-		if (type_chunked != !!(pEffect->flags & effFlagsProgramChunks)) return;
-		if (!type_chunked)
-		{
-			retrieve_be(num_params, inc, size);
-			if (num_params != pEffect->numParams) return;
-
-			if (num_programs > 1 && orgProgramIndex > 0)
-				pEffect->dispatcher(pEffect, effSetProgram, 0, 0, NULL, 0.0);
-
-			for (unsigned i = 0; i < num_params; ++i)
-			{
-				float parameter;
-				retrieve_be(parameter, inc, size);
-				pEffect->setParameter(pEffect, i, parameter);
-			}
-		}
-		else
-		{
-			uint32_t chunk_size;
-			retrieve_be(chunk_size, inc, size);
-			if (chunk_size > size) return;
-			pEffect->dispatcher(pEffect, effSetChunk, 0, chunk_size, (void*)inc, 0);
-			size -= chunk_size;
-			inc += chunk_size;
-		}
-
-		if (num_programs > 1 && size >= (sizeof(uint32_t) * 4))
-		{
-			uint32_t verMarker;
-			uint32_t nPrograms;
-			uint32_t orgIndex;
-
-			retrieve_be(verMarker, inc, size);
-			if (verMarker != (uint32_t)'VstD') return;
-			retrieve_be(verMarker, inc, size);
-			if (verMarker != (uint32_t)'Ver2') return;
-			retrieve_be(nPrograms, inc, size);
-			if (nPrograms != num_programs) return;
-			retrieve_be(orgIndex, inc, size);
-
-			if (!type_chunked)
-			{
-				for (unsigned j = 1; j < num_programs; ++j)
-				{
-					pEffect->dispatcher(pEffect, effSetProgram, 0, j, NULL, 0.0);
-					for (unsigned i = 0; i < num_params; ++i)
-					{
-						float parameter;
-						retrieve_be(parameter, inc, size);
-						pEffect->setParameter(pEffect, i, parameter);
-					}
-				}
-			}
-
-			pEffect->dispatcher(pEffect, effSetProgram, 0, orgIndex, NULL, 0.0);
-		}
-
+	uint32_t id = 0, amount = 0;
+	uint8_t chunked = 0;
+	if (!retrieve_be(id, cursor, size) || id != (uint32_t)effect->uniqueID ||
+		!retrieve_be(chunked, cursor, size) || chunked > 1 ||
+		(chunked != 0) != ((effect->flags & effFlagsProgramChunks) != 0) ||
+		!retrieve_be(amount, cursor, size)) return false;
+	if (chunked) {
+		if (amount > size) return false;
+		cursor += amount; size -= amount;
 	}
+	else {
+		if (amount != (uint32_t)effect->numParams || amount > size / sizeof(float)) return false;
+		cursor += amount * sizeof(float); size -= amount * sizeof(float);
+	}
+	if (!size) return true; // Original single-bank/first-program file format.
+	uint32_t marker = 0, programs = 0, original = 0;
+	if (effect->numPrograms <= 1 || !retrieve_be(marker, cursor, size) || marker != (uint32_t)'VstD' ||
+		!retrieve_be(marker, cursor, size) || marker != (uint32_t)'Ver2' ||
+		!retrieve_be(programs, cursor, size) || programs != (uint32_t)effect->numPrograms ||
+		!retrieve_be(original, cursor, size) || original >= programs) return false;
+	UINT64 expected = chunked ? 0 : (UINT64)(programs - 1) * amount * sizeof(float);
+	return expected == size;
 }
 
-BOOL settings_save(AEffect* pEffect)
+bool setChunk(AEffect* effect, const std::vector<uint8_t>& in)
 {
-	BOOL retResult = FALSE;
-
-	TCHAR vst_path[MAX_PATH] = { 0 };
-	_tcscpy_s(vst_path, argv[1]);
-	TCHAR* chrP = _tcsrchr(vst_path, '.'); // removes extension
-	if (chrP) chrP[0] = 0;
-	_tcscat_s(vst_path, _T(".set"));
-
-	HANDLE fileHandle = CreateFile(vst_path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-
-	if (fileHandle != INVALID_HANDLE_VALUE)
-	{
-		DWORD size;
-		std::vector<uint8_t> chunk;
-		if (pEffect) getChunk(pEffect, chunk);
-
-		if (chunk.size() >= (2 * sizeof(uint32_t) + sizeof(bool))) retResult = WriteFile(fileHandle, &chunk.front(), (DWORD)chunk.size(), &size, NULL);
-
-		CloseHandle(fileHandle);
+	if (!validateChunk(effect, in)) return false;
+	const uint8_t* cursor = &in.front();
+	unsigned size = (unsigned)in.size();
+	uint32_t id = 0, amount = 0;
+	uint8_t chunked = 0;
+	retrieve_be(id, cursor, size);
+	retrieve_be(chunked, cursor, size);
+	retrieve_be(amount, cursor, size);
+	uint32_t original = (uint32_t)effect->dispatcher(effect, effGetProgram, 0, 0, NULL, 0);
+	if (chunked) {
+		effect->dispatcher(effect, effSetChunk, 0, amount, (void*)cursor, 0);
+		cursor += amount; size -= amount;
 	}
+	else {
+		if (effect->numPrograms > 1 && original) effect->dispatcher(effect, effSetProgram, 0, 0, NULL, 0);
+		for (unsigned i = 0; i < amount; ++i) {
+			float parameter = 0;
+			retrieve_be(parameter, cursor, size);
+			effect->setParameter(effect, i, parameter);
+		}
+	}
+	bool versioned = size != 0;
+	if (versioned) {
+		uint32_t marker = 0, programs = 0;
+		retrieve_be(marker, cursor, size); retrieve_be(marker, cursor, size);
+		retrieve_be(programs, cursor, size); retrieve_be(original, cursor, size);
+		if (!chunked) {
+			for (unsigned j = 1; j < programs; ++j) {
+				effect->dispatcher(effect, effSetProgram, 0, j, NULL, 0);
+				for (unsigned i = 0; i < amount; ++i) {
+					float parameter = 0;
+					retrieve_be(parameter, cursor, size);
+					effect->setParameter(effect, i, parameter);
+				}
+			}
+		}
+	}
+	if (!chunked && effect->numPrograms > 1) effect->dispatcher(effect, effSetProgram, 0, original, NULL, 0);
+	else if (chunked && versioned) effect->dispatcher(effect, effSetProgram, 0, original, NULL, 0);
+	return true;
+}
 
-	return retResult;
+BOOL settings_save(AEffect* effect)
+{
+	std::vector<uint8_t> chunk;
+	if (!getChunk(effect, chunk) || chunk.empty()) return FALSE;
+	TCHAR path[MAX_PATH] = { 0 };
+	if (!argv || !argv[1] || _tcslen(argv[1]) >= _countof(path)) return FALSE;
+	_tcscpy_s(path, argv[1]);
+	TCHAR* dot = _tcsrchr(path, _T('.'));
+	TCHAR* slash = _tcsrchr(path, _T('\\'));
+	TCHAR* forwardSlash = _tcsrchr(path, _T('/'));
+	if (forwardSlash && (!slash || forwardSlash > slash)) slash = forwardSlash;
+	if (dot && (!slash || dot > slash)) *dot = 0; // removes extension
+	if (_tcslen(path) + 4 >= _countof(path)) return FALSE;
+	_tcscat_s(path, _T(".set"));
+	HANDLE file = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (file == INVALID_HANDLE_VALUE) return FALSE;
+	DWORD total = 0;
+	while (total < chunk.size()) {
+		DWORD done = 0;
+		if (!WriteFile(file, &chunk[total], (DWORD)chunk.size() - total, &done, NULL) || !done) break;
+		total += done;
+	}
+	CloseHandle(file);
+	return total == chunk.size();
 }
 
 void getEditorPosition(int port, int& x, int& y)
@@ -740,52 +747,27 @@ void SendOwnReset(DWORD portNum)
 		break;
 	}
 
-	doOwnReset = false;
+
 }
 
 bool getPluginMenuItem(int itemIndex, TCHAR* result, unsigned buffSize)
 {
-	long lResult;
-	DWORD dwType = REG_SZ;
-	HKEY hKey;
-	ULONG size;
-
-	lResult = RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &hKey);
-	if (lResult == ERROR_SUCCESS)
-	{
-		TCHAR szValueName[12] = _T("plugin");
-		TCHAR szPluginNum[4] = { 0 };
-
-		if (itemIndex)
-		{
-			_itot_s(itemIndex, szPluginNum, 10);
-			_tcsncat_s(szValueName, szPluginNum, _countof(szPluginNum));
-		}
-
-		lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, NULL, &size);
-		if (lResult == ERROR_SUCCESS && dwType == REG_SZ && size > 2)
-		{
-			TCHAR vst_path[MAX_PATH] = { 0 };
-			lResult = RegQueryValueEx(hKey, szValueName, NULL, &dwType, (LPBYTE)vst_path, &size);
-			if (lResult == ERROR_SUCCESS)
-			{
-				TCHAR vst_title[MAX_PATH - 6] = { 0 };
-				RegCloseKey(hKey);
-
-				GetFileTitle(vst_path, vst_title, MAX_PATH - 6);
-				_itot_s(itemIndex, szPluginNum, 10);
-				_tcscpy_s(result, buffSize, szPluginNum);
-				_tcscat_s(result, buffSize, _T(". "));
-				_tcscat_s(result, buffSize, vst_title);
-				return true;
-			}
-
-		}
-		RegCloseKey(hKey);
-	}
-
-	return false;
-
+	if (!result || !buffSize || itemIndex < 0 || itemIndex >= MAX_PLUGINS) return false;
+	result[0] = 0;
+	HKEY key;
+	if (RegOpenKeyEx(HKEY_CURRENT_USER, _T("Software\\VSTi Driver"), 0, KEY_READ, &key) != ERROR_SUCCESS) return false;
+	TCHAR valueName[20] = _T("plugin"), number[12] = { 0 };
+	_itot_s(itemIndex, number, _countof(number), 10);
+	if (itemIndex) _tcscat_s(valueName, number);
+	TCHAR path[MAX_PATH] = { 0 };
+	bool valid = VSTDriverReadRegistryString(key, valueName, path, _countof(path));
+	RegCloseKey(key);
+	TCHAR title[MAX_PATH] = { 0 };
+	if (!valid || GetFileTitle(path, title, _countof(title)) != 0) return false;
+	_tcsncat_s(result, buffSize, number, _TRUNCATE);
+	_tcsncat_s(result, buffSize, _T(". "), _TRUNCATE);
+	_tcsncat_s(result, buffSize, title, _TRUNCATE);
+	return true;
 }
 
 int getSelectedPluginIndex()
@@ -871,6 +853,8 @@ void setSelectedSysExIndex(int index)
 
 void renderAudiosamples(int channelCount)
 {
+	uint32_t count = get_code();
+	if (pipeFailed) return;
 	static bool idle_started = false;
 	static std::vector<float> sample_buffer;
 	static float** float_list_in;
@@ -878,7 +862,9 @@ void renderAudiosamples(int channelCount)
 	static float* float_null;
 	static float* float_out;
 
-	bool tmpDoOwnReset = doOwnReset;
+	DWORD resetPorts = TakeOwnReset();
+	bool tmpDoOwnReset = resetPorts != 0;
+	DWORD resetPort = resetPorts == 3 ? PORT_ALL : resetPorts == 1 ? 0 : 1;
 
 	unsigned channelMult = (unsigned)channelCount / 2;
 
@@ -968,7 +954,7 @@ void renderAudiosamples(int channelCount)
 		}
 	}
 
-	if (tmpDoOwnReset) SendOwnReset(destPort);
+	if (tmpDoOwnReset) SendOwnReset(resetPort);
 
 	if (need_idle)
 	{
@@ -980,18 +966,18 @@ void renderAudiosamples(int channelCount)
 		{
 			if (inputEventList.portMessageCount[0]) portState[0].pEffect->dispatcher(portState[0].pEffect, effProcessEvents, 0, 0, &portState[0].renderEvents, 0);
 			if (inputEventList.portMessageCount[1]) portState[1].pEffect->dispatcher(portState[1].pEffect, effProcessEvents, 0, 0, &portState[1].renderEvents, 0);
-			if (tmpDoOwnReset) SendOwnReset(destPort);
+			if (tmpDoOwnReset) SendOwnReset(resetPort);
 			idle_started = true;
 		}
 	}
 
-	uint32_t count = get_code();
 	sample_pos += count;
 
 	if (!driverResetRequested)
 		put_code(Response::NoError);
 	else
 		put_code(Response::ResetRequest);
+	if (pipeFailed) return;
 
 	while (count)
 	{
@@ -1064,15 +1050,15 @@ void renderAudiosamples(int channelCount)
 			}
 		}
 
-		uint32_t byteSize = count_to_do * sizeof(float) * MAX_OUTPUTS * channelMult;        
+		uint32_t byteSize = count_to_do * sizeof(float) * MAX_OUTPUTS * channelMult;
 
-		put_bytes(&sample_buffer.front(), byteSize);
-		
+		if (!put_bytes(&sample_buffer.front(), byteSize)) return;
+
 		if (waveWriter.getIsRecordingStarted())
-		{			
+		{
 			waveWriter.WriteData(&sample_buffer.front(), byteSize);
 		}
-				
+
 		count -= count_to_do;
 	}
 }
@@ -1165,9 +1151,9 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 				if (isMidiProxy) _tcscpy_s(wText, proxyPrefix);
 				_tcsncat_s(wText, _T("VST General Editor port "), _TRUNCATE);
 				_tcsncat_s(wText, portSign, 1);
-			}			
+			}
 
-			SetWindowText(hwnd, wText);					
+			SetWindowText(hwnd, wText);
 
 			int xPos = 0xFFFFFF; //16M not likely to be real window position
 			int yPos = 0xFFFFFF;
@@ -1282,7 +1268,7 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 			SendMessage(valueSlider, TBM_SETPAGESIZE, 0, 10);
 			SendMessage(valueSlider, TBM_SETPOS, TRUE, sliderMax / 2);
 		}
-		return TRUE;			
+		return TRUE;
 	case WM_SHOWWINDOW:
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect && wParam)
@@ -1318,7 +1304,7 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect)
 		{
-			portNum = *(int*)effect->user;			
+			portNum = *(int*)effect->user;
 
 			if (HIWORD(wParam) == LBN_SELCHANGE && lParam == (LPARAM)programsListBox)
 			{
@@ -1381,7 +1367,7 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 			}
 		}
 		break;
-	case WM_CLOSE:	
+	case WM_CLOSE:
 		if ((wParam && lParam) || sameThread)
 		{
 			effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
@@ -1401,7 +1387,7 @@ INT_PTR CALLBACK GeneralUiProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
 		}
 		else
 		{
-			ShowWindow(hwnd, SW_HIDE);			
+			ShowWindow(hwnd, SW_HIDE);
 		}
 
 		return TRUE;
@@ -1452,7 +1438,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 			SetWindowLongPtr(hwnd, GWLP_USERDATA, lParam);
 
-			
+
 			if (GetCurrentThreadId() != MainThreadId)
 			{
 				extraHeight = (int)(24 * dpiMul);
@@ -1474,7 +1460,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				_tcsncat_s(wText, portSign, 1);
 			}
 
-			SetWindowText(hwnd, wText);			
+			SetWindowText(hwnd, wText);
 
 			SetTimer(hwnd, 1, timerPeriodMS, NULL);
 			ERect* eRect = NULL;
@@ -1528,14 +1514,14 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 					sample_pos = 0;
 				}
 			}
-		}		
+		}
 		return TRUE;
 	case WM_SHOWWINDOW:
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect && wParam)
 		{
 			portNum = *(int*)effect->user;
-			if(dialogState[portNum].checkBoxWnd) SendMessage(dialogState[portNum].checkBoxWnd, BM_SETCHECK, portState[portNum].alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
+			if (dialogState[portNum].checkBoxWnd) SendMessage(dialogState[portNum].checkBoxWnd, BM_SETCHECK, portState[portNum].alwaysOnTop ? BST_CHECKED : BST_UNCHECKED, 0);
 			SetWindowPos(hwnd, portState[portNum].alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
 			SetForegroundWindow(hwnd);
 		}
@@ -1628,7 +1614,7 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		effect = reinterpret_cast<AEffect*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 		if (effect)
 		{
-			portNum = *(int*)effect->user;		
+			portNum = *(int*)effect->user;
 
 			if (sameThread) break;
 
@@ -1674,9 +1660,9 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 						GetWindowRect(hwnd, &rect);
 						setEditorPosition(portNum, rect.left, rect.top);
 
-						KillTimer(hwnd, 1);						
+						KillTimer(hwnd, 1);
 						effect->dispatcher(effect, effEditClose, 0, 0, NULL, 0);
-						portState[portNum].editorHandle = NULL;						
+						portState[portNum].editorHandle = NULL;
 
 						if (dialogState[portNum].hFont) DeleteObject(dialogState[portNum].hFont);
 						EndDialog(hwnd, IDOK);
@@ -1775,7 +1761,7 @@ void showVstEditor(uint32_t portnum, BOOL forceNew)
 
 LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-	const int STILLRUNNING = 255;	
+	const int STILLRUNNING = 255;
 	static TCHAR midiClient[64] = { 0 };
 	static TCHAR clientBitnessStr[8] = { 0 };
 	static TCHAR outputModeStr[8] = { 0 };
@@ -1788,287 +1774,286 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 	switch (msg)
 	{
-		case WM_CREATE:
-		{			
-			
-			TCHAR tmpPath[MAX_PATH] = { 0 };
-			TCHAR trayTip[MAX_PATH] = { 0 };
-			HMENU pluginMenu = CreatePopupMenu();
-			
-			_tcsncpy_s(midiClient, argv[3], _TRUNCATE);
-			_tcsncpy_s(clientBitnessStr, argv[4], _TRUNCATE);
-			_tcsncpy_s(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _TRUNCATE);
-		
-			TCHAR portItem1Str[26] = { 0 };
-			TCHAR portItem2Str[26] = { 0 };
-			if (_tcsstr(midiClient, _T("vstmidiproxy"))) isMidiProxy = true;
-			
-			if (isMidiProxy)
-			{
-				_tcsncpy_s(proxyPrefix, _T("Global "), _TRUNCATE);
-				_tcsncpy_s(portItem1Str, proxyPrefix, _TRUNCATE);
-				_tcsncpy_s(portItem2Str, proxyPrefix, _TRUNCATE);
-				_tcsncat_s(portItem1Str, _T("Port A VST Dialog"), _TRUNCATE);
-				_tcsncat_s(portItem2Str, _T("Port B VST Dialog"), _TRUNCATE);
+	case WM_CREATE:
+	{
 
-				if (argc > 6)
-				{
-					TCHAR* end_char = NULL;
-					proxyPortNum = _tcstol(argv[6], &end_char, 10);
-					if (proxyPortNum > 7 || proxyPortNum < 0) proxyPortNum = 0; 
-					size_t portPos = _tcscspn(portItem1Str, _T("A"));
-					portItem1Str[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2);
-					portItem2Str[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2 + 1);
-				}
+		TCHAR tmpPath[MAX_PATH] = { 0 };
+		TCHAR trayTip[MAX_PATH] = { 0 };
+		HMENU pluginMenu = CreatePopupMenu();
+
+		_tcsncpy_s(midiClient, argv[3], _TRUNCATE);
+		_tcsncpy_s(clientBitnessStr, argv[4], _TRUNCATE);
+		_tcsncpy_s(outputModeStr, !_tcscmp(argv[5], _T("S")) ? _T("WASAPI") : !_tcscmp(argv[5], _T("A")) ? _T("ASIO") : _T("WaveOut"), _TRUNCATE);
+
+		TCHAR portItem1Str[26] = { 0 };
+		TCHAR portItem2Str[26] = { 0 };
+		if (_tcsstr(midiClient, _T("vstmidiproxy"))) isMidiProxy = true;
+
+		if (isMidiProxy)
+		{
+			_tcsncpy_s(proxyPrefix, _T("Global "), _TRUNCATE);
+			_tcsncpy_s(portItem1Str, proxyPrefix, _TRUNCATE);
+			_tcsncpy_s(portItem2Str, proxyPrefix, _TRUNCATE);
+			_tcsncat_s(portItem1Str, _T("Port A VST Dialog"), _TRUNCATE);
+			_tcsncat_s(portItem2Str, _T("Port B VST Dialog"), _TRUNCATE);
+
+			if (argc > 6)
+			{
+				TCHAR* end_char = NULL;
+				proxyPortNum = _tcstol(argv[6], &end_char, 10);
+				if (proxyPortNum > 7 || proxyPortNum < 0) proxyPortNum = 0;
+				size_t portPos = _tcscspn(portItem1Str, _T("A"));
+				portItem1Str[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2);
+				portItem2Str[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2 + 1);
 			}
-			else 
-			{
-				_tcsncpy_s(portItem1Str, _T("Port A VST Dialog"), _TRUNCATE);
-				_tcsncpy_s(portItem2Str, _T("Port B VST Dialog"), _TRUNCATE);
+		}
+		else
+		{
+			_tcsncpy_s(portItem1Str, _T("Port A VST Dialog"), _TRUNCATE);
+			_tcsncpy_s(portItem2Str, _T("Port B VST Dialog"), _TRUNCATE);
 
-			}
+		}
 
-			for (int i = 0; i < MAX_PLUGINS; i++)
-				if (getPluginMenuItem(i, tmpPath, MAX_PATH)) {
-					if (getSelectedPluginIndex() == i)
-						AppendMenu(pluginMenu, MF_STRING | MF_ENABLED | MF_CHECKED, i, tmpPath);
-					else
-						AppendMenu(pluginMenu, MF_STRING | MF_ENABLED, i, tmpPath);
-				}
-
-			trayMenu = CreatePopupMenu();
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET, portItem1Str);
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET + 1, portItem2Str);
-			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
-			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, WAVEWRITE_START_STOP, _T("Start Wave Recording"));
-			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 3, _T("Send XG Reset"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 4, _T("Send GM2 Reset"));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 5, _T("All Notes/CC Off"));
-			AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
-			AppendMenu(trayMenu, MF_STRING | MF_ENABLED, SHOW_INFO, _T("Info..."));
-
-
-			nIconData.cbSize = sizeof(NOTIFYICONDATA);						
-			nIconData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_STATE;
-			nIconData.hWnd = hwnd;
-			nIconData.uID = WM_ICONMSG;
-			nIconData.uCallbackMessage = WM_ICONMSG;
-			nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
-
-			if (getShowDriverTrayIcon() == 0)
-			{
-				nIconData.dwState = NIS_HIDDEN;
-				nIconData.dwStateMask = NIS_HIDDEN;
+		for (int i = 0; i < MAX_PLUGINS; i++)
+			if (getPluginMenuItem(i, tmpPath, MAX_PATH)) {
+				if (getSelectedPluginIndex() == i)
+					AppendMenu(pluginMenu, MF_STRING | MF_ENABLED | MF_CHECKED, i, tmpPath);
+				else
+					AppendMenu(pluginMenu, MF_STRING | MF_ENABLED, i, tmpPath);
 			}
 
-			if (IsWinNT4())
+		trayMenu = CreatePopupMenu();
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET, portItem1Str);
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, PORT_MENU_OFFSET + 1, portItem2Str);
+		AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+		AppendMenu(trayMenu, MF_POPUP, (UINT_PTR)pluginMenu, _T("Switch Plugin"));
+		AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, WAVEWRITE_START_STOP, _T("Start Wave Recording"));
+		AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 1, _T("Send GM Reset"));
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 2, _T("Send GS Reset"));
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 3, _T("Send XG Reset"));
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 4, _T("Send GM2 Reset"));
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, RESET_MENU_OFFSET + 5, _T("All Notes/CC Off"));
+		AppendMenu(trayMenu, MF_SEPARATOR, 0, _T(""));
+		AppendMenu(trayMenu, MF_STRING | MF_ENABLED, SHOW_INFO, _T("Info..."));
+
+
+		nIconData.cbSize = sizeof(NOTIFYICONDATA);
+		nIconData.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_STATE;
+		nIconData.hWnd = hwnd;
+		nIconData.uID = WM_ICONMSG;
+		nIconData.uCallbackMessage = WM_ICONMSG;
+		nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
+
+		if (getShowDriverTrayIcon() == 0)
+		{
+			nIconData.dwState = NIS_HIDDEN;
+			nIconData.dwStateMask = NIS_HIDDEN;
+		}
+
+		if (IsWinNT4())
+		{
+			_tcscpy_s(trayTip, _T("VST Midi Synth - "));
+		}
+		else
+		{
+			if (!isMidiProxy)
 			{
-				_tcscpy_s(trayTip, _T("VST Midi Synth - "));
+				_tcscpy_s(trayTip, _T("VST Midi Synth \r\n"));
 			}
 			else
 			{
-				if (!isMidiProxy)
-				{
-					_tcscpy_s(trayTip, _T("VST Midi Synth \r\n"));
-				}
-				else 
-				{
-					
-					_tcscpy_s(trayTip, _T("VST Midi Synth(Global A/B) \r\n"));
-					size_t portPos = _tcscspn(trayTip, _T("A"));
-					trayTip[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2);
-					trayTip[portPos + 2] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2 + 1);
-					
-				}
+
+				_tcscpy_s(trayTip, _T("VST Midi Synth(Global A/B) \r\n"));
+				size_t portPos = _tcscspn(trayTip, _T("A"));
+				trayTip[portPos] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2);
+				trayTip[portPos + 2] = _T('A') + static_cast<TCHAR>(proxyPortNum * 2 + 1);
+
 			}
+		}
 
-			_tcsncat_s(trayTip, argv[3], _countof(trayTip) - _tcslen(trayTip));
+		_tcsncat_s(trayTip, argv[3], _countof(trayTip) - _tcslen(trayTip));
 
-			_tcsncpy_s(nIconData.szTip, trayTip, _TRUNCATE);
-			Shell_NotifyIcon(NIM_ADD, &nIconData);
+		_tcsncpy_s(nIconData.szTip, trayTip, _TRUNCATE);
+		Shell_NotifyIcon(NIM_ADD, &nIconData);
 
+		return 0;
+	}
+	break;
+
+	case WM_DESTROY:
+	{
+		setSelectedSysExIndex(lastUsedSysEx);
+		nIconData.dwState = 0;
+		nIconData.dwStateMask = NIS_HIDDEN;
+		Shell_NotifyIcon(NIM_MODIFY, &nIconData);
+		Sleep(1);
+		Shell_NotifyIcon(NIM_DELETE, &nIconData);
+		DestroyMenu(trayMenu);
+		trayMenu = NULL;
+		trayWndHandle = NULL;
+		PostQuitMessage(0);
+		return 0;
+	}
+	break;
+
+	case WM_ICONMSG:
+	{
+		if (wParam == WM_ICONMSG && (lParam == WM_RBUTTONDOWN || lParam == WM_LBUTTONDOWN))
+		{
+			POINT cursorPoint;
+			//bool hasEditor = portState[0].pEffect->flags & VstAEffectFlags::effFlagsHasEditor;
+			GetCursorPos(&cursorPoint);
+			CheckMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].editorHandle != NULL && IsWindowVisible(portState[0].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
+			CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].editorHandle != NULL && IsWindowVisible(portState[1].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
+			EnableMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].isPortActive /* && hasEditor */ ? MF_ENABLED : MF_GRAYED);
+			EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].isPortActive /* && hasEditor*/ ? MF_ENABLED : MF_GRAYED);
+			EnableMenuItem(trayMenu, 3, (portState[0].isPortActive || portState[1].isPortActive) && !waveWriter.getIsRecordingStarted() ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
+			EnableMenuItem(trayMenu, WAVEWRITE_START_STOP, portState[0].isPortActive || portState[1].isPortActive || waveWriter.getIsRecordingStarted() ? MF_ENABLED : MF_GRAYED);
+
+			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
+			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
+			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 3, lastUsedSysEx == RESET_MENU_OFFSET + 3 ? MF_CHECKED : MF_UNCHECKED);
+			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 4, lastUsedSysEx == RESET_MENU_OFFSET + 4 ? MF_CHECKED : MF_UNCHECKED);
+			CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 5, lastUsedSysEx == RESET_MENU_OFFSET + 5 ? MF_CHECKED : MF_UNCHECKED);
+
+			SetForegroundWindow(hwnd);
+			TrackPopupMenu(trayMenu, TPM_RIGHTBUTTON | (GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN), cursorPoint.x, cursorPoint.y, 0, hwnd, NULL);
+			PostMessage(hwnd, WM_NULL, 0, 0);
 			return 0;
 		}
-		break;
+	}
+	break;
+	case WM_HELP:
+	{
+		TCHAR tmpPath[MAX_PATH] = { 0 };
 
-		case WM_DESTROY:
+		if (GetWindowsDirectory(tmpPath, MAX_PATH))
 		{
-			setSelectedSysExIndex(lastUsedSysEx);
-			nIconData.dwState = 0;
-			nIconData.dwStateMask = NIS_HIDDEN;
+			_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\Readme.html"));
+			if (GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
+			{
+				if (GetWindowsDirectory(tmpPath, MAX_PATH))
+					_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\Readme.html"));
+			}
+
+			ShellExecute(hwnd, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
+			return 0;
+		}
+	}
+	break;
+	case WM_COMMAND:
+	{
+		static volatile int aboutBoxResult = 0;
+		TCHAR tempBuff[MAX_PATH] = { 0 };
+		TCHAR versionBuff[MAX_PATH * 2] = _T("MIDI client: ");
+		MSGBOXPARAMS params = { 0 };
+
+		if ((int)wParam >= 0 && wParam < MAX_PLUGINS)
+		{
+			setSelectedPluginIndex((int)wParam);
+			return 0;
+		}
+
+		switch (wParam)
+		{
+		case PORT_MENU_OFFSET:
+		case PORT_MENU_OFFSET + 1:
+			showVstEditor((uint32_t)wParam - PORT_MENU_OFFSET, (BOOL)lParam);
+			return 0;
+
+		case RESET_MENU_OFFSET + 1:
+		case RESET_MENU_OFFSET + 2:
+		case RESET_MENU_OFFSET + 3:
+		case RESET_MENU_OFFSET + 4:
+		case RESET_MENU_OFFSET + 5:
+			lastUsedSysEx = (int)wParam;
+			QueueOwnReset(PORT_ALL);
+			return 0;
+
+		case WAVEWRITE_START_STOP:
+		{
+			bool isRecStarted;
+			if (!waveWriter.getIsRecordingStarted())
+			{
+				uint32_t response = waveWriter.Init(is4channelMode ? 4 : 2, sample_rate, portState[0].editorHandle ? portState[0].editorHandle : portState[1].editorHandle ? portState[1].editorHandle : hwnd, hwnd, WAVEWRITE_ERROR);
+				isRecStarted = response == WaveResponse::Success;
+				if (response == WaveResponse::CannotCreate)
+				{
+					MessageBox(hwnd, _T("Wave file cannot be created.\r\nCheck write permission."), _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
+				}
+			}
+			else
+			{
+				waveWriter.Close();
+				isRecStarted = false;
+			}
+
+			ModifyMenu(trayMenu, (UINT)wParam, MF_STRING, wParam, isRecStarted ? _T("Stop Wave Recording") : _T("Start Wave Recording"));
+			nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(isRecStarted ? 32513 : 32512));
 			Shell_NotifyIcon(NIM_MODIFY, &nIconData);
-			Sleep(1);		
-			Shell_NotifyIcon(NIM_DELETE, &nIconData);
-			DestroyMenu(trayMenu);
-			trayMenu = NULL;
-			trayWndHandle = NULL;
-			PostQuitMessage(0);
 			return 0;
 		}
-		break;
 
-		case WM_ICONMSG:
-		{
-			if (wParam == WM_ICONMSG && (lParam == WM_RBUTTONDOWN || lParam == WM_LBUTTONDOWN))
+		case WAVEWRITE_ERROR:
+			if (waveWriter.TakeRecordingError())
 			{
-				POINT cursorPoint;
-				//bool hasEditor = portState[0].pEffect->flags & VstAEffectFlags::effFlagsHasEditor;
-				GetCursorPos(&cursorPoint);
-				CheckMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].editorHandle != NULL && IsWindowVisible(portState[0].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].editorHandle != NULL && IsWindowVisible(portState[1].editorHandle) ? MF_CHECKED : MF_UNCHECKED);
-				EnableMenuItem(trayMenu, PORT_MENU_OFFSET, portState[0].isPortActive /* && hasEditor */ ? MF_ENABLED : MF_GRAYED);
-				EnableMenuItem(trayMenu, PORT_MENU_OFFSET + 1, portState[1].isPortActive /* && hasEditor*/ ? MF_ENABLED : MF_GRAYED);
-				EnableMenuItem(trayMenu, 3, (portState[0].isPortActive || portState[1].isPortActive) && !waveWriter.getIsRecordingStarted() ? MF_BYPOSITION | MF_ENABLED : MF_BYPOSITION | MF_GRAYED);
-				EnableMenuItem(trayMenu, WAVEWRITE_START_STOP, portState[0].isPortActive || portState[1].isPortActive || waveWriter.getIsRecordingStarted() ? MF_ENABLED : MF_GRAYED);
+				waveWriter.Close();
 
-				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 1, lastUsedSysEx == RESET_MENU_OFFSET + 1 ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 2, lastUsedSysEx == RESET_MENU_OFFSET + 2 ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 3, lastUsedSysEx == RESET_MENU_OFFSET + 3 ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 4, lastUsedSysEx == RESET_MENU_OFFSET + 4 ? MF_CHECKED : MF_UNCHECKED);
-				CheckMenuItem(trayMenu, RESET_MENU_OFFSET + 5, lastUsedSysEx == RESET_MENU_OFFSET + 5 ? MF_CHECKED : MF_UNCHECKED);
-
-				SetForegroundWindow(hwnd);
-				TrackPopupMenu(trayMenu, TPM_RIGHTBUTTON | (GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN), cursorPoint.x, cursorPoint.y, 0, hwnd, NULL);
-				PostMessage(hwnd, WM_NULL, 0, 0);
-				return 0;
-			}		
-		}
-		break;
-		case WM_HELP:
-		{
-			TCHAR tmpPath[MAX_PATH] = { 0 };
-
-			if (GetWindowsDirectory(tmpPath, MAX_PATH))
-			{
-				_tcscat_s(tmpPath, _T("\\SysWOW64\\vstmididrv\\Help\\Readme.html"));
-				if (GetFileAttributes(tmpPath) == INVALID_FILE_ATTRIBUTES)
-				{
-					if (GetWindowsDirectory(tmpPath, MAX_PATH))
-						_tcscat_s(tmpPath, _T("\\System32\\vstmididrv\\Help\\Readme.html"));
-				}
-
-				ShellExecute(hwnd, NULL, tmpPath, NULL, NULL, SW_SHOWNORMAL);
-				return 0;
-			}
-		}
-		break;
-		case WM_COMMAND:
-		{
-			static volatile int aboutBoxResult = 0;
-			TCHAR tempBuff[MAX_PATH] = { 0 };
-			TCHAR versionBuff[MAX_PATH * 2] = _T("MIDI client: ");
-			MSGBOXPARAMS params = { 0 };
-
-			if ((int)wParam >= 0 && wParam < MAX_PLUGINS)
-			{
-				setSelectedPluginIndex((int)wParam);
-				return 0;
-			}
-
-			switch (wParam)
-			{
-			case PORT_MENU_OFFSET:
-			case PORT_MENU_OFFSET + 1:
-				showVstEditor((uint32_t)wParam - PORT_MENU_OFFSET, (BOOL)lParam);
-				return 0;
-
-			case RESET_MENU_OFFSET + 1:
-			case RESET_MENU_OFFSET + 2:
-			case RESET_MENU_OFFSET + 3:
-			case RESET_MENU_OFFSET + 4:
-			case RESET_MENU_OFFSET + 5:
-				lastUsedSysEx = (int)wParam;
-				destPort = PORT_ALL;
-				doOwnReset = true;
-				return 0;
-
-			case WAVEWRITE_START_STOP:
-			{
-				bool isRecStarted;
-				if (!waveWriter.getIsRecordingStarted())
-				{
-					uint32_t response = waveWriter.Init(is4channelMode ? 4 : 2, sample_rate, portState[0].editorHandle ? portState[0].editorHandle : portState[1].editorHandle ? portState[1].editorHandle : hwnd, hwnd, WAVEWRITE_ERROR);
-					isRecStarted = response == WaveResponse::Success;
-					if (response == WaveResponse::CannotCreate)
-					{
-						MessageBox(hwnd, _T("Wave file cannot be created.\r\nCheck write permission."), _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
-					}
-				}
-				else
-				{
-					waveWriter.Close();
-					isRecStarted = false;
-				}
-
-				ModifyMenu(trayMenu, (UINT)wParam, MF_STRING, wParam, isRecStarted ? _T("Stop Wave Recording") : _T("Start Wave Recording"));
-				nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(isRecStarted ? 32513 : 32512));
+				ModifyMenu(trayMenu, WAVEWRITE_START_STOP, MF_STRING, WAVEWRITE_START_STOP, _T("Start Wave Recording"));
+				nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
 				Shell_NotifyIcon(NIM_MODIFY, &nIconData);
-				return 0;
+
+				MessageBox(hwnd, _T("Wave recording stopped: disk write failed, maximum file size reached, or recording buffer overflowed."), _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
 			}
+			return 0;
 
-			case WAVEWRITE_ERROR:
-				if (waveWriter.getIsRecordingStarted())
-				{					
-					waveWriter.Close();
+		case SHOW_INFO:
+			if (aboutBoxResult == STILLRUNNING) return 0;
+			_tcscat_s(versionBuff, midiClient);
+			_tcscat_s(versionBuff, _T(" "));
+			_tcscat_s(versionBuff, clientBitnessStr);
+			_tcscat_s(versionBuff, _T("\r\nPlugin: "));
+#ifdef UNICODE  
+			MultiByteToWideChar(CP_ACP, 0, product_string, 64, tempBuff, 64);
+			_tcscat_s(versionBuff, tempBuff);
+#else
+			strncat_s(versionBuff, product_string, 64);
+#endif			
+			_tcscat_s(versionBuff, bitnessStr);
+			_tcscat_s(versionBuff, _T("\r\nDriver mode: "));
+			_tcscat_s(versionBuff, outputModeStr);
+			_tcscat_s(versionBuff, _T(" "));
 
-					ModifyMenu(trayMenu, WAVEWRITE_START_STOP, MF_STRING, WAVEWRITE_START_STOP, _T("Start Wave Recording"));
-					nIconData.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(32512));
-					Shell_NotifyIcon(NIM_MODIFY, &nIconData);
+			_itot_s(sample_rate, tempBuff, 10);
+			_tcscat_s(versionBuff, tempBuff);
+			_tcscat_s(versionBuff, _T(" Hz"));
 
-					MessageBox(hwnd, _T("Wave file cannot be written or maximum size has been reached.\r\nWave recording is stopped."), _T("VST Midi Driver"), MB_OK | MB_SYSTEMMODAL | MB_ICONERROR);
-				}
-				return 0;
+			_tcscat_s(versionBuff, _T("\r\n \r\n"));
 
-			case SHOW_INFO:
-				if (aboutBoxResult == STILLRUNNING) return 0;
-				_tcscat_s(versionBuff, midiClient);
-				_tcscat_s(versionBuff, _T(" "));
-				_tcscat_s(versionBuff, clientBitnessStr);
-				_tcscat_s(versionBuff, _T("\r\nPlugin: "));
-	#ifdef UNICODE  
-				MultiByteToWideChar(CP_ACP, 0, product_string, 64, tempBuff, 64);
-				_tcscat_s(versionBuff, tempBuff);
-	#else
-				strncat_s(versionBuff, product_string, 64);
-	#endif			
-				_tcscat_s(versionBuff, bitnessStr);
-				_tcscat_s(versionBuff, _T("\r\nDriver mode: "));
-				_tcscat_s(versionBuff, outputModeStr);
-				_tcscat_s(versionBuff, _T(" "));
-				
-				_itot_s(sample_rate, tempBuff, 10);
-				_tcscat_s(versionBuff, tempBuff);
-				_tcscat_s(versionBuff, _T(" Hz"));
-							
-				_tcscat_s(versionBuff, _T("\r\n \r\n"));
+			_tcscat_s(versionBuff, _T("Synth driver "));
+			GetSystemDirectory(tempBuff, MAX_PATH);
+			_tcscat_s(tempBuff, _T("\\vstmididrv.dll"));
+			GetRunTimeFileVersion(tempBuff, versionBuff, _countof(versionBuff));
 
-				_tcscat_s(versionBuff, _T("Synth driver "));
-				GetSystemDirectory(tempBuff, MAX_PATH);
-				_tcscat_s(tempBuff, _T("\\vstmididrv.dll"));
-				GetRunTimeFileVersion(tempBuff, versionBuff, _countof(versionBuff));
+			_tcscat_s(versionBuff, _T("\r\nHost bridge "));
+			GetRunTimeFileVersion(NULL, versionBuff, _countof(versionBuff));
 
-				_tcscat_s(versionBuff, _T("\r\nHost bridge "));
-				GetRunTimeFileVersion(NULL, versionBuff, _countof(versionBuff));
+			params.cbSize = sizeof(params);
+			params.dwStyle = MB_OK | MB_USERICON | MB_TOPMOST | MB_HELP;
+			params.hInstance = GetModuleHandle(NULL);
+			params.hwndOwner = hwnd;
+			params.lpszCaption = _T("VST MIDI Synth (Falcomod)");
+			params.lpszText = versionBuff;
+			params.lpszIcon = MAKEINTRESOURCE(32512);
 
-				params.cbSize = sizeof(params);
-				params.dwStyle = MB_OK | MB_USERICON | MB_TOPMOST | MB_HELP;
-				params.hInstance = GetModuleHandle(NULL);
-				params.hwndOwner = hwnd;
-				params.lpszCaption = _T("VST MIDI Synth (Falcomod)");
-				params.lpszText = versionBuff;
-				params.lpszIcon = MAKEINTRESOURCE(32512);
-
-				aboutBoxResult = STILLRUNNING;
-				aboutBoxResult = MessageBoxIndirect(&params);
-				return 0;
-			}
+			aboutBoxResult = STILLRUNNING;
+			aboutBoxResult = MessageBoxIndirect(&params);
+			return 0;
 		}
-		break;		
+	}
+	break;
 	}
 
 	return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -2238,8 +2223,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
-	bool isSinglePort32Ch = false;	
-	std::vector<uint8_t> chunk;	
+	bool isSinglePort32Ch = false;
+	std::vector<uint8_t> chunk;
 
 	MainThreadId = GetCurrentThreadId();
 
@@ -2248,7 +2233,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 	{
 		LOADUSER32FUNCTION(SetThreadDpiAwarenessContext);
 		*((void**)&DynAllowSetForegroundWindow) = GetProcAddress(user32, "AllowSetForegroundWindow");
-	}	
+	}
 
 	HINSTANCE kernel32 = GetModuleHandle(_T("kernel32.dll"));
 #ifdef UNICODE  
@@ -2397,7 +2382,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 #endif
 
 		name_string_length = (uint32_t)strlen(name_string);
-	}	
+	}
 
 	put_code(Response::NoError);
 	put_code(name_string_length);
@@ -2409,14 +2394,14 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 	if (name_string_length) put_bytes(name_string, name_string_length);
 	if (vendor_string_length) put_bytes(vendor_string, vendor_string_length);
 	if (product_string_length) put_bytes(product_string, product_string_length);
-	
+
 #pragma endregion WinMain initialization 
 
 #pragma region Message_Loop	
 	for (;;)
 	{
 		uint32_t command = get_code();
-		if (!command) break;
+		if (pipeFailed || !command) break;
 
 #ifdef LOG
 		Log(_T("Processing command %d\n"), (int)command);
@@ -2426,7 +2411,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		{
 		case Command::GetChunkData: // Get Chunk
 		{
-			getChunk(portState[0].pEffect, chunk);
+			if (!getChunk(portState[0].pEffect, chunk)) { put_code(VSTDriverInvalidChunk); break; }
 			put_code(Response::NoError);
 			put_code((uint32_t)chunk.size());
 			if (chunk.size()) put_bytes(&chunk.front(), (uint32_t)chunk.size());
@@ -2436,11 +2421,13 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::SetChunkData: // Set Chunk
 		{
 			uint32_t size = get_code();
-			chunk.resize(size);
-			if (size) get_bytes(&chunk.front(), size);
-			setChunk(portState[0].pEffect, chunk);
-			setChunk(portState[1].pEffect, chunk);
-
+			if (pipeFailed || !VSTDriverResizeChunk(chunk, size)) goto exit;
+			if (size && !get_bytes(&chunk.front(), size)) goto exit;
+			if (size && (!validateChunk(portState[0].pEffect, chunk) || !validateChunk(portState[1].pEffect, chunk))) {
+				put_code(VSTDriverInvalidChunk);
+				break;
+			}
+			if (size) { setChunk(portState[0].pEffect, chunk); setChunk(portState[1].pEffect, chunk); }
 			put_code(Response::NoError);
 		}
 		break;
@@ -2484,6 +2471,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::DisplayEditorModalThreaded: // Display Editor Modal in separate thread
 		{
 			uint32_t port_num = get_code();
+			if (pipeFailed || port_num >= MAX_PORTS) goto exit;
 
 			put_code(Response::NoError);
 
@@ -2517,6 +2505,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::SetSampleRate: // Set Sample Rate
 		{
 			uint32_t size = get_code();
+			if (pipeFailed) goto exit;
 			if (size != sizeof(sample_rate))
 			{
 				code = Response::CannotSetSampleRate;
@@ -2524,6 +2513,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 			}
 
 			sample_rate = get_code();
+			if (pipeFailed || !sample_rate) goto exit;
 
 			put_code(Response::NoError);
 		}
@@ -2532,6 +2522,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::SetHighDpiMode: // Set DPI awareness mode for plugin's editor
 		{
 			highDpiMode = (HANDLE)(int)get_code(); //requires sign extension on 64-bit
+			if (pipeFailed) goto exit;
 			put_code(Response::NoError);
 
 		}
@@ -2547,9 +2538,9 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::Reset: // Reset 
 		{
 			uint32_t port_num = get_code();
+			if (pipeFailed || port_num >= MAX_PORTS) goto exit;
 
-			destPort = port_num;
-			doOwnReset = true;
+			QueueOwnReset(isSinglePort32Ch ? PORT_ALL : port_num);
 
 			if (isSinglePort32Ch)
 			{
@@ -2580,7 +2571,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 			}
 
 			blState.resize(0);
-			resetInputEvents();
+			resetInputEvents(isSinglePort32Ch ? PORT_ALL : port_num);
+			isSinglePort32Ch = false; // Match the driver-side mode reset.
 
 			put_code(Response::NoError);
 		}
@@ -2589,6 +2581,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::SendMidiEvent: // Send MIDI Event
 		{
 			uint32_t b = get_code();
+			if (pipeFailed) goto exit;
 			uint32_t port = (b >> 24) & 1;
 			portState[port].isPortActive = true;
 			if (inputEventList.position < MAX_INPUTEVENT_COUNT) {
@@ -2608,6 +2601,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::SendMidiSysExEvent: // Send System Exclusive Event
 		{
 			uint32_t size = get_code();
+			if (pipeFailed) goto exit;
 			uint32_t port = (size >> 24) & 1;
 			size &= 0xFFFFFF;
 			portState[port].isPortActive = true;
@@ -2615,7 +2609,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 			if (size && inputEventList.position < MAX_INPUTEVENT_COUNT)
 				dump = (char*)malloc(size);
 			if (dump) {
-				get_bytes(dump, size);
+				if (!get_bytes(dump, size)) { free(dump); goto exit; }
 				InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position++];
 				memset(ev, 0, sizeof(*ev));
 				ev->port = port;
@@ -2626,7 +2620,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 				inputEventList.portMessageCount[port]++;
 			}
 			else {
-				discard_bytes(size);
+				if (!discard_bytes(size)) goto exit;
 				OutputDebugString(_T("VST MIDI Driver: pending SysEx rejected (full list, empty message, or no memory)\n"));
 			}
 			put_code(Response::NoError);
@@ -2636,7 +2630,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::RenderAudioSamples: // Render Samples
 		{
 			is4channelMode = false;
-			renderAudiosamples(2);			
+			renderAudiosamples(2);
 			resetInputEvents();
 			break;
 		}
@@ -2664,7 +2658,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 
 #pragma region WinMain_Finish
 	exit :
-	
+	resetInputEvents();
+
 	waveWriter.Close();
 
 	if (portState[0].editorHandle != NULL) SendMessageTimeout(portState[0].editorHandle, WM_CLOSE, TRUE, TRUE, SMTO_ABORTIFHUNG | SMTO_NORMAL, 1000, NULL);

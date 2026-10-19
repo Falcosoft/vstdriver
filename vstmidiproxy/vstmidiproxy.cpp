@@ -54,11 +54,13 @@ static void CALLBACK teVMCallback(LPVM_MIDI_PORT midiPort, LPBYTE midiDataBytes,
 	if (midiPort == TeVMPortA) outPort = OutPortA;
 	else if (midiPort == TeVMPortB) outPort = OutPortB;
 
-	if (!outPort) return;
+	if (!outPort || !midiDataBytes) return;
 
 	if (length < 4 && length > 1)
 	{
-		midiOutShortMsg(outPort, (DWORD)(*(LPDWORD)midiDataBytes));
+		DWORD shortMessage = 0;
+		memcpy(&shortMessage, midiDataBytes, length);
+		midiOutShortMsg(outPort, shortMessage);
 	}
 	else if (length > 1)
 	{
@@ -80,7 +82,7 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 
 	IsMidi2Srv = getMidi2Srv();
 
-	TCHAR szWindowClass[] = _T("VstMidiProxy");	
+	TCHAR szWindowClass[] = _T("VstMidiProxy");
 	TCHAR portSigns[4] = _T("A/B");
 
 	//AllocConsole();
@@ -89,7 +91,7 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 
 	portSigns[_tcslen(portSigns) - 3] = _T('A') + static_cast<TCHAR>(globalPortNum * 2);
 	portSigns[_tcslen(portSigns) - 1] = _T('A') + static_cast<TCHAR>(globalPortNum * 2 + 1);
-	
+
 	_tcscpy(wText, _T("vstmidiproxy32"));
 	if (globalPortNum > 0)_tcscat(wText, portSigns);
 
@@ -108,7 +110,7 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 		}
 		else if (globalPortNum == 0)// backward compatibility with prevuous versions
 		{
-			winHandle = FindWindow(szWindowClass, _T("VST Midi Proxy")); 
+			winHandle = FindWindow(szWindowClass, _T("VST Midi Proxy"));
 			if (winHandle)
 			{
 				ShowWindow(winHandle, SW_SHOWNORMAL);
@@ -157,7 +159,7 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 		if (foundA && foundB)  break;
 	}
 
-	if (!foundA || !foundB) 
+	if (!foundA || !foundB)
 	{
 		MessageBox(Mainhwnd, _T("VST Midi driver 2.4+ is not properly installed.\r\nDefault driver ports cannot be found.\r\nTry to reinstall the driver."), _T("VST Midi Proxy Error"), MB_OK | MB_ICONERROR);
 		return FALSE;
@@ -208,18 +210,18 @@ BOOL Initialize(HINSTANCE hInstance, int nCmdShow)
 
 	if (IsVMidiPresent)
 	{
-		TCHAR portSign[3] = _T("A)");		
+		TCHAR portSign[3] = _T("A)");
 
 		portSign[0] = _T('A') + static_cast<TCHAR>(globalPortNum * 2);
 		_tcscpy(wText, _T("VST MIDI Synth Global (port "));
-		_tcscat(wText, portSign);		
+		_tcscat(wText, portSign);
 		TeVMPortA = virtualMIDICreatePortEx2(wText, teVMCallback, NULL, 65535, TEVM_RX | TEVM_RX_ONLY);
-		
-		portSign[0] =  _T('A') + static_cast<TCHAR>(globalPortNum * 2 + 1);
+
+		portSign[0] = _T('A') + static_cast<TCHAR>(globalPortNum * 2 + 1);
 		_tcscpy(wText, _T("VST MIDI Synth Global (port "));
-		_tcscat(wText, portSign);		
+		_tcscat(wText, portSign);
 		TeVMPortB = virtualMIDICreatePortEx2(wText, teVMCallback, NULL, 65535, TEVM_RX | TEVM_RX_ONLY);
-		
+
 		IsVMidiPresent = IsVMidiPresent && TeVMPortA && TeVMPortB;
 		if (IsVMidiPresent) nCmdShow = SW_HIDE;
 	}
@@ -242,7 +244,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_WNDW);
 #endif	
 	int argc = __argc;
-	
+
 
 #ifdef UNICODE	
 	LPTSTR* argv = __wargv;
@@ -256,7 +258,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 		globalPortNum = _tcstoul(argv[1], &end_char, 10);
 		if (globalPortNum > 7) globalPortNum = 0;
 	}
-	
+
 	if (!Initialize(hInstance, nCmdShow))
 	{
 		return FALSE;
@@ -271,8 +273,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
-	}	
-	
+	}
+
 	return (int)msg.wParam;
 }
 
@@ -296,29 +298,46 @@ BOOL isX86Process(HANDLE process)
 	return bIsWow64;
 }
 
-LPTSTR getProcessName(LPTSTR buffer, DWORD processId)
+// Keep this independent of the secure CRT: Release uses the legacy msvcrt.lib.
+static void AppendTextBounded(LPTSTR buffer, size_t chars, LPCTSTR text)
 {
-	HANDLE pHandle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
-	if (pHandle)
-	{
-		TCHAR exeBuff[MAX_PATH] = { 0 };
-		TCHAR titleBuff[MAX_PATH] = { 0 };
-		GetModuleFileNameEx(pHandle, 0, exeBuff, MAX_PATH);
-		GetFileTitle(exeBuff, titleBuff, MAX_PATH);
-		_tcscat(titleBuff, isX86Process(pHandle) ? _T(" (32-bit)") : _T(" (64-bit)"));
-		_tcscat(buffer, titleBuff);
+	if (!buffer || !chars) return;
 
-		CloseHandle(pHandle);
+	size_t length = 0;
+	while (length < chars && buffer[length]) ++length;
+	if (length == chars) {
+		buffer[chars - 1] = 0;
+		return;
 	}
 
+	if (text) {
+		while (length < chars - 1 && *text) buffer[length++] = *text++;
+	}
+	buffer[length] = 0;
+}
+
+LPTSTR getProcessName(LPTSTR buffer, size_t chars, DWORD processId)
+{
+	HANDLE pHandle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processId);
+	if (pHandle) {
+		TCHAR exeBuff[MAX_PATH] = { 0 };
+		TCHAR titleBuff[MAX_PATH] = { 0 };
+		DWORD length = GetModuleFileNameEx(pHandle, 0, exeBuff, _countof(exeBuff));
+		if (length && length < _countof(exeBuff) &&
+			GetFileTitle(exeBuff, titleBuff, _countof(titleBuff)) == 0) {
+			AppendTextBounded(buffer, chars, titleBuff);
+			AppendTextBounded(buffer, chars, isX86Process(pHandle) ? _T(" (32-bit)") : _T(" (64-bit)"));
+		}
+		CloseHandle(pHandle);
+	}
 	return buffer;
 }
 
 BOOL getMidi2Srv()
 {
-	long lResult;	
+	long lResult;
 	HKEY hKey;
-	
+
 	lResult = RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("Software\\Microsoft\\Windows NT\\CurrentVersion\\Drivers32"), 0, KEY_READ, &hKey);
 	if (lResult == ERROR_SUCCESS)
 	{
@@ -332,8 +351,8 @@ BOOL getMidi2Srv()
 		if (lResult == ERROR_SUCCESS)
 		{
 			if (!_tcscmp(driverStr, _T("wdmaud2.drv"))) return TRUE;
-		}		
-		
+		}
+
 	}
 	return FALSE;
 }
@@ -378,10 +397,10 @@ void setAutoStart(bool enabled)
 		{
 			TCHAR pszValue[MAX_PATH] = { 0 };
 			GetModuleFileName(NULL, pszValue, MAX_PATH);
-			
+
 			TCHAR portStr[2] = { 0 };
 			_tcscat(pszValue, _T(" "));
-			_tcscat(pszValue, _ultot(globalPortNum , portStr, 10));
+			_tcscat(pszValue, _ultot(globalPortNum, portStr, 10));
 
 			RegSetValueEx(hKey, szValueName, NULL, REG_SZ, (LPBYTE)pszValue, (DWORD)((_tcslen(pszValue) + 1) * sizeof(TCHAR)));
 		}
@@ -402,15 +421,15 @@ int refreshClientList(const HWND hWnd)
 
 		SetWindowText(clientsCtl, _T(""));
 
-		virtualMIDIGetProcesses(TeVMPortA, (ULONG64*)&processIds, &processIdSize);
-		processIdSize /= sizeof(ULONG64);
+		if (!virtualMIDIGetProcesses(TeVMPortA, (ULONG64*)&processIds, &processIdSize)) processIdSize = 0;
+		processIdSize = min(processIdSize / sizeof(ULONG64), (DWORD)_countof(processIds));
 
 		for (DWORD i = 0; i < processIdSize; i++)
 		{
-			TCHAR buffer[MAX_PATH] = _T("Port A: ");
+			TCHAR buffer[MAX_PATH + 32] = _T("Port A: ");
 			buffer[5] = _T('A') + static_cast<TCHAR>(globalPortNum * 2);
 			if (!IsMidi2Srv)
-				_tcscat(getProcessName(buffer, (DWORD)processIds[i]), _T("\r\n"));
+				AppendTextBounded(getProcessName(buffer, _countof(buffer), (DWORD)processIds[i]), _countof(buffer), _T("\r\n"));
 			else
 				_tcscat(buffer, _T("Midi 2.0 service \r\n"));
 
@@ -419,15 +438,15 @@ int refreshClientList(const HWND hWnd)
 		}
 
 		processIdSize = sizeof(processIds);
-		virtualMIDIGetProcesses(TeVMPortB, (ULONG64*)&processIds, &processIdSize);
-		processIdSize /= sizeof(ULONG64);
+		if (!virtualMIDIGetProcesses(TeVMPortB, (ULONG64*)&processIds, &processIdSize)) processIdSize = 0;
+		processIdSize = min(processIdSize / sizeof(ULONG64), (DWORD)_countof(processIds));
 
 		for (DWORD i = 0; i < processIdSize; i++)
 		{
-			TCHAR buffer[MAX_PATH] = _T("Port B: ");
+			TCHAR buffer[MAX_PATH + 32] = _T("Port B: ");
 			buffer[5] = _T('A') + static_cast<TCHAR>(globalPortNum * 2 + 1);
 			if (!IsMidi2Srv)
-				_tcscat(getProcessName(buffer, (DWORD)processIds[i]), _T("\r\n"));
+				AppendTextBounded(getProcessName(buffer, _countof(buffer), (DWORD)processIds[i]), _countof(buffer), _T("\r\n"));
 			else
 				_tcscat(buffer, _T("Midi 2.0 service \r\n"));
 

@@ -31,11 +31,12 @@ static bool synthOpened = false;
 //static HWND hwnd = NULL;
 static int driverCount;
 
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved ){
-	if (fdwReason == DLL_PROCESS_ATTACH){
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+	if (fdwReason == DLL_PROCESS_ATTACH) {
 		hinst_vst_driver = hinstDLL;
 		//DisableThreadLibraryCalls(hinstDLL);
-	}else if(fdwReason == DLL_PROCESS_DETACH){
+	}
+	else if (fdwReason == DLL_PROCESS_DETACH) {
 		//;
 		//if (synthOpened)
 		//	midiSynth.Close();
@@ -61,7 +62,7 @@ EXTERN_C LRESULT WINAPI DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage,
 
 	TCHAR fileversionBuff[32] = _T("Driver ");
 
-	switch(wMessage) {
+	switch (wMessage) {
 	case DRV_LOAD:
 		memset(drivers, 0, sizeof(drivers));
 		driverCount = 0;
@@ -72,12 +73,13 @@ EXTERN_C LRESULT WINAPI DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage,
 		int driverNum;
 		if (driverCount == MAX_DRIVERS) {
 			return DRV_CANCEL;
-		} else {
-			for (driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {								
-				if (!drivers[driverNum].open) break;				
-			}			
 		}
-		
+		else {
+			for (driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
+				if (!drivers[driverNum].open) break;
+			}
+		}
+
 		if (driverNum == MAX_DRIVERS) return DRV_CANCEL;
 		drivers[driverNum].open = true;
 		drivers[driverNum].clientCount = 0;
@@ -90,7 +92,7 @@ EXTERN_C LRESULT WINAPI DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage,
 		return DRV_OK;
 	case DRV_QUERYCONFIGURE:
 		return DRVCNF_OK;
-	case DRV_CONFIGURE:	
+	case DRV_CONFIGURE:
 		MessageBox((HWND)dwParam1, GetFileVersion(fileversionBuff), _T("VST MIDI Driver (Falcomod)"), MB_OK | MB_ICONINFORMATION);
 		return DRVCNF_OK;
 	case DRV_CLOSE:
@@ -103,28 +105,28 @@ EXTERN_C LRESULT WINAPI DriverProc(DWORD dwDriverID, HDRVR hdrvr, WORD wMessage,
 		}
 		return DRV_CANCEL;
 	case DRV_DISABLE:
-	case DRV_REMOVE:		
+	case DRV_REMOVE:
 	case DRV_FREE:
 		if (synthOpened)
 		{
 			midiSynth.Close(true);
-			synthOpened = false;			
+			synthOpened = false;
 		}
-		return DRV_OK;	
+		return DRV_OK;
 	}
 	return DRV_OK;
 }
 
 
 HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
-	
+
 	//Rewritten to give unique GUIDs for vstmidiproxy and to fix Winamp Midi plugin 3.x ANSI/Unicode bug:
 	//It seems under unicode WinNT you never get a real ANSI request even form ANSI Midi clients. WinMM handles conversion internally.
 	//If capsSize accidentally equals an ANSI structure size (MIDIOUTCAPSA, MIDIOUTCAPS2A) the request still expects wide strings. 
-	
-	static MIDIOUTCAPS2 myCaps2[MAX_DRIVERS] = { 0 };	
-	static const TCHAR synthName[] = _T("VST MIDI Synth (port X)");	
-		
+
+	static MIDIOUTCAPS2 myCaps2[MAX_DRIVERS] = { 0 };
+	static const TCHAR synthName[] = _T("VST MIDI Synth (port X)");
+
 	if (!myCaps2[uDeviceID].wMid)
 	{
 		myCaps2[uDeviceID].wMid = MM_UNMAPPED;
@@ -135,53 +137,55 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize) {
 		myCaps2[uDeviceID].wNotes = 0;
 		myCaps2[uDeviceID].wChannelMask = 0xffff;
 		myCaps2[uDeviceID].dwSupport = MIDICAPS_VOLUME;
-		
+
 		_tcscpy_s(myCaps2[uDeviceID].szPname, synthName);
 		unsigned portCharPos = (unsigned)(_tcschr(synthName, 'X') - synthName);
 		myCaps2[uDeviceID].szPname[portCharPos] = _T('A') + static_cast<TCHAR>(uDeviceID);
-	  
+
 		//MIDIOUTCAPS2 extra
 		myCaps2[uDeviceID].ManufacturerGuid = VSTMidiDrvManufacturerGuid;
 		myCaps2[uDeviceID].ProductGuid = uDeviceID ? VSTMidiDrvPortBGuid : VSTMidiDrvPortAGuid;
 	}
 
 	memcpy(capsPtr, &myCaps2[uDeviceID], min(sizeof(MIDIOUTCAPS2), capsSize));
-	return MMSYSERR_NOERROR;	
-	
+	return MMSYSERR_NOERROR;
+
 }
 
 void DoCallback(int driverNum, DWORD_PTR clientNum, DWORD msg, DWORD_PTR param1, DWORD_PTR param2) {
-	Driver::Client *client = &drivers[driverNum].clients[clientNum];
+	Driver::Client* client = &drivers[driverNum].clients[clientNum];
 	DriverCallback(client->callback, client->flags, drivers[driverNum].hdrvr, msg, client->instance, param1, param2);
 }
 
-LONG OpenDriver(Driver *driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
+LONG OpenDriver(Driver* driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
 	int clientNum;
 	if (driver->clientCount == 0) {
 		clientNum = 0;
-	} else if (driver->clientCount == MAX_CLIENTS) {
+	}
+	else if (driver->clientCount == MAX_CLIENTS) {
 		return MMSYSERR_ALLOCATED;
-	} else {
+	}
+	else {
 		int i;
-		for (i = 0; i < MAX_CLIENTS; i++) {				
-			if (!driver->clients[i].allocated) break;			
+		for (i = 0; i < MAX_CLIENTS; i++) {
+			if (!driver->clients[i].allocated) break;
 		}
 
 		if (i == MAX_CLIENTS) return MMSYSERR_ALLOCATED;
 		clientNum = i;
 	}
-	MIDIOPENDESC *desc = (MIDIOPENDESC *)dwParam1;
+	MIDIOPENDESC* desc = (MIDIOPENDESC*)dwParam1;
 	driver->clients[clientNum].allocated = true;
 	driver->clients[clientNum].flags = HIWORD(dwParam2);
 	driver->clients[clientNum].callback = desc->dwCallback;
 	driver->clients[clientNum].instance = desc->dwInstance;
-	*(LONG *)dwUser = clientNum;
+	*(LONG*)dwUser = clientNum;
 	driver->clientCount++;
 	DoCallback(uDeviceID, clientNum, MOM_OPEN, NULL, NULL);
 	return MMSYSERR_NOERROR;
 }
 
-LONG CloseDriver(Driver *driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
+LONG CloseDriver(Driver* driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
 	if (!driver->clients[dwUser].allocated) {
 		return MMSYSERR_INVALPARAM;
 	}
@@ -192,28 +196,28 @@ LONG CloseDriver(Driver *driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DW
 }
 
 EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
-	
+
 	if (uDeviceID >= MAX_DRIVERS) return MMSYSERR_BADDEVICEID;
 
-	MIDIHDR *midiHdr;
-	Driver *driver = &drivers[uDeviceID];
+	MIDIHDR* midiHdr;
+	Driver* driver = &drivers[uDeviceID];
 	DWORD instance;
 	DWORD res;
-	
+
 	switch (uMsg) {
 	case MODM_OPEN:
 		if (!synthOpened) {
 			if (midiSynth.Init(uDeviceID) != 0) return MMSYSERR_ERROR;
-			synthOpened = true;			
+			synthOpened = true;
 		}
 		else if (!drivers[uDeviceID].clientCount) {
 			midiSynth.InitDialog(uDeviceID);
 		}
 
-		instance = NULL;		
+		instance = NULL;
 
 		res = OpenDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
-		driver->clients[*(LONG *)dwUser].synth_instance = instance;
+		driver->clients[*(LONG*)dwUser].synth_instance = instance;
 		return res;
 
 	case MODM_CLOSE:
@@ -222,34 +226,34 @@ EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, 
 		}
 
 		res = CloseDriver(driver, uDeviceID, uMsg, dwUser, dwParam1, dwParam2);
-		if (synthOpened) 
+		if (synthOpened)
 		{
 			// Reset the final port only after Close has stopped the audio worker.
-						
+
 			int clientCounts = 0;
 			for (int driverNum = 0; driverNum < MAX_DRIVERS; driverNum++) {
-			clientCounts += drivers[driverNum].clientCount;
-			if (clientCounts) break;
+				clientCounts += drivers[driverNum].clientCount;
+				if (clientCounts) break;
 			}
 
 			if (clientCounts && !drivers[uDeviceID].clientCount) midiSynth.Reset(uDeviceID);
 
-			if(!clientCounts) {
-				TCHAR exe_path[MAX_PATH] = {0};
-				TCHAR exe_title[MAX_PATH / 2] = {0};
-				
+			if (!clientCounts) {
+				TCHAR exe_path[MAX_PATH] = { 0 };
+				TCHAR exe_title[MAX_PATH / 2] = { 0 };
+
 				GetModuleFileName(NULL, exe_path, _countof(exe_path));
 				GetFileTitle(exe_path, exe_title, _countof(exe_title));
-				
+
 				//Always close fully if client is explorer. This can happen in Windows 2000's sidebar preview.
-				bool forceUnload = !_tcsicmp(exe_title,_T("Explorer.exe")) || !_tcsicmp(exe_title,_T("Explorer"));
-				
+				bool forceUnload = !_tcsicmp(exe_title, _T("Explorer.exe")) || !_tcsicmp(exe_title, _T("Explorer"));
+
 				midiSynth.Close(forceUnload);
 				synthOpened = false;
-			}		
+			}
 
 		}
-		return res;	
+		return res;
 
 	case MODM_GETDEVCAPS:
 		return modGetCaps(uDeviceID, (PVOID)dwParam1, (DWORD)dwParam2);
@@ -265,7 +269,7 @@ EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, 
 		if (driver->clients[dwUser].allocated == false) {
 			return MMSYSERR_ERROR;
 		}
-		midiHdr = (MIDIHDR *)dwParam1;
+		midiHdr = (MIDIHDR*)dwParam1;
 		if ((midiHdr->dwFlags & MHDR_PREPARED) == 0) {
 			return MIDIERR_UNPREPARED;
 		}
@@ -277,13 +281,13 @@ EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, 
 
 	case MODM_GETVOLUME:
 		*(DWORD*)dwParam1 = driver->volume;
-		return MMSYSERR_NOERROR;	
+		return MMSYSERR_NOERROR;
 
 	case MODM_SETVOLUME:
-		driver->volume = (DWORD)dwParam1;	 
+		driver->volume = (DWORD)dwParam1;
 		midiSynth.SetVolume(uDeviceID, sqrt(float(LOWORD(dwParam1)) / 65535.f)); //falco: for separate port A/B note velocity
 		return MMSYSERR_NOERROR;
-	
+
 	case MODM_RESET:
 		for (int i = 0; i <= 15; i++)
 		{
@@ -315,7 +319,7 @@ EXTERN_C DWORD WINAPI modMessage(DWORD uDeviceID, DWORD uMsg, DWORD_PTR dwUser, 
 		return MMSYSERR_NOTSUPPORTED;
 
 	default:
-		
+
 		return MMSYSERR_NOERROR;
 		break;
 	}

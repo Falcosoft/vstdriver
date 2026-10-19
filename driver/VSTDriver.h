@@ -49,7 +49,7 @@ const uint32_t ResetRequest = 255;
 
 class VSTDriver {
 private:
-	TCHAR      * szPluginPath;
+	TCHAR* szPluginPath;
 	unsigned     uPluginPlatform;
 
 	bool         bInitialized;
@@ -58,9 +58,9 @@ private:
 	HANDLE       hProcess;
 	HANDLE       hThread;
 	HANDLE       hReadEvent;
-		HANDLE       hWriteEvent;
-		HANDLE       hCancelEvent;
-		DWORD        ioTimeout;
+	HANDLE       hWriteEvent;
+	HANDLE       hCancelEvent;
+	DWORD        ioTimeout;
 	HANDLE       hChildStd_IN_Rd;
 	HANDLE       hChildStd_IN_Wr;
 	HANDLE       hChildStd_OUT_Rd;
@@ -70,9 +70,9 @@ private:
 
 	unsigned uNumOutputs;
 
-	char       * sName;
-	char       * sVendor;
-	char       * sProduct;
+	char* sName;
+	char* sVendor;
+	char* sProduct;
 	uint32_t     uVendorVersion;
 	uint32_t     uUniqueId;
 	HWND		 editorOwner;
@@ -84,38 +84,38 @@ private:
 	void process_terminate();
 	bool process_running();
 	uint32_t process_read_code();
-		bool process_read_bytes( void * buffer, uint32_t size );
-	uint32_t process_read_bytes_pass( void * buffer, uint32_t size );
-		uint32_t process_transfer_bytes_pass(void * buffer, uint32_t size, bool writing);
-	void process_write_code( uint32_t code );
-		bool process_write_bytes( const void * buffer, uint32_t size );
+	bool process_read_bytes(void* buffer, uint32_t size);
+	uint32_t process_read_bytes_pass(void* buffer, uint32_t size);
+	uint32_t process_transfer_bytes_pass(void* buffer, uint32_t size, bool writing);
+	void process_write_code(uint32_t code);
+	bool process_write_bytes(const void* buffer, uint32_t size);
 	uint32_t RenderFloatInternal(float* samples, int len, float volume, WORD channels);
 
-	void load_settings(TCHAR * szPath);
+	void load_settings(TCHAR* szPath);
 
-public:	
+public:
 	VSTDriver();
 	~VSTDriver();
 	void CloseVSTDriver();
-		void cancelPendingIO(); // Signal only; the I/O thread cancels its own NT4-compatible I/O.
-		bool isIOCancelled();
-	BOOL OpenVSTDriver(TCHAR * szPath = NULL, int sampleRate = 48000);
+	void cancelPendingIO(); // Signal only; the I/O thread cancels its own NT4-compatible I/O.
+	bool isIOCancelled();
+	BOOL OpenVSTDriver(TCHAR* szPath = NULL, int sampleRate = 48000);
 	void ResetDriver(unsigned int uDeviceID);
 	void ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1);
-	void ProcessSysEx(DWORD dwPort, const unsigned char *sysexbuffer, int exlen);
-	uint32_t Render(short * samples, int len, float volume = 1.0f, WORD channels = 2);
-	uint32_t RenderFloat(float * samples, int len, float volume = 1.0f, WORD channels = 2);
+	void ProcessSysEx(DWORD dwPort, const unsigned char* sysexbuffer, int exlen);
+	uint32_t Render(short* samples, int len, float volume = 1.0f, WORD channels = 2);
+	uint32_t RenderFloat(float* samples, int len, float volume = 1.0f, WORD channels = 2);
 
-	void getEffectName(std::string & out);
-	void getVendorString(std::string & out);
-	void getProductString(std::string & out);
+	void getEffectName(std::string& out);
+	void getVendorString(std::string& out);
+	void getProductString(std::string& out);
 	long getVendorVersion();
 	long getUniqueID();
 	bool getIsSCVA() { return IsSCVA; };
 
 	// configuration
-	void getChunk(std::vector<uint8_t> & out);
-	void setChunk( const void * in, unsigned size );
+	void getChunk(std::vector<uint8_t>& out);
+	bool setChunk(const void* in, unsigned size);
 
 	// editor
 	//bool hasEditor();

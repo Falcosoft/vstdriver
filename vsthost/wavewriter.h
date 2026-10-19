@@ -25,114 +25,125 @@
 
 #pragma pack(push, 1)
 typedef struct wav_header_ex {
-    // RIFF Header
-    char riffHeader[4]; 
-    uint32_t wavSize; 
-    // WAVE Header
-    char waveHeader[4]; 
+	// RIFF Header
+	char riffHeader[4];
+	uint32_t wavSize;
+	// WAVE Header
+	char waveHeader[4];
 
-    //fmt Header
-    char fmtHeader[4]; 
-    uint32_t fmtChunkSize; 
-    uint16_t wFormatTag; 
-    uint16_t nChannels;
-    uint32_t nSamplesPerSec;
-    uint32_t nAvgBytesPerSec; 
-    uint16_t nBlockAlign; 
-    uint16_t wBitsPerSample; 
-    uint16_t cbSize;
+	//fmt Header
+	char fmtHeader[4];
+	uint32_t fmtChunkSize;
+	uint16_t wFormatTag;
+	uint16_t nChannels;
+	uint32_t nSamplesPerSec;
+	uint32_t nAvgBytesPerSec;
+	uint16_t nBlockAlign;
+	uint16_t wBitsPerSample;
+	uint16_t cbSize;
 
-    //fact
-    char factHeader[4]; 
-    uint32_t factSize;  
-    uint32_t dwSampleLength; 
+	//fact
+	char factHeader[4];
+	uint32_t factSize;
+	uint32_t dwSampleLength;
 
-    // data
-    char dataHeader[4]; 
-    uint32_t dataSize;     
+	// data
+	char dataHeader[4];
+	uint32_t dataSize;
 
 } WaveHeaderEx;
 
 typedef struct wav_header_extensible {
-    // RIFF Header
-    char riffHeader[4];
-    uint32_t wavSize;
-    // WAVE Header
-    char waveHeader[4];
+	// RIFF Header
+	char riffHeader[4];
+	uint32_t wavSize;
+	// WAVE Header
+	char waveHeader[4];
 
-    //fmt Header
-    char fmtHeader[4];
-    uint32_t fmtChunkSize;
-    uint16_t wFormatTag;
-    uint16_t nChannels;
-    uint32_t nSamplesPerSec;
-    uint32_t nAvgBytesPerSec;
-    uint16_t nBlockAlign;
-    uint16_t wBitsPerSample;
-    uint16_t cbSize;
-    uint16_t wValidBitsPerSample;
-    uint32_t dwChannelMask;
-    GUID SubFormat;
+	//fmt Header
+	char fmtHeader[4];
+	uint32_t fmtChunkSize;
+	uint16_t wFormatTag;
+	uint16_t nChannels;
+	uint32_t nSamplesPerSec;
+	uint32_t nAvgBytesPerSec;
+	uint16_t nBlockAlign;
+	uint16_t wBitsPerSample;
+	uint16_t cbSize;
+	uint16_t wValidBitsPerSample;
+	uint32_t dwChannelMask;
+	GUID SubFormat;
 
-    //fact
-    char factHeader[4]; 
-    uint32_t factSize;  
-    uint32_t dwSampleLength; 
+	//fact
+	char factHeader[4];
+	uint32_t factSize;
+	uint32_t dwSampleLength;
 
-    // data
-    char dataHeader[4]; 
-    uint32_t dataSize;     
+	// data
+	char dataHeader[4];
+	uint32_t dataSize;
 
 } WaveHeaderExtensible;
 
 #pragma pack(pop)
 
 namespace WaveResponse {
-    enum : uint32_t
-    {
-        CannotCreate = 0,
-        Success = 1,
-        NotSelected = 2,
-        WriteError = 3,
-    };
+	enum : uint32_t
+	{
+		CannotCreate = 0,
+		Success = 1,
+		NotSelected = 2,
+		WriteError = 3,
+	};
 };
 
 class WaveWriter
 {
-public: 
-    WaveWriter();
-    uint32_t Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND messageWindow, DWORD message);
-    void WriteData(const void* data, DWORD size);
-    void Close();    
-    bool getIsRecordingStarted();
+public:
+	WaveWriter();
+	uint32_t Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND messageWindow, DWORD message);
+	void WriteData(const void* data, DWORD size);
+	void Close();
+	bool getIsRecordingStarted();
+	bool TakeRecordingError();
 
 private:
-    Win32Lock controlLock;
-    Win32Lock bufferLock;
-    const static DWORD Buffer_Size = 1024 * 1024; 
-    const static DWORD Buffer_Part_Count = 8; //8-part buffering, 128K parts
+	Win32Lock controlLock;
+	Win32Lock bufferLock;
+	const static DWORD Buffer_Part_Size = 128 * 1024;
+#ifdef WIN64
+	const static DWORD Buffer_Max_Size = 64 * 1024 * 1024;
+#else
+	const static DWORD Buffer_Max_Size = 16 * 1024 * 1024;
+#endif
+	DWORD Buffer_Size;
+	DWORD Buffer_Part_Count; // At least 8-part buffering, always 128K parts.
 
-    volatile bool isRecordingStarted;
-    volatile bool stopProcessing;
-    volatile DWORD bufferStepCount;
-    volatile DWORD bufferStepCountDone;
-    volatile DWORD bytesWritten;
-    HWND msgWindow;
-    DWORD msg;
-    char* buffer;    
-    DWORD bufferPosition;   
-    HANDLE fileHandle;
-    int channelCount; 
-    HANDLE workEvent;
-    HANDLE hThread;
-    TCHAR fileName[MAX_PATH];     
+	volatile bool isRecordingStarted;
+	volatile bool stopProcessing;
+	bool errorPending;
+	bool errorReported;
+	DWORD bufferedBytes; // Protected by bufferLock; excludes the private disk-write copy.
+	DWORD bufferReadPosition;
+	volatile DWORD bytesWritten;
+	HWND msgWindow;
+	DWORD msg;
+	char* writeBuffer; // Private 128 KiB copy, never overwritten by the audio producer.
+	char* buffer;
+	DWORD bufferPosition;
+	HANDLE fileHandle;
+	int channelCount;
+	HANDLE workEvent;
+	HANDLE hThread;
+	TCHAR fileName[MAX_PATH];
 
-    uint32_t WriteDataToDisk(const void* data, DWORD size);  
-    void ReleaseResources(); // Only after the writer exited, or before it was started.
-    WaveWriter(const WaveWriter& that);
-    WaveWriter& operator=(const WaveWriter& that);
+	void StopRecordingOnError();
+	uint32_t WriteDataToDisk(const void* data, DWORD size);
+	void ReleaseResources(); // Only after the writer exited, or before it was started.
+	WaveWriter(const WaveWriter& that);
+	WaveWriter& operator=(const WaveWriter& that);
 
-    static unsigned __stdcall WritingThread(void* pthis);
+	static unsigned __stdcall WritingThread(void* pthis);
 
 };
 
