@@ -149,12 +149,15 @@ namespace VSTMIDIDRV {
 
 	void MidiStream::Reset(DWORD port) {
 		unsigned read = startpos, write = startpos;
-		while (read != endpos) {
+		while (read != endpos) 
+		{
 			message& item = stream[read];
-			if (port == (DWORD)-1 || (item.port_type & 0x7fffffff) == port) {
+			if (port == (DWORD)-1 || (item.port_type & 0x7fffffff) == port) 
+			{
 				if ((item.port_type & 0x80000000) && item.sysex) free(item.sysex);
 			}
-			else {
+			else 
+			{
 				if (write != read) stream[write] = item;
 				write = (write + 1) % maxPos;
 			}
@@ -232,6 +235,19 @@ namespace VSTMIDIDRV {
 			startpos = 0;
 	}
 
+	DWORD MidiStream::GetShortMessages(DWORD timestamp, DWORD* messages, DWORD maxCount) {
+		DWORD count = 0;
+		while (startpos != endpos && count < maxCount)
+		{
+			const message& item = stream[startpos];
+			// A different timestamp or a SysEx ends this consecutive short-message group.
+			if (item.timestamp != timestamp || (item.port_type & 0x80000000) || !item.msg) break;
+			messages[count++] = (item.msg & 0xFFFFFF) | (item.port_type << 24);
+			if (++startpos == maxPos) startpos = 0;
+		}
+		return count;
+	}
+
 	DWORD MidiStream::PeekMessageTime() {
 		if (startpos == endpos) // check for buffer empty
 			return (DWORD)-1;
@@ -246,10 +262,12 @@ namespace VSTMIDIDRV {
 	}
 
 	DWORD MidiStream::PeekMessageCount() {
-		if (endpos < startpos) {
+		if (endpos < startpos) 
+		{
 			return endpos + maxPos - startpos;
 		}
-		else {
+		else
+		{
 			return endpos - startpos;
 		}
 	}
@@ -297,25 +315,30 @@ namespace VSTMIDIDRV {
 	}
 
 	MidiSynth::~MidiSynth() {
-		if (waveOut) {
+		if (waveOut)
+		{
 			delete waveOut;
 			waveOut = NULL;
 		}
 
-		if (bufferf) {
+		if (bufferf)
+		{
 			delete[] bufferf;
 			bufferf = NULL;
 		}
-		if (buffer) {
+		if (buffer)
+		{
 			delete[] buffer;
 			buffer = NULL;
 		}
 
-		if (bassAsioOut) {
+		if (bassAsioOut)
+		{
 			delete bassAsioOut;
 			bassAsioOut = NULL;
 		}
-		if (midiStream) {
+		if (midiStream)
+		{
 			delete midiStream;
 			midiStream = NULL;
 		}
@@ -367,7 +390,8 @@ namespace VSTMIDIDRV {
 			return MMSYSERR_INVALPARAM;
 
 		chunkSize = (unsigned int)chunkFrames;
-		if (chunkSize) {
+		if (chunkSize) 
+		{
 			// Round up without overflowing the frame-count arithmetic.
 			bufferFrames = ((bufferFrames + chunkSize - 1) / chunkSize) * chunkSize;
 			if (bufferFrames > MAXDWORD) return MMSYSERR_INVALPARAM;
@@ -375,7 +399,8 @@ namespace VSTMIDIDRV {
 		bufferSize = (unsigned int)bufferFrames;
 		midiLatency = MillisToFrames(midiLatencyMS);
 
-		if (!useAsio && (!bufferSize || !chunkSize)) {
+		if (!useAsio && (!bufferSize || !chunkSize)) 
+		{
 			bufferSize = MillisToFrames(80);
 			chunkSize = bufferSize / 4;
 			if (!bufferSize || !chunkSize) return MMSYSERR_INVALPARAM;
@@ -420,7 +445,8 @@ namespace VSTMIDIDRV {
 			// Init runs before output starts. Replace only after allocation succeeds.
 			if (usingFloat)
 			{
-				if (!bufferf || bufferfCapacity < capacityNeeded) {
+				if (!bufferf || bufferfCapacity < capacityNeeded)
+				{
 					float* replacement = new (std::nothrow) float[capacityNeeded];
 					if (!replacement) return MMSYSERR_NOMEM;
 					delete[] bufferf;
@@ -430,7 +456,8 @@ namespace VSTMIDIDRV {
 			}
 			else
 			{
-				if (!buffer || bufferCapacity < capacityNeeded) {
+				if (!buffer || bufferCapacity < capacityNeeded) 
+				{
 					short* replacement = new (std::nothrow) short[capacityNeeded];
 					if (!replacement) return MMSYSERR_NOMEM;
 					delete[] buffer;
@@ -472,7 +499,8 @@ namespace VSTMIDIDRV {
 		InterlockedExchange(&stopping, 0);
 
 		// Start playing stream
-		if (useAsio) {
+		if (useAsio) 
+		{
 			wResult = bassAsioOut->Start();
 			if (wResult) bassAsioOut->Close();
 		}
@@ -490,49 +518,58 @@ namespace VSTMIDIDRV {
 		return wResult;
 	}
 
+	DWORD MidiSynth::ProcessMIDIEvents() {
+		DWORD messages[VSTDriverMidiProtocol::MaxBatchEvents];
+		DWORD timeStamp = (DWORD)-1;
+		while (!stopping)
+		{
+			ScopeLock<Win32Lock> scopeLock(&synthLock);
+			timeStamp = midiStream->PeekMessageTime();
+			if (stopping || timeStamp != framesRendered) break;
+
+			DWORD count = midiStream->GetShortMessages(framesRendered, messages, VSTDriverMidiProtocol::MaxBatchEvents);
+			if (count) 
+			{
+				// Keep the complete request/reply under synthLock; release it between batches.
+				vstDriver->ProcessMIDIMessages(messages, count);
+			}
+			else 
+			{
+				DWORD msg, sysex_len, port;
+				unsigned char* sysex;
+				midiStream->GetMessage(port, msg, sysex, sysex_len);
+				if (!msg && sysex && sysex_len)
+				{
+					vstDriver->ProcessSysEx(port, sysex, sysex_len);
+					free(sysex);
+				}
+			}
+		}
+		return timeStamp;
+	}
+
 	// Renders totalFrames frames starting from bufpos
 	// The number of frames rendered is added to the global counter framesRendered
 	void MidiSynth::Render(short* bufpos, DWORD totalFrames) {
-		while (totalFrames > 0) {
-			if (stopping) {
+		while (totalFrames > 0)
+		{
+			if (stopping)
+			{
 				memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
 				return;
 			}
-			DWORD timeStamp = (DWORD)-1;
 			// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-			while (!stopping) {
-				{
-					DWORD msg;
-					DWORD sysex_len;
-					DWORD port;
-					unsigned char* sysex;
+			DWORD timeStamp = ProcessMIDIEvents();
 
-					ScopeLock<Win32Lock> scopeLock(&synthLock);
-					timeStamp = midiStream->PeekMessageTime();
-					if (stopping || timeStamp != framesRendered) break;
-
-					midiStream->GetMessage(port, msg, sysex, sysex_len);
-
-					if (msg && !sysex)
-					{
-						vstDriver->ProcessMIDIMessage(port, msg);
-					}
-					else if (!msg && sysex && sysex_len)
-					{
-						vstDriver->ProcessSysEx(port, sysex, sysex_len);
-						free(sysex);
-					}
-				}
-
-			}
-
-			if (stopping) {
+			if (stopping)
+			{
 				memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
 				return;
 			}
 			// Find out how many frames to render. The value of timeStamp == -1 indicates the MIDI buffer is empty
 			DWORD framesToRender = timeStamp - framesRendered;
-			if (framesToRender > totalFrames) {
+			if (framesToRender > totalFrames)
+			{
 				// MIDI message is too far - render the rest of frames
 				framesToRender = totalFrames;
 			}
@@ -554,51 +591,32 @@ namespace VSTMIDIDRV {
 		}
 
 		// Wrap framesRendered counter
-		if (framesRendered >= bufferSize) {
+		if (framesRendered >= bufferSize) 
+		{
 			framesRendered -= bufferSize;
 		}
 	}
 
 	void MidiSynth::RenderFloat(float* bufpos, DWORD totalFrames) {
-		while (totalFrames > 0) {
-			if (stopping) {
+		while (totalFrames > 0) 
+		{
+			if (stopping) 
+			{
 				memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
 				return;
 			}
-			DWORD timeStamp = (DWORD)-1;
 			// Incoming MIDI messages timestamped with the current audio playback position + midiLatency
-			while (!stopping) {
-				{
-					DWORD msg;
-					DWORD sysex_len;
-					DWORD port;
-					unsigned char* sysex;
+			DWORD timeStamp = ProcessMIDIEvents();
 
-					ScopeLock<Win32Lock> scopeLock(&synthLock);
-					timeStamp = midiStream->PeekMessageTime();
-					if (stopping || timeStamp != framesRendered) break;
-
-					midiStream->GetMessage(port, msg, sysex, sysex_len);
-
-					if (msg && !sysex)
-					{
-						vstDriver->ProcessMIDIMessage(port, msg);
-					}
-					else if (!msg && sysex && sysex_len)
-					{
-						vstDriver->ProcessSysEx(port, sysex, sysex_len);
-						free(sysex);
-					}
-				}
-			}
-
-			if (stopping) {
+			if (stopping) 
+			{
 				memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
 				return;
 			}
 			// Find out how many frames to render. The value of timeStamp == -1 indicates the MIDI buffer is empty
 			DWORD framesToRender = timeStamp - framesRendered;
-			if (framesToRender > totalFrames) {
+			if (framesToRender > totalFrames) 
+			{
 				// MIDI message is too far - render the rest of frames
 				framesToRender = totalFrames;
 			}
@@ -618,7 +636,8 @@ namespace VSTMIDIDRV {
 		}
 
 		// Wrap framesRendered counter
-		if (framesRendered >= bufferSize) {
+		if (framesRendered >= bufferSize) 
+		{
 			framesRendered -= bufferSize;
 		}
 	}
@@ -662,8 +681,10 @@ namespace VSTMIDIDRV {
 
 	bool MidiSynth::PreprocessMIDI(unsigned int& uDeviceID, DWORD& msg) {
 		//// support for F5 xx port select message (FSMP can send this message)
-		if ((unsigned char)(msg) == 0xF5 && enableSinglePort32ChMode) {
-			if (!isSinglePort32Ch) {
+		if ((unsigned char)(msg) == 0xF5 && enableSinglePort32ChMode)
+		{
+			if (!isSinglePort32Ch)
+			{
 
 				vstDriver->setSinglePort32ChMode();
 				InitDialogInternal((unsigned int)!uDeviceID);
@@ -678,13 +699,16 @@ namespace VSTMIDIDRV {
 		if (isSinglePort32Ch) uDeviceID = virtualPortNum;
 
 		////falco: running status support
-		if ((unsigned char)msg >= 0x80 && (unsigned char)msg <= 0xEF) {
+		if ((unsigned char)msg >= 0x80 && (unsigned char)msg <= 0xEF) 
+		{
 			statusBuff[uDeviceID] = (unsigned char)msg; //store status in case of normal Channel/Voice messages.
 		}
-		else if ((unsigned char)msg < 0x80 && statusBuff[uDeviceID] >= 0x80 && statusBuff[uDeviceID] <= 0xEF) {
+		else if ((unsigned char)msg < 0x80 && statusBuff[uDeviceID] >= 0x80 && statusBuff[uDeviceID] <= 0xEF) 
+		{
 			msg = (msg << 8) | statusBuff[uDeviceID]; //expand messages without status to full messages.								
 		}
-		else if ((unsigned char)msg > 0xF0 && (unsigned char)msg < 0xF7) {
+		else if ((unsigned char)msg > 0xF0 && (unsigned char)msg < 0xF7)
+		{
 			statusBuff[uDeviceID] = 0;  //clear running status in case of System Common messages				
 		}
 		else if ((unsigned char)msg < 0x80)
@@ -694,8 +718,10 @@ namespace VSTMIDIDRV {
 
 
 		////falco: midiOutSetVolume support
-		if (midiVol[uDeviceID] != 1.0f) {
-			if ((msg & 0xF0) == 0x90) {
+		if (midiVol[uDeviceID] != 1.0f) 
+		{
+			if ((msg & 0xF0) == 0x90)
+			{
 				unsigned char velocity = ((unsigned char*)&msg)[2];
 				velocity = (midiVol[uDeviceID] == 0.0 || velocity == 0) ? 0 : (unsigned char)Max<DWORD>(DWORD(velocity * midiVol[uDeviceID]), 1);
 				((unsigned char*)&msg)[2] = velocity;
@@ -741,7 +767,8 @@ namespace VSTMIDIDRV {
 	}
 
 	void MidiSynth::PlaySysEx(unsigned uDeviceID, unsigned char* bufpos, DWORD len) {
-		if (!bufpos || !len || len > VSTDriverMaxSysExBytes) {
+		if (!bufpos || !len || len > VSTDriverMaxSysExBytes) 
+		{
 			OutputDebugString(_T("VST MIDI Driver: invalid SysEx buffer rejected\n"));
 			return;
 		}
@@ -749,14 +776,25 @@ namespace VSTMIDIDRV {
 		//Short Midi channel messages can be also sent by midiOutLongMsg(). But VSTi plugins many times cannot handle short messages sent as kVstSysExType.
 		//So we will send short channel messages always as kVstMidiType. No running status support in this case.  
 		//bufpos[0] > 0x7F check has to be added because of SysEx Continuation messages...
-		if (bufpos[0] < 0xF0 && bufpos[0] > 0x7F && len > 1) {
+		if (bufpos[0] < 0xF0 && bufpos[0] > 0x7F)
+		{
 
 			DWORD startPos = 0;
-			for (DWORD i = 0; i < len; i++) {
-				if (bufpos[i] > 0x7F || i == len - 1) {
-					DWORD shortMsg = 0;
-					memcpy(&shortMsg, &bufpos[startPos], Min<DWORD>(i - startPos + 1, 3));
-					PushMIDI(uDeviceID, shortMsg);
+			for (DWORD i = 1; i <= len; i++)
+			{
+				if (i == len || bufpos[i] > 0x7F)
+				{
+					// The next status byte starts the next message; do not copy it into this one.
+					unsigned char status = bufpos[startPos];
+					DWORD messageLength = Min<DWORD>(i - startPos, 3);
+					if (status < 0xF0) messageLength = (status & 0xE0) == 0xC0 ? 2 : 3;
+					// Keep embedded system/port-select messages on the existing PushMIDI path.
+					if (i - startPos >= messageLength)
+					{
+						DWORD shortMsg = 0;
+						memcpy(&shortMsg, &bufpos[startPos], messageLength);
+						PushMIDI(uDeviceID, shortMsg);
+					}
 					startPos = i;
 				}
 			}
@@ -780,11 +818,13 @@ namespace VSTMIDIDRV {
 	void MidiSynth::Close(bool forceUnload) {
 		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
 		InterlockedExchange(&stopping, 1);
-		if (useAsio && bassAsioOut) {
+		if (useAsio && bassAsioOut)
+		{
 			bassAsioOut->Pause();
 			bassAsioOut->Close();
 		}
-		else if (!useAsio && waveOut) {
+		else if (!useAsio && waveOut)
+		{
 			waveOut->Pause();
 			waveOut->Close();
 		}
@@ -795,7 +835,8 @@ namespace VSTMIDIDRV {
 		}
 
 		// The final client's reset is deferred until the audio worker has exited.
-		if (vstDriver && keepLoaded && !forceUnload && !vstDriver->isIOCancelled()) {
+		if (vstDriver && keepLoaded && !forceUnload && !vstDriver->isIOCancelled()) 
+		{
 			Reset(0);
 			Reset(1);
 		}
@@ -825,7 +866,8 @@ namespace VSTMIDIDRV {
 	void CALLBACK MidiSynth::ResetSynthTimerProc(UINT uTimerID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dw1, DWORD_PTR dw2) {
 		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
 		// A queued plugin-switch timer must not resurrect an explicitly closed synth.
-		if (!midiSynth.stopping) {
+		if (!midiSynth.stopping)
+		{
 			midiSynth.Close(true);
 			midiSynth.Init(DWORD(-1));
 		}

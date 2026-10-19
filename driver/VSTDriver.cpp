@@ -84,27 +84,6 @@ bool UseWasapi()
 	return valid && _tcsstr(value, _T("VSTDriver-ASIO2WASAPI")) != NULL;
 }
 
-namespace Command {
-	enum : uint32_t
-	{
-		Exit = 0,
-		GetChunkData = 1,
-		SetChunkData = 2,
-		//HasEditor = 3,
-		DisplayEditorModal = 4,
-		SetSampleRate = 5,
-		Reset = 6,
-		SendMidiEvent = 7,
-		SendMidiSysExEvent = 8,
-		RenderAudioSamples = 9,
-		DisplayEditorModalThreaded = 10,
-		RenderAudioSamples4channel = 11,
-		SetHighDpiMode = 12,
-		SetSinglePort32ChMode = 13,
-		InitSysTray = 14
-	};
-};
-
 VSTDriver::VSTDriver() :
 	szPluginPath(),
 	bInitialized(),
@@ -836,9 +815,32 @@ void VSTDriver::ResetDriver(unsigned int uDeviceID) {
 
 void VSTDriver::ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1) {
 	dwParam1 = (dwParam1 & 0xFFFFFF) | (dwPort << 24);
-	process_write_code(Command::SendMidiEvent);
-	process_write_code(dwParam1);
+	uint32_t request[2] = { Command::SendMidiEvent, dwParam1 };
+	process_write_bytes(request, sizeof(request));
 
+	uint32_t code = process_read_code();
+	if (code != NoError) process_terminate();
+}
+
+void VSTDriver::ProcessMIDIMessages(const DWORD* messages, DWORD count) {
+	if (!messages || !count || count > VSTDriverMidiProtocol::MaxBatchEvents) return;
+	for (DWORD i = 0; i < count; ++i) {
+		if ((messages[i] >> 24) > 1) return;
+	}
+	if (count == 1) {
+		ProcessMIDIMessage(messages[0] >> 24, messages[0] & 0xFFFFFF);
+		return;
+	}
+
+	// One contiguous request and one acknowledgement, with no heap allocation.
+	uint32_t packet[2 + VSTDriverMidiProtocol::MaxBatchEvents];
+	packet[0] = Command::SendMidiEvents;
+	packet[1] = count;
+	memcpy(packet + 2, messages, count * sizeof(*messages));
+	if (!process_write_bytes(packet, (count + 2) * sizeof(*packet))) {
+		process_terminate();
+		return;
+	}
 	uint32_t code = process_read_code();
 	if (code != NoError) process_terminate();
 }
@@ -847,8 +849,8 @@ void VSTDriver::ProcessSysEx(DWORD dwPort, const unsigned char* sysexbuffer, int
 	// Validate before writing any part of the command; header and payload must agree.
 	if (dwPort > 1 || exlen <= 0 || (unsigned)exlen > VSTDriverMaxSysExBytes || !sysexbuffer) return;
 	dwPort = (dwPort << 24) | (unsigned)exlen;
-	process_write_code(Command::SendMidiSysExEvent);
-	process_write_code(dwPort);
+	uint32_t request[2] = { Command::SendMidiSysExEvent, dwPort };
+	process_write_bytes(request, sizeof(request));
 	process_write_bytes(sysexbuffer, exlen);
 
 	uint32_t code = process_read_code();
@@ -857,8 +859,8 @@ void VSTDriver::ProcessSysEx(DWORD dwPort, const unsigned char* sysexbuffer, int
 
 uint32_t VSTDriver::RenderFloatInternal(float* samples, int len, float volume, WORD channels) {
 	uint32_t opCode = channels == 2 ? Command::RenderAudioSamples : Command::RenderAudioSamples4channel;
-	process_write_code(opCode);
-	process_write_code(len);
+	uint32_t request[2] = { opCode, (uint32_t)len };
+	process_write_bytes(request, sizeof(request));
 
 	uint32_t code = process_read_code();
 	if (code != NoError) {
@@ -902,10 +904,11 @@ uint32_t VSTDriver::Render(short* samples, int len, float volume, WORD channels)
 #pragma warning(disable:6385) //false buffer alarms
 #pragma warning(disable:6386) 
 
-	float* float_out = (float*)_alloca((UINT64)(BUFFER_SIZE / 8) * uNumOutputs * channels / 2 * sizeof(*float_out));
+	const int maxFrames = BUFFER_SIZE / 4;
+	float* float_out = (float*)_alloca((UINT64)maxFrames * uNumOutputs * channels / 2 * sizeof(*float_out));
 	while (len > 0)
 	{
-		int len_todo = len > (BUFFER_SIZE / 8) ? (BUFFER_SIZE / 8) : len;
+		int len_todo = len > maxFrames ? maxFrames : len;
 		int result = RenderFloatInternal(float_out, len_todo, volume, channels);
 		unsigned int tmp = len_todo * uNumOutputs * channels / 2;
 		for (unsigned int i = 0; i < tmp; i++)

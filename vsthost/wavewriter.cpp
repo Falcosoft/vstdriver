@@ -72,7 +72,8 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
 		bufferPosition = bufferReadPosition = bufferedBytes = 0;
 		buffer = (char*)malloc(Buffer_Size);
 		writeBuffer = (char*)malloc(Buffer_Part_Size);
-		if (!buffer || !writeBuffer) {
+		if (!buffer || !writeBuffer) 
+		{
 			ReleaseResources();
 			return WaveResponse::CannotCreate;
 		}
@@ -81,7 +82,8 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
 		errorPending = errorReported = false;
 		workEvent = CreateEvent(NULL, false, false, NULL);
 
-		if (!workEvent) {
+		if (!workEvent) 
+		{
 			ReleaseResources();
 			return WaveResponse::CannotCreate;
 		}
@@ -110,7 +112,8 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
 			waveHeaderEx.wValidBitsPerSample = waveHeaderEx.wBitsPerSample;
 			waveHeaderEx.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 
-			if (WriteDataToDisk(&waveHeaderEx, sizeof(waveHeaderEx)) != WaveResponse::Success) {
+			if (WriteDataToDisk(&waveHeaderEx, sizeof(waveHeaderEx)) != WaveResponse::Success)
+			{
 				ReleaseResources();
 				return WaveResponse::CannotCreate;
 			}
@@ -140,7 +143,8 @@ uint32_t WaveWriter::Init(int chCount, DWORD sampleRate, HWND ownerWindow, HWND 
 
 		// Do not publish recording or start the consumer before initialization completes.
 		hThread = (HANDLE)_beginthreadex(NULL, 8192, &WritingThread, this, 0, NULL);
-		if (!hThread) {
+		if (!hThread)
+		{
 			ReleaseResources();
 			return WaveResponse::CannotCreate;
 		}
@@ -173,7 +177,8 @@ void WaveWriter::WriteData(const void* data, DWORD size)
 	ScopeLock<Win32Lock> bufferScope(&bufferLock);
 	// Recheck after acquiring the lock: the caller's earlier flag read can be stale.
 	if (!isRecordingStarted || stopProcessing || !buffer || !size) return;
-	if (!data || size > Buffer_Size - bufferedBytes) {
+	if (!data || size > Buffer_Size - bufferedBytes)
+	{
 		// Preserve the queued prefix. Never overwrite unread data or wait on disk.
 		OutputDebugString(_T("VST MIDI Driver: recording buffer overrun; stopping recording\n"));
 		StopRecordingOnError();
@@ -222,8 +227,10 @@ void WaveWriter::Close()
 	}
 	// Never hold bufferLock while waiting for disk I/O. Audio can immediately
 	// enter WriteData, see recording stopped, and return without waiting on disk.
-	if (hThread != NULL) {
-		if (WaitForSingleObject(hThread, 5000) != WAIT_OBJECT_0) {
+	if (hThread != NULL) 
+	{
+		if (WaitForSingleObject(hThread, 5000) != WAIT_OBJECT_0)
+		{
 			// Keep ALL resources alive; a later Close/Init can retry cleanup.
 			OutputDebugString(_T("VST MIDI Driver: recording writer still stopping\n"));
 			return;
@@ -288,17 +295,21 @@ unsigned __stdcall WaveWriter::WritingThread(void* pthis)
 {
 	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 	WaveWriter* self = static_cast<WaveWriter*>(pthis);
-	for (;;) {
-		if (WaitForSingleObject(self->workEvent, INFINITE) != WAIT_OBJECT_0) {
+	for (;;)
+	{
+		if (WaitForSingleObject(self->workEvent, INFINITE) != WAIT_OBJECT_0)
+		{
 			self->StopRecordingOnError();
 			return 0;
 		}
-		for (;;) {
+		for (;;) 
+		{
 			DWORD count = 0;
 			{
 				ScopeLock<Win32Lock> bufferScope(&self->bufferLock);
 				DWORD part = Buffer_Part_Size;
-				if (!self->bufferedBytes) {
+				if (!self->bufferedBytes)
+				{
 					if (self->stopProcessing) return 0;
 					break;
 				}
@@ -312,7 +323,8 @@ unsigned __stdcall WaveWriter::WritingThread(void* pthis)
 			}
 			// The producer can reuse the ring immediately. This private copy stays
 			// alive even if Close times out while WriteFile is still in progress.
-			if (self->WriteDataToDisk(self->writeBuffer, count) != WaveResponse::Success) {
+			if (self->WriteDataToDisk(self->writeBuffer, count) != WaveResponse::Success) 
+			{
 				self->StopRecordingOnError();
 				return 0;
 			}

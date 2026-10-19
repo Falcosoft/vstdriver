@@ -33,6 +33,7 @@
 #endif
 #include <string>
 #include <vector>
+#include "../common/MidiProtocol.h"
 
 #ifndef UNICODE  
 typedef std::string tstring;
@@ -102,6 +103,7 @@ public:
 	BOOL OpenVSTDriver(TCHAR* szPath = NULL, int sampleRate = 48000);
 	void ResetDriver(unsigned int uDeviceID);
 	void ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1);
+	void ProcessMIDIMessages(const DWORD* messages, DWORD count); // Packed MIDI data and port, in queue order.
 	void ProcessSysEx(DWORD dwPort, const unsigned char* sysexbuffer, int exlen);
 	uint32_t Render(short* samples, int len, float volume = 1.0f, WORD channels = 2);
 	uint32_t RenderFloat(float* samples, int len, float volume = 1.0f, WORD channels = 2);

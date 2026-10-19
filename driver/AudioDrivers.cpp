@@ -85,8 +85,10 @@ namespace VSTMIDIDRV {
 
 		// Open waveout device
 		int wResult = waveOutOpen(&hWaveOut, GetWaveOutDeviceId(), isWinNT4 ? (LPWAVEFORMATEX)&wFormatLegacy : &wFormat.Format, callback, (DWORD_PTR)parentSynth, callbackType);
-		if (wResult != MMSYSERR_NOERROR) {
-			if (!errorShown[FailedToOpen]) {
+		if (wResult != MMSYSERR_NOERROR) 
+		{
+			if (!errorShown[FailedToOpen])
+			{
 				MessageBox(NULL, _T("Failed to open waveform output device"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 				errorShown[FailedToOpen] = true;
 			}
@@ -98,7 +100,8 @@ namespace VSTMIDIDRV {
 		WaveHdr = new WAVEHDR[chunks];
 		LPSTR chunkStart = (LPSTR)buffer;
 		DWORD chunkBytes = (usingFloat ? sizeof(float) * channels : sizeof(short) * channels) * chunkSize;
-		for (UINT i = 0; i < chunks; i++) {
+		for (UINT i = 0; i < chunks; i++) 
+		{
 
 			WaveHdr[i].dwBufferLength = chunkBytes;
 			WaveHdr[i].lpData = chunkStart;
@@ -107,8 +110,10 @@ namespace VSTMIDIDRV {
 			chunkStart += chunkBytes;
 
 			wResult = waveOutPrepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
-			if (wResult != MMSYSERR_NOERROR) {
-				if (!errorShown[FailedToPrepare]) {
+			if (wResult != MMSYSERR_NOERROR) 
+			{
+				if (!errorShown[FailedToPrepare]) 
+				{
 					MessageBox(NULL, _T("Failed to Prepare Header"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[FailedToPrepare] = true;
 				}
@@ -120,11 +125,14 @@ namespace VSTMIDIDRV {
 		return 0;
 	}
 
-	int WaveOutWin32::Close() {
+	int WaveOutWin32::Close() 
+	{
 		stopProcessing = true;
 		SetEvent(hEvent);
-		if (hThread != NULL) {
-			if (WaitForSingleObject(hThread, 2000) == WAIT_TIMEOUT) {
+		if (hThread != NULL) 
+		{
+			if (WaitForSingleObject(hThread, 2000) == WAIT_TIMEOUT)
+			{
 				parentSynth->CancelPendingRender();
 			}
 			// Pipe I/O is cancellable and the worker never displays modal dialogs.
@@ -135,8 +143,10 @@ namespace VSTMIDIDRV {
 			hThread = NULL;
 		}
 		int wResult = waveOutReset(hWaveOut);
-		if (wResult != MMSYSERR_NOERROR) {
-			if (!errorShown[FailedToReset]) {
+		if (wResult != MMSYSERR_NOERROR)
+		{
+			if (!errorShown[FailedToReset])
+			{
 				MessageBox(NULL, _T("Failed to Reset WaveOut"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 				errorShown[FailedToReset] = true;
 			}
@@ -144,10 +154,13 @@ namespace VSTMIDIDRV {
 			return 8;
 		}
 
-		for (UINT i = 0; i < chunks; i++) {
+		for (UINT i = 0; i < chunks; i++)
+		{
 			wResult = waveOutUnprepareHeader(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR));
-			if (wResult != MMSYSERR_NOERROR) {
-				if (!errorShown[FailedToUnprepare]) {
+			if (wResult != MMSYSERR_NOERROR) 
+			{
+				if (!errorShown[FailedToUnprepare])
+				{
 					MessageBox(NULL, _T("Failed to Unprepare Wave Header"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[FailedToUnprepare] = true;
 				}
@@ -160,8 +173,10 @@ namespace VSTMIDIDRV {
 		chunks = 0;
 
 		wResult = waveOutClose(hWaveOut);
-		if (wResult != MMSYSERR_NOERROR) {
-			if (!errorShown[FailedToClose]) {
+		if (wResult != MMSYSERR_NOERROR)
+		{
+			if (!errorShown[FailedToClose])
+			{
 				MessageBox(NULL, _T("Failed to Close WaveOut"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 				errorShown[FailedToClose] = true;
 			}
@@ -169,19 +184,24 @@ namespace VSTMIDIDRV {
 			return 8;
 		}
 		hWaveOut = NULL;
-		if (hEvent != NULL) {
+		if (hEvent != NULL) 
+		{
 			CloseHandle(hEvent);
 			hEvent = NULL;
 		}
 		return 0;
 	}
 
-	int WaveOutWin32::Start() {
+	int WaveOutWin32::Start()
+	{
 		//getPosWraps = 0;
 		prevPlayPos = 0;
-		for (UINT i = 0; i < chunks; i++) {
-			if (waveOutWrite(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
-				if (!errorShown[FailedToWrite]) {
+		for (UINT i = 0; i < chunks; i++)
+		{
+			if (waveOutWrite(hWaveOut, &WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
+			{
+				if (!errorShown[FailedToWrite]) 
+				{
 					MessageBox(NULL, _T("Failed to write block to device"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 					errorShown[FailedToWrite] = true;
 				}
@@ -193,9 +213,12 @@ namespace VSTMIDIDRV {
 		return 0;
 	}
 
-	int WaveOutWin32::Pause() {
-		if (waveOutPause(hWaveOut) != MMSYSERR_NOERROR) {
-			if (!errorShown[FailedToPause]) {
+	int WaveOutWin32::Pause() 
+	{
+		if (waveOutPause(hWaveOut) != MMSYSERR_NOERROR)
+		{
+			if (!errorShown[FailedToPause])
+			{
 				MessageBox(NULL, _T("Failed to Pause wave playback"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 				errorShown[FailedToPause] = true;
 			}
@@ -205,9 +228,12 @@ namespace VSTMIDIDRV {
 		return 0;
 	}
 
-	int WaveOutWin32::Resume() {
-		if (waveOutRestart(hWaveOut) != MMSYSERR_NOERROR) {
-			if (!errorShown[FailedToResume]) {
+	int WaveOutWin32::Resume() 
+	{
+		if (waveOutRestart(hWaveOut) != MMSYSERR_NOERROR) 
+		{
+			if (!errorShown[FailedToResume])
+			{
 				MessageBox(NULL, _T("Failed to Resume wave playback"), _T("VST MIDI Driver"), MB_OK | MB_ICONEXCLAMATION);
 				errorShown[FailedToResume] = true;
 			}
@@ -217,7 +243,8 @@ namespace VSTMIDIDRV {
 		return 0;
 	}
 
-	UINT64 WaveOutWin32::GetPos(WORD channels) {
+	UINT64 WaveOutWin32::GetPos(WORD channels) 
+	{
 
 		DWORD WRAP_BITS = 27;
 		if (usingFloat) WRAP_BITS--;
@@ -234,16 +261,20 @@ namespace VSTMIDIDRV {
 		MMTIME mmTime = { 0 };
 		mmTime.wType = TIME_SAMPLES;
 
-		if (waveOutGetPosition(hWaveOut, &mmTime, sizeof(MMTIME)) != MMSYSERR_NOERROR) {
-			if (!errorShown[FailedToGetPosition]) {
+		if (waveOutGetPosition(hWaveOut, &mmTime, sizeof(MMTIME)) != MMSYSERR_NOERROR) 
+		{
+			if (!errorShown[FailedToGetPosition]) 
+			{
 				OutputDebugString(_T("VST MIDI Driver: failed to get playback position\n"));
 				errorShown[FailedToGetPosition] = true;
 			}
 
 			return playPositionSnapshot;
 		}
-		if (mmTime.wType != TIME_SAMPLES) {
-			if (!errorShown[FailedToGetSamples]) {
+		if (mmTime.wType != TIME_SAMPLES)
+		{
+			if (!errorShown[FailedToGetSamples])
+			{
 				OutputDebugString(_T("VST MIDI Driver: sample position unavailable\n"));
 				errorShown[FailedToGetSamples] = true;
 			}
@@ -257,7 +288,8 @@ namespace VSTMIDIDRV {
 		// The output of that nasty waveOutGetPosition() isn't monotonically increasing
 		// even during 2^27 samples playback, so we have to ensure the difference is big enough...
 		int delta = mmTime.u.sample - wrappedPosition;
-		if (delta < -WRAP_THRESHOLD) {
+		if (delta < -WRAP_THRESHOLD) 
+		{
 #ifdef _DEBUG
 			std::cout << "VST MIDI Driver: GetPos() wrap: " << delta << "\n";
 #endif
@@ -270,7 +302,7 @@ namespace VSTMIDIDRV {
 #endif
 			return playPositionSnapshot;
 		}
-		prevPlayPos = playPositionSnapshot = (UINT64)(mmTime.u.sample + (wrapCount << WRAP_BITS));
+		prevPlayPos = playPositionSnapshot = (UINT64)mmTime.u.sample + ((UINT64)wrapCount << WRAP_BITS);
 
 #ifdef _DEBUG
 		std::cout << "VST MIDI Driver: GetPos()" << playPositionSnapshot << "\n";
@@ -314,17 +346,21 @@ namespace VSTMIDIDRV {
 		while (!_this->stopProcessing)
 		{
 			bool allBuffersRendered = true;
-			for (UINT i = 0; i < _this->chunks && !_this->stopProcessing; i++) {
-				if (_this->WaveHdr[i].dwFlags & WHDR_DONE) {
+			for (UINT i = 0; i < _this->chunks && !_this->stopProcessing; i++)
+			{
+				if (_this->WaveHdr[i].dwFlags & WHDR_DONE) 
+				{
 					allBuffersRendered = false;
 					if (_this->usingFloat)
 						_this->parentSynth->RenderFloat((float*)_this->WaveHdr[i].lpData, _this->WaveHdr[i].dwBufferLength / (sizeof(float) * _this->channels));
 					else
 						_this->parentSynth->Render((short*)_this->WaveHdr[i].lpData, _this->WaveHdr[i].dwBufferLength / (sizeof(short) * _this->channels));
 					if (_this->stopProcessing) break;
-					if (waveOutWrite(_this->hWaveOut, &_this->WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+					if (waveOutWrite(_this->hWaveOut, &_this->WaveHdr[i], sizeof(WAVEHDR)) != MMSYSERR_NOERROR)
+					{
 						_this->stopProcessing = true;
-						if (!_this->errorShown[FailedToWrite]) {
+						if (!_this->errorShown[FailedToWrite])
+						{
 							OutputDebugString(_T("VST MIDI Driver: WaveOut write failed\n"));
 							_this->errorShown[FailedToWrite] = true;
 						}
@@ -332,7 +368,8 @@ namespace VSTMIDIDRV {
 					}
 				}
 			}
-			if (allBuffersRendered) {
+			if (allBuffersRendered) 
+			{
 				// Ensure the playback position is monitored frequently enough in order not to miss a wraparound
 				_this->GetPos(_this->channels);
 				WaitForSingleObject(_this->hEvent, 2000);
@@ -422,7 +459,8 @@ namespace VSTMIDIDRV {
 			// Join the next channel to it (stereo)
 			if (!BASS_ASIO_ChannelJoin(FALSE, (channelId + 1) % info.outputs, channelId)) return -2;
 
-			if (channels == 4) {
+			if (channels == 4)
+			{
 				DWORD offset = GetPortBOffset();
 				// Join the next channel to it (quad left)
 				if (!BASS_ASIO_ChannelJoin(FALSE, (channelId + offset) % info.outputs, channelId)) return -2;

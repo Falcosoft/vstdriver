@@ -1426,7 +1426,8 @@ public:
 
 		CString selectedDriverMode;
 
-		if (usingASIO) {
+		if (usingASIO)
+		{
 			selectedDriverMode = _T("Bass ASIO");
 			driverMode.SelectString(0, _T("Bass ASIO"));
 			LoadAsioDrivers();
@@ -1438,7 +1439,8 @@ public:
 
 
 		}
-		else {
+		else 
+		{
 			selectedDriverMode = _T("WinMM WaveOut");
 			driverMode.SelectString(0, _T("WinMM WaveOut"));
 			LoadWaveOutDrivers();

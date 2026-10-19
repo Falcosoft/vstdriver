@@ -9,6 +9,7 @@
 #include "wavewriter.h"
 #include "log.h"
 #include "../common/LegacySafety.h"
+#include "../common/MidiProtocol.h"
 
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
@@ -47,27 +48,6 @@ static HANDLE WIN32DEF(SetThreadDpiAwarenessContext)(HANDLE dpiContext) = NULL;
 #define BUFFER_SIZE 4800  //matches better for typical 48/96/192 kHz
 #define MAX_INPUTEVENT_COUNT 1024  // Bounded pending list; producers can refill the driver queue while it drains.
 #define PORT_ALL 0xFFFF
-
-namespace Command {
-	enum : uint32_t
-	{
-		GetChunkData = 1,
-		SetChunkData = 2,
-		HasEditor = 3,
-		DisplayEditorModal = 4,
-		SetSampleRate = 5,
-		Reset = 6,
-		SendMidiEvent = 7,
-		SendMidiSysExEvent = 8,
-		RenderAudioSamples = 9,
-		DisplayEditorModalThreaded = 10,
-		RenderAudioSamples4channel = 11,
-		SetHighDpiMode = 12,
-		SetSinglePort32ChMode = 13,
-		InitSysTray = 14
-
-	};
-};
 
 namespace Response {
 	enum : uint32_t
@@ -315,17 +295,37 @@ static TCHAR* GetRunTimeFileVersion(TCHAR* filePath, TCHAR* result, unsigned buf
 	return result;
 }
 
+static void QueueMidiEvent(uint32_t b)
+{
+	uint32_t port = (b >> 24) & 1;
+	portState[port].isPortActive = true;
+	if (inputEventList.position < MAX_INPUTEVENT_COUNT)
+	{
+		InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position++];
+		memset(ev, 0, sizeof(*ev));
+		ev->port = port;
+		ev->ev.midiEvent.type = kVstMidiType;
+		ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
+		memcpy(&ev->ev.midiEvent.midiData, &b, sizeof(b));
+		inputEventList.portMessageCount[port]++;
+	}
+	else OutputDebugString(_T("VST MIDI Driver: pending MIDI event list full\n"));
+}
+
 void resetInputEvents(unsigned port = PORT_ALL)
 {
 	unsigned kept = 0;
 	inputEventList.portMessageCount[0] = inputEventList.portMessageCount[1] = 0;
-	for (unsigned i = 0; i < inputEventList.position; ++i) {
+	for (unsigned i = 0; i < inputEventList.position; ++i) 
+	{
 		InputEventList::InputEvent& item = inputEventList.events[i];
-		if (port == PORT_ALL || item.port == port) {
+		if (port == PORT_ALL || item.port == port)
+		{
 			if (item.ev.sysexEvent.type == kVstSysExType && item.ev.sysexEvent.sysexDump)
 				free(item.ev.sysexEvent.sysexDump);
 		}
-		else {
+		else 
+		{
 			if (kept != i) inputEventList.events[kept] = item;
 			++inputEventList.portMessageCount[item.port];
 			++kept;
@@ -338,9 +338,11 @@ bool put_bytes(const void* out, uint32_t size)
 {
 	if (pipeFailed) return false;
 	const uint8_t* bytes = (const uint8_t*)out;
-	while (size) {
+	while (size)
+	{
 		DWORD done = 0;
-		if (!WriteFile(pipe_out, bytes, size, &done, NULL) || !done || done > size) {
+		if (!WriteFile(pipe_out, bytes, size, &done, NULL) || !done || done > size) 
+		{
 			pipeFailed = true;
 			return false;
 		}
@@ -359,9 +361,11 @@ bool get_bytes(void* in, uint32_t size)
 {
 	if (pipeFailed) return false;
 	uint8_t* bytes = (uint8_t*)in;
-	while (size) {
+	while (size)
+	{
 		DWORD done = 0;
-		if (!ReadFile(pipe_in, bytes, size, &done, NULL) || !done || done > size) {
+		if (!ReadFile(pipe_in, bytes, size, &done, NULL) || !done || done > size) 
+		{
 			pipeFailed = true;
 			return false;
 		}
@@ -374,7 +378,8 @@ bool get_bytes(void* in, uint32_t size)
 bool discard_bytes(uint32_t size)
 {
 	char scratch[1024];
-	while (size) {
+	while (size)
+	{
 		unsigned wanted = size > sizeof(scratch) ? sizeof(scratch) : size;
 		if (!get_bytes(scratch, wanted)) return false;
 		size -= wanted;
@@ -400,7 +405,8 @@ bool getChunk(AEffect* effect, std::vector<uint8_t>& out)
 	void* data = NULL;
 	VstIntPtr dataSize = 0;
 	UINT64 total = sizeof(uint32_t) + sizeof(bool) + sizeof(uint32_t);
-	if (chunked) {
+	if (chunked)
+	{
 		dataSize = effect->dispatcher(effect, effGetChunk, 0, 0, &data, 0);
 		if (dataSize < 0 || (dataSize && !data)) return false;
 		total += (UINT64)dataSize;
@@ -413,24 +419,29 @@ bool getChunk(AEffect* effect, std::vector<uint8_t>& out)
 	catch (const std::length_error&) { return false; }
 	append_be(out, (uint32_t)effect->uniqueID);
 	append_be(out, chunked);
-	if (chunked) {
+	if (chunked)
+	{
 		append_be(out, (uint32_t)dataSize);
 		size_t offset = out.size();
 		out.resize(offset + (size_t)dataSize); // Capacity was checked and reserved above.
 		if (dataSize) memcpy(&out[offset], data, (size_t)dataSize);
 	}
-	else {
+	else 
+	{
 		append_be(out, params);
 		if (programs > 1 && original) effect->dispatcher(effect, effSetProgram, 0, 0, NULL, 0);
 		for (unsigned i = 0; i < params; ++i) append_be(out, effect->getParameter(effect, i));
 	}
-	if (programs > 1) {
+	if (programs > 1) 
+	{
 		append_be(out, (uint32_t)'VstD'); //From now on in case of more programs we save all programs. These new markers are for file version check.
 		append_be(out, (uint32_t)'Ver2');
 		append_be(out, programs);
 		append_be(out, original);
-		if (!chunked) {
-			for (unsigned j = 1; j < programs; ++j) {
+		if (!chunked)
+		{
+			for (unsigned j = 1; j < programs; ++j)
+			{
 				effect->dispatcher(effect, effSetProgram, 0, j, NULL, 0);
 				for (unsigned i = 0; i < params; ++i) append_be(out, effect->getParameter(effect, i));
 			}
@@ -452,11 +463,13 @@ bool validateChunk(AEffect* effect, const std::vector<uint8_t>& in)
 		!retrieve_be(chunked, cursor, size) || chunked > 1 ||
 		(chunked != 0) != ((effect->flags & effFlagsProgramChunks) != 0) ||
 		!retrieve_be(amount, cursor, size)) return false;
-	if (chunked) {
+	if (chunked)
+	{
 		if (amount > size) return false;
 		cursor += amount; size -= amount;
 	}
-	else {
+	else
+	{
 		if (amount != (uint32_t)effect->numParams || amount > size / sizeof(float)) return false;
 		cursor += amount * sizeof(float); size -= amount * sizeof(float);
 	}
@@ -481,27 +494,34 @@ bool setChunk(AEffect* effect, const std::vector<uint8_t>& in)
 	retrieve_be(chunked, cursor, size);
 	retrieve_be(amount, cursor, size);
 	uint32_t original = (uint32_t)effect->dispatcher(effect, effGetProgram, 0, 0, NULL, 0);
-	if (chunked) {
+	if (chunked) 
+	{
 		effect->dispatcher(effect, effSetChunk, 0, amount, (void*)cursor, 0);
 		cursor += amount; size -= amount;
 	}
-	else {
+	else
+	{
 		if (effect->numPrograms > 1 && original) effect->dispatcher(effect, effSetProgram, 0, 0, NULL, 0);
-		for (unsigned i = 0; i < amount; ++i) {
+		for (unsigned i = 0; i < amount; ++i)
+		{
 			float parameter = 0;
 			retrieve_be(parameter, cursor, size);
 			effect->setParameter(effect, i, parameter);
 		}
 	}
 	bool versioned = size != 0;
-	if (versioned) {
+	if (versioned)
+	{
 		uint32_t marker = 0, programs = 0;
 		retrieve_be(marker, cursor, size); retrieve_be(marker, cursor, size);
 		retrieve_be(programs, cursor, size); retrieve_be(original, cursor, size);
-		if (!chunked) {
-			for (unsigned j = 1; j < programs; ++j) {
+		if (!chunked) 
+		{
+			for (unsigned j = 1; j < programs; ++j)
+			{
 				effect->dispatcher(effect, effSetProgram, 0, j, NULL, 0);
-				for (unsigned i = 0; i < amount; ++i) {
+				for (unsigned i = 0; i < amount; ++i) 
+				{
 					float parameter = 0;
 					retrieve_be(parameter, cursor, size);
 					effect->setParameter(effect, i, parameter);
@@ -531,7 +551,8 @@ BOOL settings_save(AEffect* effect)
 	HANDLE file = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (file == INVALID_HANDLE_VALUE) return FALSE;
 	DWORD total = 0;
-	while (total < chunk.size()) {
+	while (total < chunk.size()) 
+	{
 		DWORD done = 0;
 		if (!WriteFile(file, &chunk[total], (DWORD)chunk.size() - total, &done, NULL) || !done) break;
 		total += done;
@@ -672,7 +693,8 @@ void InsertSysExEvent(const char* sysExBytes, int size, DWORD portNum)
 
 	if (ev->ev.sysexEvent.sysexDump)
 		memcpy(ev->ev.sysexEvent.sysexDump, sysExBytes, size);
-	else {
+	else 
+	{
 		inputEventList.position--;
 		inputEventList.portMessageCount[portNum]--;
 	}
@@ -1582,14 +1604,16 @@ INT_PTR CALLBACK EditorProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				float** samples = (float**)malloc(sizeof(float**) * effect->numOutputs);
 				if (samples)
 				{
-					for (int channel = 0; channel < effect->numOutputs; channel++) {
+					for (int channel = 0; channel < effect->numOutputs; channel++)
+					{
 						samples[channel] = (float*)malloc(sizeof(float*) * sampleFrames);
 					}
 
 					effect->processReplacing(effect, samples, samples, sampleFrames); //ADLPlug's editor is frozen without this.
 					sample_pos += sampleFrames;
 
-					for (int channel = 0; channel < effect->numOutputs; channel++) {
+					for (int channel = 0; channel < effect->numOutputs; channel++)
+					{
 						free(samples[channel]);
 					}
 
@@ -1815,7 +1839,8 @@ LRESULT CALLBACK TrayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 
 		for (int i = 0; i < MAX_PLUGINS; i++)
-			if (getPluginMenuItem(i, tmpPath, MAX_PATH)) {
+			if (getPluginMenuItem(i, tmpPath, MAX_PATH)) 
+			{
 				if (getSelectedPluginIndex() == i)
 					AppendMenu(pluginMenu, MF_STRING | MF_ENABLED | MF_CHECKED, i, tmpPath);
 				else
@@ -2074,7 +2099,8 @@ static void TrayThread(void* threadparam)
 
 	//ShowWindow(trayWndHandle, SW_SHOWNORMAL);
 
-	while (GetMessage(&message, NULL, 0, 0)) {
+	while (GetMessage(&message, NULL, 0, 0))
+	{
 		TranslateMessage(&message);
 		DispatchMessage(&message);
 	}
@@ -2582,18 +2608,24 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		{
 			uint32_t b = get_code();
 			if (pipeFailed) goto exit;
-			uint32_t port = (b >> 24) & 1;
-			portState[port].isPortActive = true;
-			if (inputEventList.position < MAX_INPUTEVENT_COUNT) {
-				InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position++];
-				memset(ev, 0, sizeof(*ev));
-				ev->port = port;
-				ev->ev.midiEvent.type = kVstMidiType;
-				ev->ev.midiEvent.byteSize = sizeof(ev->ev.midiEvent);
-				memcpy(&ev->ev.midiEvent.midiData, &b, sizeof(b));
-				inputEventList.portMessageCount[port]++;
+			QueueMidiEvent(b);
+			put_code(Response::NoError);
+		}
+		break;
+
+		case Command::SendMidiEvents: // Send consecutive short MIDI events at one timestamp
+		{
+			uint32_t count = get_code();
+			if (pipeFailed) goto exit;
+			if (!count || count > VSTDriverMidiProtocol::MaxBatchEvents) { code = Response::CommandUnknown; goto exit; }
+			uint32_t messages[VSTDriverMidiProtocol::MaxBatchEvents];
+			if (!get_bytes(messages, count * sizeof(*messages))) goto exit;
+			// Validate the whole packet before changing the pending event list.
+			for (uint32_t i = 0; i < count; ++i) 
+			{
+				if ((messages[i] >> 24) >= MAX_PORTS) { code = Response::CommandUnknown; goto exit; }
 			}
-			else OutputDebugString(_T("VST MIDI Driver: pending MIDI event list full\n"));
+			for (uint32_t i = 0; i < count; ++i) QueueMidiEvent(messages[i]);
 			put_code(Response::NoError);
 		}
 		break;
@@ -2608,8 +2640,13 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 			char* dump = NULL;
 			if (size && inputEventList.position < MAX_INPUTEVENT_COUNT)
 				dump = (char*)malloc(size);
-			if (dump) {
-				if (!get_bytes(dump, size)) { free(dump); goto exit; }
+			if (dump)
+			{
+				if (!get_bytes(dump, size))
+				{
+					free(dump);
+					goto exit;
+				}
 				InputEventList::InputEvent* ev = &inputEventList.events[inputEventList.position++];
 				memset(ev, 0, sizeof(*ev));
 				ev->port = port;
