@@ -76,10 +76,15 @@ bool UseWasapi()
 	TCHAR value[MAX_PATH] = { 0 };
 #ifdef WIN64
 	LPCTSTR name = _T("Bass ASIO x64");
+	LPCTSTR fallbackName = _T("Bass ASIO");
 #else
 	LPCTSTR name = _T("Bass ASIO");
+	LPCTSTR fallbackName = _T("Bass ASIO x64");
 #endif
 	bool valid = VSTDriverReadRegistryString(hKey, name, value, _countof(value));
+	// Match the ASIO driver selection fallback when this architecture has no selection.
+	if (!valid || !value[0])
+		valid = VSTDriverReadRegistryString(hKey, fallbackName, value, _countof(value));
 	RegCloseKey(hKey);
 	return valid && _tcsstr(value, _T("VSTDriver-ASIO2WASAPI")) != NULL;
 }
