@@ -1,6 +1,7 @@
 name: CodeQL
 
 on:
+  workflow_dispatch:
   push:
     branches: ["master"]
   pull_request:
@@ -36,23 +37,26 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: cpp
+          build-mode: manual
 
+      # The Windows 2022 image already includes Visual Studio 2022 and ATL.
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[17.0,18.0)'
+          msbuild-architecture: x64
 
-      - name: Install Visual Studio
-        uses: microsoft/setup-visual-studio@v1
-        with: 
-        channel: 2022
-        components: |
-          microsoft.visualstudio.component.atl
-
-      - name: Build debuggable x64 
+      - name: Build debuggable x64
         working-directory: ${{ github.workspace }}
-        run: msbuild /m /p:Configuration="Debug" /p:Platform="x64" /p:PlatformToolset=v142 ${{ env.SOLUTION_FILE_PATH }}
+        run: >-
+          msbuild "${{ env.SOLUTION_FILE_PATH }}"
+          /m /t:Rebuild
+          /p:Configuration=Debug /p:Platform=x64
+          /p:PlatformToolset=v143
+          /p:WindowsTargetPlatformVersion=10.0
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
