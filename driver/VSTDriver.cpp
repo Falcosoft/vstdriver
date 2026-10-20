@@ -89,15 +89,37 @@ bool UseWasapi()
 	return valid && _tcsstr(value, _T("VSTDriver-ASIO2WASAPI")) != NULL;
 }
 
+// Reused for serialized pipe transfers; no allocation is needed per MIDI/audio request.
+// Both the OVERLAPPED and its buffer must survive a cancellation timeout.
+struct VSTDriverPipeIO {
+	OVERLAPPED overlapped;
+	BYTE buffer[65536];
+};
+
+// Keep timeout recovery separate from a worker delayed outside bridge I/O.
+class VSTDriverIOActivity {
+	volatile LONG* pending;
+public:
+	explicit VSTDriverIOActivity(volatile LONG* state) : pending(state) {
+		InterlockedExchange(pending, 1);
+	}
+	~VSTDriverIOActivity() {
+		InterlockedExchange(pending, 0);
+	}
+};
+
 VSTDriver::VSTDriver() :
 	szPluginPath(),
 	bInitialized(),
 	bInitializedOtherModel(),
 	hProcess(),
+	childProcessId(),
 	hThread(),
 	hReadEvent(),
 	hWriteEvent(),
 	hCancelEvent(),
+	pipeIO(),
+	pendingIO(),
 	ioTimeout(INFINITE),
 	hChildStd_IN_Rd(),
 	hChildStd_IN_Wr(),
@@ -118,6 +140,7 @@ VSTDriver::VSTDriver() :
 
 VSTDriver::~VSTDriver() {
 	CloseVSTDriver();
+	delete pipeIO;
 	if (hCancelEvent) CloseHandle(hCancelEvent);
 	delete[] sName;
 	delete[] sVendor;
@@ -424,6 +447,7 @@ bool VSTDriver::process_create()
 	hChildStd_IN_Rd = NULL;
 
 	hProcess = piProcInfo.hProcess;
+	childProcessId = piProcInfo.dwProcessId;
 	hThread = piProcInfo.hThread;
 
 #ifdef NDEBUG
@@ -480,26 +504,51 @@ bool VSTDriver::process_create()
 	return true;
 }
 
+void VSTDriver::cancel_and_wait_for_io(HANDLE pipe, VSTDriverPipeIO* operation)
+{
+	// CancelIo cancels only I/O issued by THIS thread (available on NT4).
+	CancelIo(pipe);
+	if (WaitForSingleObject(operation->overlapped.hEvent, 5000) == WAIT_OBJECT_0) {
+		DWORD bytesDone = 0;
+		GetOverlappedResult(pipe, &operation->overlapped, &bytesDone, FALSE);
+		return;
+	}
+
+	// Stop using this connection. Retain the unfinished operation and its handles
+	// until process exit so a late completion cannot touch freed/reused storage.
+	cancelPendingIO();
+	if (pipe == hChildStd_IN_Wr) hChildStd_IN_Wr = NULL;
+	if (pipe == hChildStd_OUT_Rd) hChildStd_OUT_Rd = NULL;
+	if (operation->overlapped.hEvent == hReadEvent) hReadEvent = NULL;
+	if (operation->overlapped.hEvent == hWriteEvent) hWriteEvent = NULL;
+	pipeIO = NULL;
+	OutputDebugString(_T("VST MIDI Driver: pipe cancellation timed out; connection abandoned\n"));
+}
+
 void VSTDriver::process_terminate()
 {
 	if (hProcess) {
 		// A failed pipe write must never recursively enter process_terminate.
 		// Attempt a bounded graceful exit only when the protocol is still usable.
 		if (process_running() && !isIOCancelled() && hWriteEvent) {
-			DWORD command = Command::Exit, written = 0;
-			OVERLAPPED ol = { 0 };
-			ol.hEvent = hWriteEvent;
-			ResetEvent(hWriteEvent);
-			BOOL done = WriteFile(hChildStd_IN_Wr, &command, sizeof(command), &written, &ol);
-			if (!done && GetLastError() == ERROR_IO_PENDING) {
-				if (WaitForSingleObject(hWriteEvent, 500) == WAIT_OBJECT_0)
-					done = GetOverlappedResult(hChildStd_IN_Wr, &ol, &written, FALSE);
-				else {
-					CancelIo(hChildStd_IN_Wr);
-					GetOverlappedResult(hChildStd_IN_Wr, &ol, &written, TRUE);
+			if (!pipeIO) pipeIO = new (std::nothrow) VSTDriverPipeIO;
+			if (pipeIO) {
+				VSTDriverIOActivity activity(&pendingIO);
+				VSTDriverPipeIO* operation = pipeIO;
+				DWORD command = Command::Exit, written = 0;
+				memset(&operation->overlapped, 0, sizeof(operation->overlapped));
+				operation->overlapped.hEvent = hWriteEvent;
+				memcpy(operation->buffer, &command, sizeof(command));
+				ResetEvent(hWriteEvent);
+				BOOL done = WriteFile(hChildStd_IN_Wr, operation->buffer, sizeof(command), &written, &operation->overlapped);
+				if (!done && GetLastError() == ERROR_IO_PENDING) {
+					if (WaitForSingleObject(hWriteEvent, 500) == WAIT_OBJECT_0)
+						done = GetOverlappedResult(hChildStd_IN_Wr, &operation->overlapped, &written, FALSE);
+					else
+						cancel_and_wait_for_io(hChildStd_IN_Wr, operation);
 				}
+				if (done && written == sizeof(command)) WaitForSingleObject(hProcess, 5000);
 			}
-			if (done && written == sizeof(command)) WaitForSingleObject(hProcess, 5000);
 		}
 		if (process_running()) {
 			TerminateProcess(hProcess, 0);
@@ -518,6 +567,7 @@ void VSTDriver::process_terminate()
 	bInitialized = false;
 	bInitializedOtherModel = false;
 	hProcess = hThread = hReadEvent = hWriteEvent = NULL;
+	childProcessId = 0;
 	hChildStd_IN_Rd = hChildStd_IN_Wr = NULL;
 	hChildStd_OUT_Rd = hChildStd_OUT_Wr = NULL;
 	// hCancelEvent belongs to this VSTDriver object, not the child process.
@@ -531,6 +581,26 @@ void VSTDriver::cancelPendingIO()
 bool VSTDriver::isIOCancelled()
 {
 	return hCancelEvent && WaitForSingleObject(hCancelEvent, 0) == WAIT_OBJECT_0;
+}
+
+bool VSTDriver::hasPendingIO()
+{
+	return InterlockedCompareExchange(&pendingIO, 0, 0) != 0;
+}
+
+static BOOL CALLBACK HideBridgeWindow(HWND window, LPARAM processId)
+{
+	DWORD windowProcessId = 0;
+	GetWindowThreadProcessId(window, &windowProcessId);
+	if (windowProcessId == (DWORD)processId) ShowWindowAsync(window, SW_HIDE);
+	return TRUE;
+}
+
+void VSTDriver::hideEditors()
+{
+	// Do not wait for the rendering pipe or another thread's window procedure.
+	if (childProcessId && process_running())
+		EnumWindows(HideBridgeWindow, (LPARAM)childProcessId);
 }
 
 bool VSTDriver::process_running()
@@ -551,14 +621,26 @@ static void ProcessPendingMessages(HWND editorOwner)
 uint32_t VSTDriver::process_transfer_bytes_pass(void* out, uint32_t size, bool writing)
 {
 	if (isIOCancelled() || !process_running()) return 0;
+	if (!pipeIO) pipeIO = new (std::nothrow) VSTDriverPipeIO;
+	if (!pipeIO) return 0;
+	VSTDriverIOActivity activity(&pendingIO);
+	VSTDriverPipeIO* operation = pipeIO;
+	// The byte-stream callers already retry partial transfers.
+	if (size > sizeof(operation->buffer)) size = (uint32_t)sizeof(operation->buffer);
 	HANDLE pipe = writing ? hChildStd_IN_Wr : hChildStd_OUT_Rd;
-	OVERLAPPED ol = { 0 };
+	OVERLAPPED& ol = operation->overlapped;
+	memset(&ol, 0, sizeof(ol));
 	ol.hEvent = writing ? hWriteEvent : hReadEvent;
 	ResetEvent(ol.hEvent);
 	DWORD bytesDone = 0;
-	BOOL done = writing ? WriteFile(pipe, out, size, &bytesDone, &ol) :
-		ReadFile(pipe, out, size, &bytesDone, &ol);
-	if (done) return bytesDone;
+	if (writing) memcpy(operation->buffer, out, size);
+	BOOL done = writing ? WriteFile(pipe, operation->buffer, size, &bytesDone, &ol) :
+		ReadFile(pipe, operation->buffer, size, &bytesDone, &ol);
+	if (done) {
+		if (bytesDone > size) return 0;
+		if (!writing) memcpy(out, operation->buffer, bytesDone);
+		return bytesDone;
+	}
 	if (GetLastError() != ERROR_IO_PENDING) return 0;
 
 	const HANDLE handles[3] = { ol.hEvent, hCancelEvent, hProcess };
@@ -574,12 +656,12 @@ uint32_t VSTDriver::process_transfer_bytes_pass(void* out, uint32_t size, bool w
 			ProcessPendingMessages(editorOwner);
 			continue;
 		}
-		if (state == WAIT_OBJECT_0 && GetOverlappedResult(pipe, &ol, &bytesDone, FALSE))
+		if (state == WAIT_OBJECT_0 && GetOverlappedResult(pipe, &ol, &bytesDone, FALSE)) {
+			if (bytesDone > size) return 0;
+			if (!writing) memcpy(out, operation->buffer, bytesDone);
 			return bytesDone;
-		// CancelIo cancels only I/O issued by THIS thread (available on NT4).
-		// Reap completion before the stack OVERLAPPED or caller's buffer expires.
-		CancelIo(pipe);
-		GetOverlappedResult(pipe, &ol, &bytesDone, TRUE);
+		}
+		cancel_and_wait_for_io(pipe, operation);
 		return 0;
 	}
 }

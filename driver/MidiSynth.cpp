@@ -578,6 +578,11 @@ namespace VSTMIDIDRV {
 			{
 				ScopeLock<Win32Lock> scopeLock(&synthLock);
 
+				if (stopping)
+				{
+					memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
+					return;
+				}
 				result = vstDriver->Render(bufpos, framesToRender, outputGain, channels);
 			}
 
@@ -625,6 +630,11 @@ namespace VSTMIDIDRV {
 			{
 				ScopeLock<Win32Lock> scopeLock(&synthLock);
 
+				if (stopping)
+				{
+					memset(bufpos, 0, (size_t)totalFrames * channels * sizeof(*bufpos));
+					return;
+				}
 				result = vstDriver->RenderFloat(bufpos, framesToRender, outputGain, channels);
 			}
 
@@ -818,6 +828,8 @@ namespace VSTMIDIDRV {
 	void MidiSynth::Close(bool forceUnload) {
 		ScopeLock<Win32Lock> lifecycleScope(&lifecycleLock);
 		InterlockedExchange(&stopping, 1);
+		// Hide editors without waiting for the audio worker or a bridge exchange.
+		if (vstDriver) vstDriver->hideEditors();
 		if (useAsio && bassAsioOut)
 		{
 			bassAsioOut->Pause();
@@ -834,13 +846,13 @@ namespace VSTMIDIDRV {
 			if (midiStream) midiStream->Reset();
 		}
 
-		// The final client's reset is deferred until the audio worker has exited.
-		if (vstDriver && keepLoaded && !forceUnload && !vstDriver->isIOCancelled()) 
+		// Reset retained ports after audio close; editor hiding was requested above.
+		if (vstDriver && keepLoaded && !forceUnload && !vstDriver->isIOCancelled())
 		{
 			Reset(0);
 			Reset(1);
 		}
-		// An interrupted exchange cannot be reused: discard that bridge after joining.
+		// An interrupted exchange cannot be reused: discard that bridge after audio close.
 		if (vstDriver && vstDriver->isIOCancelled()) forceUnload = true;
 		if (!keepLoaded || forceUnload)
 		{
@@ -854,7 +866,7 @@ namespace VSTMIDIDRV {
 
 	void MidiSynth::CancelPendingRender() {
 		// Do not take synthLock: the rendering thread may hold it while waiting.
-		if (vstDriver) vstDriver->cancelPendingIO();
+		if (vstDriver && vstDriver->hasPendingIO()) vstDriver->cancelPendingIO();
 	}
 
 	void MidiSynth::RequestReset() {

@@ -135,10 +135,6 @@ namespace VSTMIDIDRV {
 			{
 				parentSynth->CancelPendingRender();
 			}
-			// Pipe I/O is cancellable and the worker never displays modal dialogs.
-			// Keep headers and buffers alive until it has actually exited.
-			if (WaitForSingleObject(hThread, INFINITE) != WAIT_OBJECT_0)
-				return MMSYSERR_ERROR;
 			CloseHandle(hThread);
 			hThread = NULL;
 		}

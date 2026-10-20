@@ -48,6 +48,8 @@ bool UseAsio();
 const uint32_t NoError = 0;
 const uint32_t ResetRequest = 255;
 
+struct VSTDriverPipeIO;
+
 class VSTDriver {
 private:
 	TCHAR* szPluginPath;
@@ -57,10 +59,13 @@ private:
 	bool         bInitializedOtherModel;
 	bool         IsSCVA;
 	HANDLE       hProcess;
+	DWORD        childProcessId;
 	HANDLE       hThread;
 	HANDLE       hReadEvent;
 	HANDLE       hWriteEvent;
 	HANDLE       hCancelEvent;
+	VSTDriverPipeIO* pipeIO;
+	volatile LONG pendingIO;
 	DWORD        ioTimeout;
 	HANDLE       hChildStd_IN_Rd;
 	HANDLE       hChildStd_IN_Wr;
@@ -83,6 +88,7 @@ private:
 	tstring GetVsthostPath();
 	bool process_create();
 	void process_terminate();
+	void cancel_and_wait_for_io(HANDLE pipe, VSTDriverPipeIO* operation);
 	bool process_running();
 	uint32_t process_read_code();
 	bool process_read_bytes(void* buffer, uint32_t size);
@@ -100,6 +106,8 @@ public:
 	void CloseVSTDriver();
 	void cancelPendingIO(); // Signal only; the I/O thread cancels its own NT4-compatible I/O.
 	bool isIOCancelled();
+	bool hasPendingIO();
+	void hideEditors();
 	BOOL OpenVSTDriver(TCHAR* szPath = NULL, int sampleRate = 48000);
 	void ResetDriver(unsigned int uDeviceID);
 	void ProcessMIDIMessage(DWORD dwPort, DWORD dwParam1);
