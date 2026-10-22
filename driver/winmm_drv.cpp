@@ -55,6 +55,7 @@ struct Driver
 	DWORD volume;
 	struct Client {
 		bool allocated;
+		HMIDI hMidi;
 		DWORD_PTR instance;
 		DWORD flags;
 		DWORD_PTR callback;
@@ -166,7 +167,7 @@ HRESULT modGetCaps(UINT uDeviceID, PVOID capsPtr, DWORD capsSize)
 void DoCallback(int driverNum, DWORD_PTR clientNum, DWORD msg, DWORD_PTR param1, DWORD_PTR param2) 
 {
 	Driver::Client* client = &drivers[driverNum].clients[clientNum];
-	DriverCallback(client->callback, client->flags, drivers[driverNum].hdrvr, msg, client->instance, param1, param2);
+	DriverCallback(client->callback, client->flags, (HDRVR)client->hMidi, msg, client->instance, param1, param2);
 }
 
 LONG OpenDriver(Driver* driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
@@ -193,6 +194,7 @@ LONG OpenDriver(Driver* driver, UINT uDeviceID, UINT uMsg, DWORD_PTR dwUser, DWO
 	}
 	MIDIOPENDESC* desc = (MIDIOPENDESC*)dwParam1;
 	driver->clients[clientNum].allocated = true;
+	driver->clients[clientNum].hMidi = desc->hMidi;
 	driver->clients[clientNum].flags = HIWORD(dwParam2);
 	driver->clients[clientNum].callback = desc->dwCallback;
 	driver->clients[clientNum].instance = desc->dwInstance;
