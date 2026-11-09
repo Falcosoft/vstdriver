@@ -8,6 +8,7 @@
 #include "../external_packages/audiodefs.h"
 #include "../driver/VSTDriver.h"
 #include "../common/LegacySafety.h"
+#include "../common/PluginPath.h"
 #include "../version.h"
 
 #ifdef _DEBUG
@@ -198,20 +199,13 @@ static bool GetSelectedSettingsPath(TCHAR* path, DWORD chars)
 	}
 	bool valid = VSTDriverReadRegistryString(key, valueName, path, chars);
 	RegCloseKey(key);
-	if (!valid || !path[0]) return false;
-	TCHAR* dot = _tcsrchr(path, _T('.'));
-	TCHAR* slash = _tcsrchr(path, _T('\\'));
-	TCHAR* forwardSlash = _tcsrchr(path, _T('/'));
-	if (forwardSlash && (!slash || forwardSlash > slash)) slash = forwardSlash;
-	if (dot && (!slash || dot > slash)) *dot = 0; // removes extension
-	if (_tcslen(path) + 4 >= chars) return false;
-	_tcscat_s(path, chars, _T(".set"));
-	return true;
+	if (!valid || !path[0] || _tcslen(path) >= MAX_PATH) return false;
+	return VSTDriverMakeSettingsPath(path, chars);
 }
 
 static BOOL settings_load(VSTDriver* effect)
 {
-	TCHAR path[MAX_PATH] = { 0 };
+	TCHAR path[MAX_PATH + 4] = { 0 };
 	if (!effect || !GetSelectedSettingsPath(path, _countof(path))) return FALSE;
 	HANDLE file = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (file == INVALID_HANDLE_VALUE) return FALSE;
@@ -229,7 +223,7 @@ static BOOL settings_load(VSTDriver* effect)
 
 static BOOL settings_save(VSTDriver* effect)
 {
-	TCHAR path[MAX_PATH] = { 0 };
+	TCHAR path[MAX_PATH + 4] = { 0 };
 	if (!effect || !GetSelectedSettingsPath(path, _countof(path))) return FALSE;
 	std::vector<uint8_t> chunk;
 	effect->getChunk(chunk);
@@ -532,7 +526,9 @@ public:
 	{
 		TCHAR szFileName[MAX_PATH] = { 0 };
 		LPCTSTR sFiles =
-			_T("VSTi instruments (*.dll)\0*.dll\0")
+			_T("All Instruments (*.dll; *.clap)\0*.dll;*.clap\0")
+			_T("VSTi Instruments (*.dll)\0*.dll\0")
+			_T("CLAP Instruments (*.clap)\0*.clap\0")
 			_T("All Files (*.*)\0*.*\0\0");
 
 		vst_info.GetLBText(SelectedPluginIndex, szFileName);
@@ -541,6 +537,7 @@ public:
 			vst_info.GetLBText(SelectedPluginIndex, vst_path);
 		}
 		CFileDialog dlg(TRUE, NULL, vst_path, OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, sFiles);
+		dlg.m_ofn.nFilterIndex = 1;
 		if (dlg.DoModal() == IDOK)
 		{
 			szFileName[0] = 0;
@@ -781,7 +778,8 @@ public:
 			delete effect;
 			effect = NULL;
 			if (checkValidity && szPluginPath && *szPluginPath)
-				MessageBox(_T("This is NOT a VSTi synth!"), _T("VST MIDI Driver"), MB_OK | MB_ICONERROR);
+				MessageBox(VSTDriverIsClapPluginPath(szPluginPath) ? _T("Could not load this CLAP instrument.")
+					: _T("This is NOT a VSTi synth!"), _T("VST MIDI Driver"), MB_OK | MB_ICONERROR);
 			vst_effect.SetWindowText(_T("No VSTi loaded"));
 			vst_vendor.SetWindowText(_T("No VSTi loaded"));
 			int selIndex = vst_info.GetCurSel();

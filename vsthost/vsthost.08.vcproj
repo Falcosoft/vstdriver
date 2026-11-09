@@ -383,6 +383,48 @@
 					/>
 				</FileConfiguration>
 			</File>
+			<File RelativePath=".\clap2vst2\legacy_clap.cpp">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\clap2vst2\legacy_win32.cpp">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+			</File>
+			<File RelativePath=".\clap2vst2\wrapasvst2.cpp">
+				<FileConfiguration Name="Debug|Win32">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Debug|x64">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Release|Win32">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+				<FileConfiguration Name="Release|x64">
+					<Tool Name="VCCLCompilerTool" UsePrecompiledHeader="0" AdditionalIncludeDirectories="clap2vst2\compat" />
+				</FileConfiguration>
+			</File>
 			<File
 				RelativePath=".\vsthost.cpp"
 				>
@@ -401,6 +443,7 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
+			<File RelativePath=".\clap2vst2\clap2vst2.h" />
 			<File
 				RelativePath=".\log.h"
 				>

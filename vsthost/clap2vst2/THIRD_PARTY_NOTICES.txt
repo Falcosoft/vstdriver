@@ -1,0 +1,22 @@
+CLAP2VST2 VS2005 Legacy - third party/source notices
+=====================================================
+
+CLAP C API declarations
+-----------------------
+Source: free-audio/clap, release/tag 1.2.6
+License: MIT
+The clap tree vendors the CLAP 1.2.6 declarations required by this wrapper.
+Comments and API portions not used by this wrapper were trimmed in some headers;
+ABI declarations and constants used by the wrapper retain CLAP 1.2.6 values/layouts.
+
+CLAP wrapper source lineage
+---------------------------
+The VST2 translation layer originated from the free-audio/clap-wrapper project and
+Falcosoft's VST2 add-on/working baseline. The generic modern proxy/filesystem layer
+has been replaced by the local VS2005-compatible legacy_clap/legacy_win32 layer.
+License for free-audio/clap-wrapper: MIT 
+
+VST2 interface declarations
+---------------------------
+This module uses the driver's existing external_packages/aeffect.h and
+external_packages/aeffectx.h VST 2.4 interface declarations.

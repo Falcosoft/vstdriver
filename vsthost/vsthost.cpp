@@ -9,7 +9,9 @@
 #include "wavewriter.h"
 #include "log.h"
 #include "../common/LegacySafety.h"
+#include "../common/PluginPath.h"
 #include "../common/MidiProtocol.h"
+#include "clap2vst2/clap2vst2.h"
 
 #ifdef _DEBUG
 #define _CRTDBG_MAP_ALLOC
@@ -538,16 +540,10 @@ BOOL settings_save(AEffect* effect)
 {
 	std::vector<uint8_t> chunk;
 	if (!getChunk(effect, chunk) || chunk.empty()) return FALSE;
-	TCHAR path[MAX_PATH] = { 0 };
-	if (!argv || !argv[1] || _tcslen(argv[1]) >= _countof(path)) return FALSE;
+	TCHAR path[MAX_PATH + 4] = { 0 };
+	if (!argv || !argv[1] || _tcslen(argv[1]) >= MAX_PATH) return FALSE;
 	_tcscpy_s(path, argv[1]);
-	TCHAR* dot = _tcsrchr(path, _T('.'));
-	TCHAR* slash = _tcsrchr(path, _T('\\'));
-	TCHAR* forwardSlash = _tcsrchr(path, _T('/'));
-	if (forwardSlash && (!slash || forwardSlash > slash)) slash = forwardSlash;
-	if (dot && (!slash || dot > slash)) *dot = 0; // removes extension
-	if (_tcslen(path) + 4 >= _countof(path)) return FALSE;
-	_tcscat_s(path, _T(".set"));
+	if (!VSTDriverMakeSettingsPath(path, _countof(path))) return FALSE;
 	HANDLE file = CreateFile(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (file == INVALID_HANDLE_VALUE) return FALSE;
 	DWORD total = 0;
@@ -873,7 +869,7 @@ void setSelectedSysExIndex(int index)
 	}
 }
 
-void renderAudiosamples(int channelCount)
+void renderAudiosamples(int channelCount, bool clapBacked)
 {
 	uint32_t count = get_code();
 	if (pipeFailed) return;
@@ -927,9 +923,9 @@ void renderAudiosamples(int channelCount)
 		portState[0].pEffect->dispatcher(portState[0].pEffect, DECLARE_VST_DEPRECATED(effIdle), 0, 0, NULL, 0);
 		portState[1].pEffect->dispatcher(portState[1].pEffect, DECLARE_VST_DEPRECATED(effIdle), 0, 0, NULL, 0);
 
-		if (!idle_started)
+		if (!idle_started && !clapBacked)
 		{
-			unsigned idle_run = BUFFER_SIZE * 200;
+			unsigned idle_run = BUFFER_SIZE * 128;
 
 			while (idle_run)
 			{
@@ -984,7 +980,7 @@ void renderAudiosamples(int channelCount)
 		portState[1].pEffect->dispatcher(portState[1].pEffect, DECLARE_VST_DEPRECATED(effIdle), 0, 0, NULL, 0);
 
 
-		if (!idle_started)
+		if (!idle_started && !clapBacked)
 		{
 			if (inputEventList.portMessageCount[0]) portState[0].pEffect->dispatcher(portState[0].pEffect, effProcessEvents, 0, 0, &portState[0].renderEvents, 0);
 			if (inputEventList.portMessageCount[1]) portState[1].pEffect->dispatcher(portState[1].pEffect, effProcessEvents, 0, 0, &portState[1].renderEvents, 0);
@@ -2249,6 +2245,8 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 
 	HMODULE hDll = NULL;
 	main_func pMain = NULL;
+	const bool isClapPlugin = VSTDriverIsClapPluginPath(argv[1]);
+	bool clapBacked = isClapPlugin;
 	bool isSinglePort32Ch = false;
 	std::vector<uint8_t> chunk;
 
@@ -2292,40 +2290,43 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 	SetUnhandledExceptionFilter(myExceptFilterProc);
 #endif
 
-	size_t dll_name_len = _tcslen(argv[1]);
-	dll_dir = (char*)malloc(dll_name_len + 1);
+	if (!isClapPlugin)
+	{
+		size_t dll_name_len = _tcslen(argv[1]);
+		dll_dir = (char*)malloc(dll_name_len + 1);
 
 #ifdef UNICODE  
-	WideCharToMultiByte(CP_ACP, 0, argv[1], -1, dll_dir, (int)dll_name_len + 1, NULL, NULL); //does not depent on C locale (problematic on some VC++ verisons).
+		WideCharToMultiByte(CP_ACP, 0, argv[1], -1, dll_dir, (int)dll_name_len + 1, NULL, NULL); //does not depent on C locale (problematic on some VC++ verisons).
 #else
-	strncpy(dll_dir, argv[1], dll_name_len);
+		strncpy(dll_dir, argv[1], dll_name_len);
 #endif
 
-	dll_dir[dll_name_len] = '\0';
-	char* slash = strrchr(dll_dir, '\\');
-	*slash = '\0';
+		dll_dir[dll_name_len] = '\0';
+		char* slash = strrchr(dll_dir, '\\');
+		*slash = '\0';
 
-	hDll = LoadLibrary(argv[1]);
-	if (!hDll)
-	{
-		code = Response::CannotLoadVstiDll;
-		goto exit;
-	}
+		hDll = LoadLibrary(argv[1]);
+		if (!hDll)
+		{
+			code = Response::CannotLoadVstiDll;
+			goto exit;
+		}
 
-	pMain = (main_func)GetProcAddress(hDll, "VSTPluginMain");
-	if (!pMain)
-		pMain = (main_func)GetProcAddress(hDll, "main");
-	if (!pMain)
-	{
-		code = Response::CannotGetProcAddress;
-		goto exit;
+		pMain = (main_func)GetProcAddress(hDll, "VSTPluginMain");
+		if (!pMain)
+			pMain = (main_func)GetProcAddress(hDll, "main");
+		if (!pMain)
+		{
+			code = Response::CannotGetProcAddress;
+			goto exit;
+		}
 	}
 
 #if 0
 	MessageBox(GetDesktopWindow(), argv[1], _T("HUUUURRRRRR"), 0);
 #endif	
 
-	portState[0].pEffect = pMain(&audioMaster);
+	portState[0].pEffect = isClapPlugin ? CreateClapVst2(&audioMaster, argv[1]) : pMain(&audioMaster);
 
 	if (!portState[0].pEffect || portState[0].pEffect->magic != kEffectMagic)
 	{
@@ -2345,7 +2346,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		goto exit;
 	}
 
-	portState[1].pEffect = pMain(&audioMaster);
+	portState[1].pEffect = isClapPlugin ? CreateClapVst2(&audioMaster, argv[1]) : pMain(&audioMaster);
 	if (!portState[1].pEffect)
 	{
 		code = Response::NotAVsti;
@@ -2356,6 +2357,14 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 	portState[1].pEffect->user = &portState[1].effectData;
 
 	portState[1].pEffect->dispatcher(portState[1].pEffect, effOpen, 0, 0, NULL, 0);
+
+	// CLAP2VST2 requests effIdle to deliver main-thread callbacks. The
+	// legacy VST2 warm-up renders audio and replays MIDI, which CLAP does not need.
+	if (need_idle && !clapBacked)
+	{
+		char capability[] = "CLAP2VST2VariableBlocks";
+		clapBacked = portState[0].pEffect->dispatcher(portState[0].pEffect, effCanDo, 0, 0, capability, 0) == 1;
+	}
 
 	char name_string[256] = { 0 };
 	char vendor_string[256] = { 0 };
@@ -2667,7 +2676,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::RenderAudioSamples: // Render Samples
 		{
 			is4channelMode = false;
-			renderAudiosamples(2);
+			renderAudiosamples(2, clapBacked);
 			resetInputEvents();
 			break;
 		}
@@ -2675,7 +2684,7 @@ int CALLBACK _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCm
 		case Command::RenderAudioSamples4channel: // Render Samples for 4 channel mode
 		{
 			is4channelMode = true;
-			renderAudiosamples(4);
+			renderAudiosamples(4, clapBacked);
 			resetInputEvents();
 			break;
 		}

@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <new>
 #include "../common/LegacySafety.h"
+#include "../common/PluginPath.h"
 
 #pragma warning(disable:6255) 
 #pragma warning(disable:26812)
@@ -214,14 +215,11 @@ void VSTDriver::load_settings(TCHAR* szPath) {
 	memcpy(szPluginPath, path, chars * sizeof(TCHAR));
 	uPluginPlatform = test_plugin_platform();
 
-	// Replace only the filename extension, not a dot in a directory name.
-	tstring settings(path);
-	size_t slash = settings.find_last_of(_T("\\/"));
-	size_t dot = settings.find_last_of(_T('.'));
-	if (dot != tstring::npos && (slash == tstring::npos || dot > slash)) settings.resize(dot);
-	settings += _T(".set");
+	TCHAR settings[MAX_PATH + 4];
+	_tcscpy_s(settings, path);
+	if (!VSTDriverMakeSettingsPath(settings, _countof(settings))) return;
 	FILE* file = NULL;
-	if (_tfopen_s(&file, settings.c_str(), _T("rb")) || !file) return;
+	if (_tfopen_s(&file, settings, _T("rb")) || !file) return;
 	bool valid = fseek(file, 0, SEEK_END) == 0;
 	long length = valid ? ftell(file) : -1;
 	valid = length >= 0 && (unsigned long)length <= VSTDriverMaxChunkBytes && fseek(file, 0, SEEK_SET) == 0;
